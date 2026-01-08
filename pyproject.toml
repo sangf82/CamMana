@@ -1,7 +1,7 @@
 [project]
 name = "cammana"
-version = "0.1.0"
-description = "Add your description here"
+version = "2.0.0"
+description = "ONVIF Camera Manager - Desktop Application"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -9,5 +9,14 @@ dependencies = [
     "onvif-zeep>=0.2.12",
     "opencv-python>=4.11.0.86",
     "pillow>=12.1.0",
-    "streamlit>=1.52.2",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "pywebview>=5.3.0",
+    "pydantic>=2.10.0",
+    "pyinstaller>=6.0.0",
 ]
+
+[project.scripts]
+cammana = "app:main"
+
+
