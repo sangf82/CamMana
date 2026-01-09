@@ -10,10 +10,15 @@ from datetime import datetime
 from pathlib import Path
 from PIL import Image
 import numpy as np
+from dotenv import load_dotenv
+
+# Load env variables
+load_dotenv()
 
 # Suppress OpenCV/FFmpeg warnings
-os.environ["OPENCV_LOG_LEVEL"] = "OFF"
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;2048000"
+os.environ["OPENCV_LOG_LEVEL"] = "ERROR"
+# Force TCP for stability and reduced artifacts, increase buffer for high res streams
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|buffer_size;1024000"
 
 
 class VideoStreamer:
@@ -25,8 +30,11 @@ class VideoStreamer:
         self.is_streaming = False
         self.last_frame: Optional[np.ndarray] = None
         self.frame_count = 0
-        self.capture_dir = Path("captured_img")
-        self.capture_dir.mkdir(exist_ok=True)
+        
+        # Get capture dir from env or default
+        capture_path = os.getenv("CAPTURE_DIR_PATH", "database/captured_img")
+        self.capture_dir = Path(capture_path)
+        self.capture_dir.mkdir(parents=True, exist_ok=True)
         
     def start(self) -> bool:
         """Start video capture"""
@@ -34,11 +42,14 @@ class VideoStreamer:
             self.cap.release()
         
         self.cap = cv2.VideoCapture(self.rtsp_uri, cv2.CAP_FFMPEG)
-        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)
         
-        # Read initial frames to stabilize
-        for _ in range(5):
-            self.cap.read()
+        # Optimize for low latency but stable connection
+        # We assume buffer management is handled better by default or specific flags if needed
+        
+        # Read initial frames to stabilize and clear any initial garbage
+        for _ in range(10):
+            if self.cap.isOpened():
+                self.cap.read()
         
         self.is_streaming = self.cap.isOpened()
         return self.is_streaming

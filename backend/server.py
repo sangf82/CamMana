@@ -6,8 +6,8 @@ Handles camera control, video streaming, and API endpoints
 import os
 import sys
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -64,6 +64,97 @@ class PTZMoveRequest(BaseModel):
 
 
 # API Endpoints
+
+from dotenv import load_dotenv
+load_dotenv()
+
+# API Endpoints
+
+@app.get("/api/schedule")
+async def get_schedule():
+    """Get schedule data from Excel file with normalized keys"""
+    try:
+        import pandas as pd
+        import numpy as np
+        
+        file_path = os.getenv("SCHEDULE_FILE_PATH", "database/schedule/CCN_template.xlsx")
+        # Handle relative path if run from different location
+        if not os.path.isabs(file_path):
+            file_path = os.path.join(os.getcwd(), file_path)
+
+        if not os.path.exists(file_path):
+             raise FileNotFoundError(f"Schedule file not found at: {file_path}")
+
+        df = pd.read_excel(file_path)
+        
+        # 1. Clean column names
+        df.columns = [str(c).strip() for c in df.columns]
+        
+        # 2. Rename columns robustly
+        rename_map = {}
+        for col in df.columns:
+            col_lower = col.lower()
+            if 'stt' in col_lower:
+                rename_map[col] = 'stt'
+            elif 'thời gian' in col_lower or 'measure time' in col_lower:
+                rename_map[col] = 'time_in'
+            elif 'biển số' in col_lower or 'plate' in col_lower:
+                rename_map[col] = 'plate'
+            elif 'loại xe' in col_lower or 'truck model' in col_lower:
+                rename_map[col] = 'vehicle_type'
+            elif 'kích thước' in col_lower:
+                rename_map[col] = 'dimensions'
+            elif 'thể tích' in col_lower:
+                rename_map[col] = 'volume'
+            elif 'trạng thái' in col_lower or 'status' in col_lower or 'trang thai' in col_lower:
+                rename_map[col] = 'status_validity'
+            elif 'ghi chú' in col_lower or 'notes' in col_lower:
+                rename_map[col] = 'notes'
+        
+        df.rename(columns=rename_map, inplace=True)
+
+        # Replace Infinity with NaN
+        df.replace([np.inf, -np.inf], np.nan, inplace=True)
+        
+        # Replace NaN with None
+        df = df.astype(object).where(pd.notnull(df), None)
+        
+        # Convert timestamp to string
+        if 'time_in' in df.columns:
+            df['time_in'] = df['time_in'].astype(str)
+            
+        return df.to_dict(orient='records')
+    except Exception as e:
+        print(f"Error reading schedule: {e}")
+        return JSONResponse(
+            status_code=500, 
+            content={"detail": f"Server Error: {str(e)}"}
+        )
+
+
+@app.post("/api/schedule/upload")
+async def upload_schedule(file: UploadFile = File(...)):
+    """Upload new schedule Excel file"""
+    try:
+        file_path = os.getenv("SCHEDULE_FILE_PATH", "database/schedule/CCN_template.xlsx")
+        if not os.path.isabs(file_path):
+            file_path = os.path.join(os.getcwd(), file_path)
+            
+        # Ensure dir exists
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        
+        # Save file
+        with open(file_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+            
+        return {"success": True, "filename": file.filename}
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Upload failed: {str(e)}"}
+        )
+
 
 @app.get("/api/cameras")
 async def get_cameras():
@@ -195,6 +286,25 @@ async def capture_image(camera_id: str):
          raise HTTPException(status_code=400, detail="No streamer")
          
     return streamer.capture_image()
+
+
+@app.get("/api/cameras/{camera_id}/snapshot")
+async def get_snapshot(camera_id: str):
+    """Get current frame as JPEG image for processing"""
+    from fastapi.responses import Response
+    
+    if camera_id not in cameras:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    
+    streamer = cameras[camera_id]["streamer"]
+    if not streamer:
+         raise HTTPException(status_code=400, detail="No streamer")
+    
+    jpeg_bytes = streamer.get_frame_jpeg()
+    if not jpeg_bytes:
+        raise HTTPException(status_code=500, detail="Could not capture frame")
+        
+    return Response(content=jpeg_bytes, media_type="image/jpeg")
 
 
 # PTZ Control Endpoints

@@ -29,17 +29,80 @@ class ONVIFCameraManager:
         self.connected = False
         
     def connect(self) -> dict:
-        """Connect to ONVIF camera and initialize services"""
+        """Connect to ONVIF camera and initialize services with retry logic and time sync"""
+        import datetime
+        
+        # Ports to try: Configured port first, then common ONVIF ports
+        ports_to_try = [self.config.port]
+        common_ports = [80, 8000, 8080, 8899]
+        for p in common_ports:
+            if p not in ports_to_try:
+                ports_to_try.append(p)
+                
+        last_error = None
+        
+        for port in ports_to_try:
+            try:
+                # 1. Attempt Connection
+                self.camera = ONVIFCamera(
+                    self.config.ip, 
+                    port, 
+                    self.config.user, 
+                    self.config.password
+                )
+                
+                # Verify connection by creating a service (e.g., DeviceMgmt)
+                # This ensures we are actually talking to the device
+                self.devicemgmt = self.camera.create_devicemgmt_service()
+                
+                # If we are here, connection is successful
+                # Update config with the working port
+                self.config.port = port
+                break
+            except Exception as e:
+                last_error = e
+                self.camera = None
+                continue
+                
+        if not self.camera:
+            self.connected = False
+            return {"success": False, "error": f"Connection failed on ports {ports_to_try}. Last error: {str(last_error)}"}
+
         try:
-            # Connect to camera
-            self.camera = ONVIFCamera(
-                self.config.ip, 
-                self.config.port, 
-                self.config.user, 
-                self.config.password
-            )
+            # 2. Time Synchronization
+            # Many cameras reject auth if time is skewed. We attempt to sync camera time to PC time.
+            try:
+                # Get camera time
+                # cam_time = self.devicemgmt.GetSystemDateAndTime()
+                # print(f"Camera Time: {cam_time}")
+                
+                # Set manual time to now (UTC)
+                now = datetime.datetime.utcnow()
+                dt_param = {
+                    'DateTimeType': 'Manual',
+                    'DaylightSavings': False,
+                    'TimeZone': {
+                        'TZ': 'GMT0' # Simple UTC
+                    },
+                    'UTCDateTime': {
+                        'Time': {
+                            'Hour': now.hour,
+                            'Minute': now.minute,
+                            'Second': now.second
+                        },
+                        'Date': {
+                            'Year': now.year,
+                            'Month': now.month,
+                            'Day': now.day
+                        }
+                    }
+                }
+                self.devicemgmt.SetSystemDateAndTime(dt_param)
+            except Exception as e:
+                print(f"Time sync warning (non-fatal): {e}")
+
             
-            # Get media service and profiles
+            # 3. Get Media Profiles (Dynamic)
             self.media_service = self.camera.create_media_service()
             profiles = self.media_service.GetProfiles()
             
@@ -73,16 +136,19 @@ class ONVIFCameraManager:
                     uri = res.Uri
                     
                     # Inject credentials into RTSP URL if needed
+                    # Some cameras result in http://.../rtsp, we want the RTSP URI usually
                     if self.config.user and "@" not in uri:
-                        uri = uri.replace(
-                            "rtsp://", 
-                            f"rtsp://{self.config.user}:{self.config.password}@", 
-                            1
-                        )
+                        # Handle standard rtsp:// protocol
+                        if uri.startswith("rtsp://"):
+                            uri = uri.replace(
+                                "rtsp://", 
+                                f"rtsp://{self.config.user}:{self.config.password}@", 
+                                1
+                            )
                 except:
                     uri = None
                 
-                if uri and (w * h) > max_res:
+                if uri and (w * h) >= max_res: # Use >= to pick last if multiple same res (often newer/better)
                     max_res = w * h
                     best_profile = p
                     best_uri = uri
@@ -106,7 +172,8 @@ class ONVIFCameraManager:
                 "stream_uri": self.stream_uri,
                 "resolution": resolution,
                 "profile": best_profile.Name,
-                "ptz_available": self.ptz_service is not None
+                "ptz_available": self.ptz_service is not None,
+                "active_port": self.config.port
             }
             
         except Exception as e:
