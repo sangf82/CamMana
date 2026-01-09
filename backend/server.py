@@ -269,8 +269,19 @@ async def video_feed(camera_id: str):
         if not streamer or not streamer.is_streaming:
              raise HTTPException(status_code=400, detail="Stream not started")
     
+    async def safe_generate():
+        """Wrapper to catch exceptions in streaming"""
+        try:
+            async for frame in streamer.generate_frames():
+                yield frame
+        except GeneratorExit:
+            # Client disconnected - normal
+            pass
+        except Exception as e:
+            print(f"[Stream Error] {camera_id}: {e}")
+    
     return StreamingResponse(
-        streamer.generate_frames(),
+        safe_generate(),
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
 
@@ -371,10 +382,28 @@ if static_dir:
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8000):
-    """Run the FastAPI server"""
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    """Run the FastAPI server with crash protection"""
+    import signal
+    import traceback
+    
+    def signal_handler(sig, frame):
+        print(f"\n[Server] Received signal {sig}, shutting down gracefully...")
+        raise SystemExit(0)
+    
+    # Register signal handlers
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    try:
+        print("[Server] Starting CamMana backend...")
+        uvicorn.run(app, host=host, port=port, log_level="info")
+    except SystemExit:
+        print("[Server] Shutdown requested.")
+    except Exception as e:
+        print(f"[Server] FATAL ERROR: {e}")
+        traceback.print_exc()
+        raise
 
 
 if __name__ == "__main__":
     run_server()
-
