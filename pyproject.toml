@@ -18,6 +18,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "python-dotenv>=1.2.1",
     "python-multipart>=0.0.21",
+    "ultralytics>=8.3.250",
 ]
 
 [project.scripts]
