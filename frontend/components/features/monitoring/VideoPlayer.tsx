@@ -63,8 +63,7 @@ export default function VideoPlayer({
 
   return (
     <div 
-      className={`relative h-full bg-black rounded-lg overflow-hidden border border-border shadow-sm group ${className}`}
-      style={{ aspectRatio: '16/9' }}
+      className={`relative w-full h-full bg-black rounded-lg overflow-hidden border border-border shadow-sm group ${className}`}
       onClick={onClick}
     >
       {/* Video Content */}

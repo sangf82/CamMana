@@ -1,5 +1,6 @@
 import os
 import uuid
+import asyncio
 from typing import Optional, List, Dict, Any, Union
 from fastapi import APIRouter, HTTPException, File, UploadFile
 from fastapi.responses import StreamingResponse, JSONResponse, Response
@@ -92,10 +93,13 @@ async def delete_camera(camera_id: str):
 @camera_router.get("/saved")
 async def get_saved_cameras():
     saved = db.get_all_cameras()
+    # Build a lookup of active cameras by IP for reliable matching
+    active_by_ip = {cam["config"].ip: (cam_id, cam) for cam_id, cam in cameras.items()}
+    
     for cam in saved:
-        cam_id = str(cam.get('id'))
-        if cam_id in cameras:
-            active_cam = cameras[cam_id]
+        saved_ip = cam.get('ip')
+        if saved_ip in active_by_ip:
+            cam_id, active_cam = active_by_ip[saved_ip]
             streamer = active_cam.get("streamer")
             manager = active_cam.get("manager")
             
@@ -104,7 +108,7 @@ async def get_saved_cameras():
             elif manager and manager.connected:
                 cam['status'] = 'Connected'
             else:
-                cam['status'] = 'Local' # Active but not fully connected?
+                cam['status'] = 'Local'
         else:
             cam['status'] = 'Offline'
     return saved
@@ -154,7 +158,17 @@ async def connect_camera(request: CameraConnectRequest):
     config.name = request.name
     
     manager = ONVIFCameraManager(config)
-    result = manager.connect()
+    
+    # Run blocking connection in thread pool with 10 second timeout
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(manager.connect),
+            timeout=10.0
+        )
+    except asyncio.TimeoutError:
+        return {"success": False, "error": "Connection timed out after 10 seconds"}
+    except Exception as e:
+        return {"success": False, "error": f"Connection failed: {str(e)}"}
     
     if result["success"]:
         streamer = VideoStreamer(manager.stream_uri)

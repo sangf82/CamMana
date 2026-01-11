@@ -18,8 +18,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="vi" className="dark">
-      <body className={`${inter.variable} ${mono.variable} font-sans antialiased bg-background text-foreground overflow-hidden`}>
+    <html lang="vi" className="dark" suppressHydrationWarning>
+      <body className={`${inter.variable} ${mono.variable} font-sans antialiased bg-background text-foreground overflow-hidden`} suppressHydrationWarning>
         <div className="flex h-screen w-full">
           <Sidebar />
           <main className="flex-1 overflow-auto bg-muted/30 relative">
