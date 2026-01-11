@@ -3,7 +3,7 @@
 # csv_storage.py handles captured car data (daily CSV files)
 
 from backend.data_process.db import (
-    init_db, get_connection, save_camera, get_camera, get_all_cameras,
+    init_db, save_camera, get_camera, get_all_cameras,
     get_cameras_by_tag, delete_camera, update_camera_detection_mode
 )
 
@@ -18,7 +18,7 @@ from backend.data_process import csv_storage
 
 __all__ = [
     # DB (cameras only)
-    'init_db', 'get_connection', 'save_camera', 'get_camera', 'get_all_cameras',
+    'init_db', 'save_camera', 'get_camera', 'get_all_cameras',
     'get_cameras_by_tag', 'delete_camera', 'update_camera_detection_mode',
     # CSV Storage (captured cars & logs)
     'save_captured_car', 'get_captured_cars', 'search_by_plate',

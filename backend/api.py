@@ -1,7 +1,6 @@
-"""API Layer - Thin API layer that delegates to service modules"""
 import os
 import uuid
-from typing import Optional
+from typing import Optional, List, Dict, Any, Union
 from fastapi import APIRouter, HTTPException, File, UploadFile
 from fastapi.responses import StreamingResponse, JSONResponse, Response
 from pydantic import BaseModel
@@ -29,6 +28,10 @@ class UpdateDetectionModeRequest(BaseModel):
 
 class UpdateCameraTagRequest(BaseModel):
     tag: Optional[str]
+
+class ConfigItem(BaseModel):
+    id: Union[int, str]
+    name: str
 
 # Routers
 camera_router = APIRouter(prefix="/api/cameras", tags=["cameras"])
@@ -64,15 +67,85 @@ async def get_cameras():
         })
     return result
 
+@camera_router.post("")
+async def save_camera_config(camera: dict):
+    # Ensure ID
+    if 'id' not in camera or not camera['id']:
+        camera['id'] = str(uuid.uuid4())
+    db.save_camera(camera)
+    return {"success": True, "id": camera['id']}
+
+@camera_router.delete("/{camera_id}")
+async def delete_camera(camera_id: str):
+    # Disconnect if active
+    if camera_id in cameras:
+        cam = cameras[camera_id]
+        get_detection_service().unregister_camera(camera_id)
+        if cam["streamer"]: cam["streamer"].stop()
+        if cam["manager"]: cam["manager"].disconnect()
+        del cameras[camera_id]
+    
+    # Remove from storage
+    db.delete_camera(camera_id)
+    return {"success": True}
+
 @camera_router.get("/saved")
 async def get_saved_cameras():
-    return db.get_all_cameras()
+    saved = db.get_all_cameras()
+    for cam in saved:
+        cam_id = str(cam.get('id'))
+        if cam_id in cameras:
+            active_cam = cameras[cam_id]
+            streamer = active_cam.get("streamer")
+            manager = active_cam.get("manager")
+            
+            if streamer and streamer.is_streaming:
+                cam['status'] = 'Online'
+            elif manager and manager.connected:
+                cam['status'] = 'Connected'
+            else:
+                cam['status'] = 'Local' # Active but not fully connected?
+        else:
+            cam['status'] = 'Offline'
+    return saved
+
+# --- Configuration Endpoints (Locations, Types, Registry) ---
+
+@camera_router.get("/locations")
+async def get_locations():
+    return csv_storage.get_locations()
+
+@camera_router.post("/locations")
+async def save_locations(locations: List[Dict[str, Any]]):
+    print(f"Received locations: {locations}")
+    csv_storage.save_locations(locations)
+    return {"success": True}
+
+@camera_router.get("/types")
+async def get_cam_types():
+    return csv_storage.get_cam_types()
+
+@camera_router.post("/types")
+async def save_cam_types(types: List[Dict[str, Any]]):
+    print(f"Received types: {types}")
+    csv_storage.save_cam_types(types)
+    return {"success": True}
+
+@camera_router.get("/registered_cars")
+async def get_registered_cars():
+    return csv_storage.get_registered_cars()
+
+@camera_router.post("/registered_cars")
+async def save_registered_cars(cars: List[Dict[str, Any]]):
+    csv_storage.save_registered_cars(cars)
+    return {"success": True}
 
 @camera_router.post("/connect")
 async def connect_camera(request: CameraConnectRequest):
+    # Check if already connected
     for cam_id, cam in cameras.items():
         if cam["config"].ip == request.ip:
-            return {"success": False, "error": f"Camera {request.ip} already connected", "id": cam_id}
+            return {"success": True, "error": f"Camera {request.ip} already connected", "id": cam_id}
     
     if request.tag and request.tag not in ("front_cam", "side_cam"):
         raise HTTPException(status_code=400, detail="Invalid tag")
@@ -85,13 +158,22 @@ async def connect_camera(request: CameraConnectRequest):
     
     if result["success"]:
         streamer = VideoStreamer(manager.stream_uri)
-        camera_id = str(uuid.uuid4())
+        
+        # Check if camera already exists in saved cameras by IP - reuse that ID
+        existing_cameras = db.get_all_cameras()
+        existing_cam = next((c for c in existing_cameras if c.get('ip') == request.ip), None)
+        
+        if existing_cam and existing_cam.get('id'):
+            camera_id = existing_cam['id']
+        else:
+            camera_id = str(uuid.uuid4())
         
         cameras[camera_id] = {"manager": manager, "streamer": streamer, "config": config, "detection_mode": request.detection_mode}
         
         detection_service = get_detection_service()
         detection_service.register_camera(camera_id, streamer, request.tag)
         
+        # Update existing record or create new one
         db.save_camera({
             'id': camera_id, 'name': request.name, 'ip': request.ip, 'port': request.port,
             'username': request.user, 'password': request.password, 'profile_token': manager.profile_token,

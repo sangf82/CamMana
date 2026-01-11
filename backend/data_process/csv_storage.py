@@ -22,6 +22,11 @@ CAR_HEADERS = [
 
 LOG_HEADERS = ['timestamp', 'camera_id', 'event_type', 'details']
 
+CAMERA_HEADERS = ['id', 'name', 'ip', 'port', 'user', 'password', 'location', 'type', 'status', 'tag', 'username', 'brand', 'cam_id']
+LOCATION_HEADERS = ['id', 'name']
+TYPE_HEADERS = ['id', 'name']
+REGISTERED_CAR_HEADERS = ['id', 'plate_number', 'owner', 'model', 'color', 'notes', 'created_at']
+
 def _ensure_dirs():
     """Ensure data directories exist"""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -43,6 +48,11 @@ def _get_log_csv_path(date: Optional[str] = None) -> Path:
     date_str = date or _get_today_date()
     return LOGS_DIR / f"detection_logs_{date_str}.csv"
 
+def _get_config_csv_path(filename: str) -> Path:
+    """Get path to config CSV files"""
+    _ensure_dirs()
+    return DATA_DIR / filename
+
 def _init_csv_if_needed(filepath: Path, headers: List[str]):
     """Create CSV file with headers if it doesn't exist"""
     if not filepath.exists():
@@ -53,6 +63,70 @@ def _init_csv_if_needed(filepath: Path, headers: List[str]):
 def _generate_id() -> str:
     """Generate unique ID based on timestamp"""
     return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+def _read_csv(path: Path) -> List[Dict[str, Any]]:
+    """Generic CSV reader"""
+    if not path.exists():
+        return []
+    with open(path, 'r', encoding='utf-8') as f:
+        return list(csv.DictReader(f))
+
+def _write_csv(path: Path, headers: List[str], data: List[Dict[str, Any]]):
+    """Generic CSV writer"""
+    with _write_lock:
+        with open(path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(data)
+
+# ========== Configurations (Cameras, Locations, Types, Registry) ==========
+
+def get_cameras_config() -> List[Dict[str, Any]]:
+    path = _get_config_csv_path("cameras.csv")
+    _init_csv_if_needed(path, CAMERA_HEADERS)
+    return _read_csv(path)
+
+def save_cameras_config(cameras: List[Dict[str, Any]]):
+    _write_csv(_get_config_csv_path("cameras.csv"), CAMERA_HEADERS, cameras)
+
+def get_locations() -> List[Dict[str, str]]:
+    path = _get_config_csv_path("locations.csv")
+    _init_csv_if_needed(path, LOCATION_HEADERS)
+    data = _read_csv(path)
+    # Migration: if no ID, generate one on the fly (won't save until next write, or we can save now)
+    # Simple approach: return objects.
+    return data
+
+def save_locations(locations: List[Dict[str, str]]):
+    # Ensure IDs
+    for loc in locations:
+        if not loc.get('id'):
+            loc['id'] = _generate_id()
+    _write_csv(_get_config_csv_path("locations.csv"), LOCATION_HEADERS, locations)
+
+def get_cam_types() -> List[Dict[str, str]]:
+    path = _get_config_csv_path("camtypes.csv")
+    _init_csv_if_needed(path, TYPE_HEADERS)
+    return _read_csv(path)
+
+def save_cam_types(types: List[Dict[str, str]]):
+    # Ensure IDs
+    for t in types:
+        if not t.get('id'):
+            t['id'] = _generate_id()
+    _write_csv(_get_config_csv_path("camtypes.csv"), TYPE_HEADERS, types)
+
+def get_registered_cars() -> List[Dict[str, Any]]:
+    path = _get_config_csv_path("registered_cars.csv")
+    _init_csv_if_needed(path, REGISTERED_CAR_HEADERS)
+    return _read_csv(path)
+
+def save_registered_cars(cars: List[Dict[str, Any]]):
+    # Ensure IDs
+    for car in cars:
+        if not car.get('id'):
+            car['id'] = _generate_id()
+    _write_csv(_get_config_csv_path("registered_cars.csv"), REGISTERED_CAR_HEADERS, cars)
 
 # ========== Captured Cars ==========
 

@@ -14,9 +14,6 @@ wheels/
 .vscode
 .agent
 
-# Frontend
-node_modules
-
 # Database
 *.jpg
 *.json

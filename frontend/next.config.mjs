@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Static export for packaging with PyInstaller
-  output: 'export',
+  // Output export disabled for dev proxy support
+  // output: 'export',
   
   // Disable image optimization for static export
   images: {
@@ -13,6 +13,15 @@ const nextConfig = {
   
   // Trailing slash for static export
   trailingSlash: false,
+
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://127.0.0.1:8000/api/:path*',
+      },
+    ]
+  },
 }
 
 export default nextConfig
