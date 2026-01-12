@@ -22,10 +22,10 @@ CAR_HEADERS = [
 
 LOG_HEADERS = ['timestamp', 'camera_id', 'event_type', 'details']
 
-CAMERA_HEADERS = ['id', 'name', 'ip', 'port', 'user', 'password', 'location', 'type', 'status', 'tag', 'username', 'brand', 'cam_id']
+CAMERA_HEADERS = ['id', 'name', 'ip', 'port', 'user', 'password', 'location', 'type', 'status', 'tag', 'username', 'brand', 'cam_id', 'location_id']
 LOCATION_HEADERS = ['id', 'name']
 TYPE_HEADERS = ['id', 'name']
-REGISTERED_CAR_HEADERS = ['id', 'plate_number', 'owner', 'model', 'color', 'notes', 'created_at']
+REGISTERED_CAR_HEADERS = ['id', 'plate_number', 'owner', 'model', 'color', 'notes', 'created_at', 'box_dimensions', 'standard_volume']
 
 def _ensure_dirs():
     """Ensure data directories exist"""
@@ -62,7 +62,8 @@ def _init_csv_if_needed(filepath: Path, headers: List[str]):
 
 def _generate_id() -> str:
     """Generate unique ID based on timestamp"""
-    return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    import uuid
+    return f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
 
 def _read_csv(path: Path) -> List[Dict[str, Any]]:
     """Generic CSV reader"""
@@ -75,7 +76,7 @@ def _write_csv(path: Path, headers: List[str], data: List[Dict[str, Any]]):
     """Generic CSV writer"""
     with _write_lock:
         with open(path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=headers)
+            writer = csv.DictWriter(f, fieldnames=headers, extrasaction='ignore')
             writer.writeheader()
             writer.writerows(data)
 
@@ -122,11 +123,27 @@ def get_registered_cars() -> List[Dict[str, Any]]:
     return _read_csv(path)
 
 def save_registered_cars(cars: List[Dict[str, Any]]):
-    # Ensure IDs
+    """Save registered cars, ensuring every item has a unique ID"""
+    seen_ids = set()
+    cleaned_cars = []
+    
     for car in cars:
-        if not car.get('id'):
-            car['id'] = _generate_id()
-    _write_csv(_get_config_csv_path("registered_cars.csv"), REGISTERED_CAR_HEADERS, cars)
+        current_id = str(car.get('id', '')).strip()
+        
+        # Determine if ID needs generation (missing or duplicate)
+        if not current_id or current_id in seen_ids:
+            new_id = _generate_id()
+            # Paranoid check ensuring the generated ID isn't somehow already seen (unlikely with UUID)
+            while new_id in seen_ids:
+                new_id = _generate_id()
+            car['id'] = new_id
+        else:
+            car['id'] = current_id
+            
+        seen_ids.add(car['id'])
+        cleaned_cars.append(car)
+            
+    _write_csv(_get_config_csv_path("registered_cars.csv"), REGISTERED_CAR_HEADERS, cleaned_cars)
 
 # ========== Captured Cars ==========
 
@@ -287,4 +304,4 @@ def get_daily_stats(date: Optional[str] = None) -> Dict[str, Any]:
 
 # Initialize directories on import
 _ensure_dirs()
-print(f"[CSV Storage] Data directory: {DATA_DIR}")
+print(f"[cam_mana] Data directory: {DATA_DIR}")

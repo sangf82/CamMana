@@ -22,7 +22,7 @@ export default function RootLayout({
       <body className={`${inter.variable} ${mono.variable} font-sans antialiased bg-background text-foreground overflow-hidden`} suppressHydrationWarning>
         <div className="flex h-screen w-full">
           <Sidebar />
-          <main className="flex-1 overflow-auto bg-muted/30 relative">
+          <main className="flex-1 flex flex-col overflow-hidden bg-muted/30 relative">
             {children}
           </main>
         </div>

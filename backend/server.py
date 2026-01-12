@@ -25,7 +25,7 @@ def clean_pycache():
             shutil.rmtree(pycache_dir)
             count += 1
     if count:
-        print(f"[Server] Cleaned {count} __pycache__ directories")
+        print(f"[cam_mana] Cleaned {count} __pycache__ directories")
 
 
 def get_static_dir():
@@ -40,7 +40,7 @@ def get_static_dir():
 def create_app() -> FastAPI:
     db.init_db()
     
-    app = FastAPI(title="CamMana API", description="ONVIF Camera Control & Streaming API", version="2.0.0")
+    app = FastAPI(title="cam_mana", description="ONVIF Camera Control & Streaming API", version="2.0.0")
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
     
     app.include_router(camera_router)
@@ -83,14 +83,14 @@ def run_server(host: str = "127.0.0.1", port: int = 8000):
     clean_pycache()
     
     try:
-        print("[Server] Starting CamMana backend...")
+        print("[cam_mana] Starting backend...")
         uvicorn.run(app, host=host, port=port, log_level="info")
     except SystemExit:
         pass
     finally:
         # Clean pycache on stop
         clean_pycache()
-        print("[Server] Shutdown complete.")
+        print("[cam_mana] Shutdown complete.")
 
 
 if __name__ == "__main__":

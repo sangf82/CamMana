@@ -264,7 +264,44 @@ export default function MonitorPage() {
                 : "flex gap-1"
             }`}
           >
-            {!currentGate ? (
+            {viewMode === "grid" ? (
+              // Grid Mode - Always show 4 boxes (2x2)
+              <>
+                {Array.from({ length: 4 }).map((_, idx) => {
+                  const cam = filteredCameras[idx];
+                  return (
+                    <div
+                      key={cam?.id || `empty-${idx}`}
+                      className="relative bg-black rounded-lg border border-border overflow-hidden"
+                    >
+                      {cam ? (
+                        <>
+                          {isConnecting(cam) && (
+                            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80">
+                              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-2" />
+                              <span className="text-xs text-muted-foreground">
+                                Đang kết nối...
+                              </span>
+                            </div>
+                          )}
+                          <VideoPlayer
+                            label={cam.name}
+                            camCode={cam.cam_id}
+                            activeId={getActiveId(cam)}
+                            className="h-full"
+                            src={getStreamUrl(cam)}
+                          />
+                        </>
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground">
+                          <span className="text-xs opacity-50">Slot {idx + 1}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            ) : !currentGate ? (
               <div className="w-full h-full flex flex-col items-center justify-center bg-black/50 border border-dashed border-border rounded-lg text-muted-foreground">
                 <p>Vui lòng chọn Cổng từ Menu bên trái</p>
               </div>
@@ -273,7 +310,7 @@ export default function MonitorPage() {
                 <PhotoCamera className="text-4xl mb-2 opacity-20" />
                 <p>Chưa có camera tại {currentGate}</p>
               </div>
-            ) : viewMode === "focus" ? (
+            ) : (
               // Focus Mode - Single Camera with Info Panel
               <div className="h-full w-full flex flex-col overflow-hidden">
                 {/* Video Area - fills entire container */}
@@ -375,40 +412,6 @@ export default function MonitorPage() {
                   </div>
                 )}
               </div>
-            ) : (
-              // Grid Mode - Always show 4 boxes (2x2)
-              <>
-                {Array.from({ length: 4 }).map((_, idx) => {
-                  const cam = filteredCameras[idx];
-                  return (
-                    <div key={cam?.id || `empty-${idx}`} className="relative bg-black rounded-lg border border-border overflow-hidden">
-                      {cam ? (
-                        <>
-                          {isConnecting(cam) && (
-                            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80">
-                              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-2" />
-                              <span className="text-xs text-muted-foreground">
-                                Đang kết nối...
-                              </span>
-                            </div>
-                          )}
-                          <VideoPlayer
-                            label={cam.name}
-                            camCode={cam.cam_id}
-                            activeId={getActiveId(cam)}
-                            className="h-full"
-                            src={getStreamUrl(cam)}
-                          />
-                        </>
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground">
-                          <span className="text-xs opacity-50">Slot {idx + 1}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </>
             )}
           </div>
         </div>
@@ -507,9 +510,9 @@ export default function MonitorPage() {
               </div>
               <div className="bg-muted/30 p-2 rounded border border-border/50">
                 <span className="block text-xs text-muted-foreground mb-1">
-                  Độ tin cậy
+                  Thể tích
                 </span>
-                <span className="text-sm font-bold text-green-500">---</span>
+                <span className="text-xl font-mono font-bold text-white tracking-widest">---</span>
               </div>
               <div className="flex items-center gap-2">
                 <Palette fontSize="small" className="text-muted-foreground" />

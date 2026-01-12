@@ -9,7 +9,7 @@ def save_camera(data: Dict[str, Any]) -> bool:
     cameras = csv_storage.get_cameras_config()
     
     # Check if update or insert
-    existing_idx = next((i for i, c in enumerate(cameras) if c['id'] == data['id']), -1)
+    existing_idx = next((i for i, c in enumerate(cameras) if str(c['id']) == str(data['id'])), -1)
     
     if existing_idx >= 0:
         # UPDATE: Preserve existing fields, only update what's provided
@@ -18,7 +18,7 @@ def save_camera(data: Dict[str, Any]) -> bool:
         # Only update fields that are explicitly provided and not empty
         for key in ['name', 'ip', 'port', 'user', 'password', 'tag', 'username', 
                     'profile_token', 'stream_uri', 'resolution_width', 'resolution_height',
-                    'detection_mode']:
+                    'detection_mode', 'location_id']:
             if key in data and data[key] is not None:
                 existing_cam[key] = data[key]
         
@@ -43,6 +43,7 @@ def save_camera(data: Dict[str, Any]) -> bool:
             'user': data.get('username', 'admin'),
             'password': data.get('password', ''),
             'location': data.get('location', ''),
+            'location_id': data.get('location_id', ''),
             'type': data.get('type', ''),
             'status': data.get('status', 'Offline'),
             'tag': data.get('tag'),

@@ -147,3 +147,44 @@ body {
   @apply bg-background text-foreground;
   font-feature-settings: "rlig" 1, "calt" 1;
 }
+
+/* Minimal Themed Scrollbar */
+*::-webkit-scrollbar {
+  width: 5px !important;
+  height: 5px !important;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #f59e0b80 !important; /* amber-500 with 50% opacity */
+  border-radius: 20px !important;
+  border: 1px solid transparent !important;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #d97706 !important; /* amber-600 */
+}
+
+/* Firefox support */
+* {
+  scrollbar-width: thin !important;
+  scrollbar-color: #f59e0b80 transparent !important;
+}
+
+/* Force horizontal scrollbar visibility */
+.scrollbar-show-always {
+  scrollbar-width: thin !important;
+  overflow-x: scroll !important;
+}
+
+.scrollbar-show-always::-webkit-scrollbar {
+  display: block !important;
+  height: 6px !important;
+}
+
+.scrollbar-show-always::-webkit-scrollbar-thumb {
+  background-color: #f59e0b80 !important;
+}

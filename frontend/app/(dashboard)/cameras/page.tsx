@@ -1,8 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Add, Edit, Delete, Settings, ExpandMore, Check, Close, Warning } from '@mui/icons-material'
-import DataTable from '../../../components/ui/data-table'
+import { Add, Edit, Delete, Settings, ExpandMore, Check, Close, Warning, Visibility, VisibilityOff, Search, Download, ExpandLess } from '@mui/icons-material'
 import Dialog from '../../../components/ui/dialog'
 import { toast } from 'sonner'
 
@@ -34,13 +33,15 @@ interface Camera {
 const DEFAULT_TYPES_NAMES = [
     'Nhận diện xe & biển số',
     'Nhận diện màu & số bánh',
-    'Tính toán trọng lượng & khối lượng'
+    'Tính toán thể tích'
 ]
 
 export default function CamerasPage() {
   const [data, setData] = useState<Camera[]>([])
   const [locations, setLocations] = useState<LocationItem[]>([])
   const [camTypes, setCamTypes] = useState<TypeItem[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showScrollTop, setShowScrollTop] = useState(false)
   
   // Dialog States
   const [isCamDialogOpen, setIsCamDialogOpen] = useState(false)
@@ -58,6 +59,7 @@ export default function CamerasPage() {
   const [editLocIndex, setEditLocIndex] = useState<number | null>(null)
   const [tempLocName, setTempLocName] = useState('')
   const [isLocInputFocused, setIsLocInputFocused] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   // --- 1. Load Data from API ---
   const fetchInitialData = async () => {
@@ -255,6 +257,74 @@ export default function CamerasPage() {
     }
   }
 
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300)
+    }
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const filteredData = data.filter(item => {
+    const searchLow = searchTerm.toLowerCase()
+    return (
+        item.name.toLowerCase().includes(searchLow) ||
+        item.ip.toLowerCase().includes(searchLow) ||
+        item.location.toLowerCase().includes(searchLow) ||
+        (item.cam_id || '').toLowerCase().includes(searchLow) ||
+        (item.brand || '').toLowerCase().includes(searchLow)
+    )
+  })
+
+  const handleExportExcel = () => {
+    if (filteredData.length === 0) {
+      toast.error('Không có dữ liệu để xuất')
+      return
+    }
+
+    const headers = [
+      'Trạng thái',
+      'Mã Camera',
+      'Thương hiệu',
+      'Tên Camera',
+      'Địa chỉ IP',
+      'Vị trí',
+      'Loại chuyên dụng'
+    ]
+
+    const rows = filteredData.map(item => [
+      item.status,
+      item.cam_id || '',
+      item.brand || '',
+      item.name,
+      item.ip,
+      item.location,
+      item.type
+    ])
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n')
+
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    
+    link.setAttribute('href', url)
+    link.setAttribute('download', `Danh_sach_camera.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    toast.success('Đã tải xuống danh sách camera')
+  }
+
 
   // Columns Configuration
   const columns = [
@@ -318,35 +388,102 @@ export default function CamerasPage() {
   ]
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Danh sách Camera</h1>
-        
-        <div className="flex gap-3">
-            {/* Configuration Button */}
-            <button 
-                onClick={() => setIsConfigDialogOpen(true)}
-                className="bg-secondary hover:bg-muted text-secondary-foreground border border-border px-4 py-2 rounded-md font-medium flex items-center gap-2 transition-colors"
-            >
-                <Settings fontSize="small" /> Cấu hình
-            </button>
+    <div className="h-full flex flex-col p-6 gap-2 overflow-hidden">
+      {/* Header Section */}
+      <div className="flex justify-between items-center shrink-0">
+          <div className="space-y-1">
+              <h1 className="text-2xl font-bold tracking-tight">Danh sách Camera</h1>
+          </div>
 
-            {/* Add Camera Button */}
-            <button 
-            onClick={openAddDialog}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-md font-medium flex items-center gap-2 transition-colors"
-            >
-            <Add /> Thêm Camera
-            </button>
+          <div className="flex items-center gap-3">
+              {/* Search Bar */}
+              <div className="relative group min-w-[300px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" fontSize="small" />
+                  <input 
+                      type="text"
+                      placeholder="Tìm kiếm camera, IP, vị trí..."
+                      className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+              </div>
+
+              <button 
+                onClick={() => setIsConfigDialogOpen(true)}
+                className="px-4 py-1.5 bg-card border border-border text-foreground hover:bg-muted rounded-md text-sm font-bold flex items-center gap-2 transition-all shadow-sm"
+              >
+                <Settings fontSize="small" /> Cấu hình
+              </button>
+              
+              <button 
+                onClick={openAddDialog}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20 active:scale-95"
+              >
+                <Add fontSize="small" /> Thêm camera
+              </button>
+
+              <button 
+                onClick={handleExportExcel}
+                className="px-4 py-1.5 bg-card border border-border text-foreground hover:bg-muted rounded-md text-sm font-bold flex items-center gap-2 transition-all shadow-sm"
+              >
+                <Download fontSize="small" /> Xuất Excel
+              </button>
+          </div>
+      </div>
+
+      {/* Table Section */}
+      <div className="border border-border rounded-lg bg-card overflow-hidden flex-1 flex flex-col min-h-0">
+        {/* Unified Scroll Container */}
+        <div className="flex-1 overflow-y-scroll overflow-x-auto scrollbar-show-always min-h-0">
+          <table className="text-sm text-left border-collapse table-fixed w-fit min-w-full">
+            {/* Sticky Header */}
+            <thead className="text-[10px] uppercase text-muted-foreground font-bold sticky top-0 bg-muted/90 backdrop-blur-md z-20 border-b border-border">
+              <tr>
+                {columns.map((col, idx) => (
+                  <th key={idx} className="px-4 py-3 whitespace-nowrap" style={{ width: col.width || 'auto' }}>
+                    {col.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            
+            {/* Data Body */}
+            <tbody className="divide-y divide-border">
+              {filteredData.length > 0 ? (
+                filteredData.map((row, rowIdx) => (
+                  <tr 
+                    key={rowIdx} 
+                    className="bg-card hover:bg-muted/5 transition-colors group"
+                  >
+                    {columns.map((col, colIdx) => (
+                      <td key={colIdx} className="px-4 py-2.5 whitespace-nowrap text-foreground font-medium text-xs truncate" style={{ width: col.width || 'auto' }}>
+                        {col.render ? col.render(row) : (row as any)[col.accessorKey!]}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={columns.length} className="px-4 py-12 text-center text-muted-foreground font-medium">
+                    Không có camera nào được cấu hình
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      {/* Main Table */}
-      <DataTable 
-        columns={columns} 
-        data={data} 
-      />
+      {/* Floating Scroll to Top Button */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-10 left-1/2 -translate-x-1/2 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-all animate-in fade-in zoom-in duration-300 z-50 flex items-center justify-center border border-primary/20"
+          aria-label="Back to top"
+        >
+          <ExpandLess fontSize="medium" />
+        </button>
+      )}
 
       {/* --- ADD/EDIT CAMERA DIALOG --- */}
       <Dialog 
@@ -406,14 +543,24 @@ export default function CamerasPage() {
 
            <div className="space-y-2">
              <label className="text-sm font-medium text-muted-foreground">Mật khẩu (Password)</label>
-             <input 
-                type="password"
-                className="w-full p-2 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none"
-                value={editingItem?.password || ''}
-                onChange={e => setEditingItem(prev => ({ ...prev!, password: e.target.value }))}
-                autoComplete="new-password"
-                name="camera_password"
-             />
+             <div className="relative">
+               <input 
+                 type={showPassword ? "text" : "password"}
+                 className="w-full p-2 pr-10 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none"
+                 value={editingItem?.password || ''}
+                 onChange={e => setEditingItem(prev => ({ ...prev!, password: e.target.value }))}
+                 autoComplete="new-password"
+                 name="camera_password"
+               />
+               <button
+                 type="button"
+                 onClick={() => setShowPassword(!showPassword)}
+                 className="absolute inset-y-0 right-0 px-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
+                 tabIndex={-1}
+               >
+                 {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+               </button>
+             </div>
            </div>
 
            <div className="space-y-2">

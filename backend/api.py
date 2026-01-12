@@ -73,6 +73,17 @@ async def save_camera_config(camera: dict):
     # Ensure ID
     if 'id' not in camera or not camera['id']:
         camera['id'] = str(uuid.uuid4())
+    
+    # Resolve Location ID from Location Name
+    loc_name = camera.get('location')
+    if loc_name:
+        # Load locations to find ID
+        locations = csv_storage.get_locations()
+        # Find matching location
+        match = next((l for l in locations if l.get('name') == loc_name), None)
+        if match and match.get('id'):
+            camera['location_id'] = match['id']
+            
     db.save_camera(camera)
     return {"success": True, "id": camera['id']}
 
@@ -87,7 +98,7 @@ async def delete_camera(camera_id: str):
         del cameras[camera_id]
     
     # Remove from storage
-    db.delete_camera(camera_id)
+    db.delete_camera(camera_id) 
     return {"success": True}
 
 @camera_router.get("/saved")
@@ -122,7 +133,45 @@ async def get_locations():
 @camera_router.post("/locations")
 async def save_locations(locations: List[Dict[str, Any]]):
     print(f"Received locations: {locations}")
+    
+    # Save locations first to ensure IDs are generated if needed
     csv_storage.save_locations(locations)
+    
+    # Reload locations to get stable IDs/names map
+    saved_locations = csv_storage.get_locations() # [{id: '123', name: 'A'}, ...]
+    
+    # Map ID -> Name
+    loc_id_to_name = {str(loc.get('id')): loc.get('name') for loc in saved_locations if loc.get('id')}
+    # Map Name -> ID (for backfilling legacy cameras)
+    loc_name_to_id = {loc.get('name'): str(loc.get('id')) for loc in saved_locations if loc.get('name')}
+    
+    # Sync Cameras
+    all_cameras = csv_storage.get_cameras_config()
+    updated = False
+    
+    for cam in all_cameras:
+        cam_loc_id = str(cam.get('location_id', ''))
+        cam_loc_name = cam.get('location', '')
+        
+        # Scenario 1: Camera has ID -> Sync Name from Location
+        if cam_loc_id and cam_loc_id in loc_id_to_name:
+            current_known_name = loc_id_to_name[cam_loc_id]
+            if cam_loc_name != current_known_name:
+                cam['location'] = current_known_name
+                updated = True
+                
+        # Scenario 2: Camera has NO ID (or invalid) -> Backfill ID from Name
+        elif cam_loc_name and cam_loc_name in loc_name_to_id:
+            new_id = loc_name_to_id[cam_loc_name]
+            # Only update if it was missing or different
+            if cam_loc_id != new_id:
+                cam['location_id'] = new_id
+                updated = True
+                
+    if updated:
+        csv_storage.save_cameras_config(all_cameras)
+        print("Synced cameras with new location configurations")
+
     return {"success": True}
 
 @camera_router.get("/types")
@@ -188,13 +237,32 @@ async def connect_camera(request: CameraConnectRequest):
         detection_service.register_camera(camera_id, streamer, request.tag)
         
         # Update existing record or create new one
-        db.save_camera({
+        cam_data = {
             'id': camera_id, 'name': request.name, 'ip': request.ip, 'port': request.port,
             'username': request.user, 'password': request.password, 'profile_token': manager.profile_token,
             'stream_uri': manager.stream_uri, 'resolution_width': result.get('resolution', {}).get('width'),
             'resolution_height': result.get('resolution', {}).get('height'), 'tag': request.tag,
             'detection_mode': request.detection_mode
-        })
+        }
+        
+        # Resolve Location ID based on Request Name (if it's a name) for immediate sync
+        # If the request comes with a location name (which might be in request.name or implicit),
+        # but here the request is CameraConnectRequest which lacks 'location'.
+        # However, db.save_camera merges with existing data if possible, OR we should fetch location from DB if it exists 
+        # and we are just re-connecting. 
+        # Actually, CameraConnectRequest is for connecting, typically from the "Add Camera" dialog which MIGHT include location.
+        # But looking at CameraConnectRequest model, it doesn't have 'location'.
+        # Ah, the user might be using the "Edit/Add Saved Camera" list endpoint @camera_router.post("")
+        
+        # Let's fix the schema for save_camera_config first as that's where the user 'adds' or 'updates' via the list.
+        # For THIS connect endpoint, we are just connecting. We should preserve existing location info from DB if it exists.
+        if existing_cam:
+             cam_data['location'] = existing_cam.get('location')
+             cam_data['location_id'] = existing_cam.get('location_id')
+             cam_data['type'] = existing_cam.get('type')
+             cam_data['brand'] = existing_cam.get('brand')
+        
+        db.save_camera(cam_data)
         result["id"] = camera_id
     return result
 
