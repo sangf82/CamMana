@@ -65,3 +65,62 @@ class CameraMode:
     PLATE_DETECTION = "plate"
     VERIFICATION = "verify"
     DISABLED = "disabled"
+
+
+def detect_all_info(image: np.ndarray) -> Dict[str, Any]:
+    """Detect all vehicle information (plate, color, wheels) in parallel
+    
+    This is a convenience function that runs all detections and returns combined results.
+    More efficient than calling each function separately.
+    
+    Args:
+        image: Vehicle image (numpy array from OpenCV)
+        
+    Returns:
+        Combined results:
+        {
+            'success': bool,
+            'plate': str or None,
+            'color': str or None,
+            'wheel_count': int or None,
+            'plate_details': dict,
+            'color_details': dict,
+            'wheel_details': dict
+        }
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    result = {
+        'success': True,
+        'plate': None,
+        'color': None,
+        'wheel_count': None
+    }
+    
+    # Run all detections in parallel
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {
+            'plate': executor.submit(detect_plate, image),
+            'color': executor.submit(detect_colors, image),
+            'wheel': executor.submit(count_wheels, image)
+        }
+        
+        for key, future in futures.items():
+            try:
+                if key == 'plate':
+                    plate_result = future.result(timeout=30)
+                    result['plate'] = plate_result['plates'][0] if plate_result['success'] and plate_result['plates'] else None
+                    result['plate_details'] = plate_result
+                elif key == 'color':
+                    color_result = future.result(timeout=30)
+                    result['color'] = color_result.get('primary_color')
+                    result['color_details'] = color_result
+                elif key == 'wheel':
+                    wheel_result = future.result(timeout=30)
+                    result['wheel_count'] = wheel_result.get('wheel_count')
+                    result['wheel_details'] = wheel_result
+            except Exception as e:
+                result['success'] = False
+                result[f'{key}_error'] = str(e)
+    
+    return result

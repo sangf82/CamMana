@@ -32,9 +32,18 @@ class VideoStreamer:
         self._reconnect_delay = 2.0
         self._last_frame_time = 0.0
         self._frame_timeout = 10.0
-        capture_path = os.getenv("CAPTURE_DIR_PATH", "database/captured_img")
+        capture_path = os.getenv("CAPTURE_DIR_PATH", "database/saved_image")
         self.capture_dir = Path(capture_path)
         self.capture_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Camera info for image naming (set by camera manager)
+        self.cam_code = None
+        self.cam_location = None
+    
+    def set_camera_info(self, cam_code: str = None, location: str = None):
+        """Set camera information for image naming"""
+        self.cam_code = cam_code
+        self.cam_location = location
     
     def _capture_loop(self):
         while not self._stop_event.is_set():
@@ -148,14 +157,30 @@ class VideoStreamer:
         return {"width": 0, "height": 0, "fps": 0, "resolution": "N/A", "frame_count": 0}
     
     def capture_image(self) -> dict:
+        """Capture image with format: cam-code_location_date.jpg"""
         if self.last_frame is None:
             return {"success": False, "error": "No frame available"}
         try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = self.capture_dir / f"capture_{timestamp}.jpg"
+            # Generate filename: cam-code_location_date
+            date_str = datetime.now().strftime("%d-%m-%Y")
+            time_str = datetime.now().strftime("%H%M%S")
+            
+            # Build filename parts
+            cam_part = self.cam_code if self.cam_code else "CAM-XX"
+            loc_part = self.cam_location.replace(" ", "-") if self.cam_location else "Unknown"
+            
+            filename = self.capture_dir / f"{cam_part}_{loc_part}_{date_str}_{time_str}.jpg"
+            
+            # Save image
             frame_rgb = cv2.cvtColor(self.last_frame, cv2.COLOR_BGR2RGB)
             Image.fromarray(frame_rgb).save(filename, quality=95)
-            return {"success": True, "filename": str(filename), "timestamp": timestamp}
+            
+            return {
+                "success": True, 
+                "filename": filename.name,
+                "path": str(filename),
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
         except Exception as e:
             return {"success": False, "error": str(e)}
     

@@ -152,7 +152,7 @@ class CarDetector:
         return frame[y1:y2, x1:x2], detection
 
 class StreamCarDetector:
-    def __init__(self, capture_dir: str = "database/captured_img", confidence: float = 0.3, cooldown_seconds: float = 5.0):
+    def __init__(self, capture_dir: str = "database/saved_image", confidence: float = 0.3, cooldown_seconds: float = 5.0):
         self.detector = CarDetector(confidence=confidence, detect_trucks=True)
         self.capture_dir = Path(capture_dir)
         self.capture_dir.mkdir(parents=True, exist_ok=True)

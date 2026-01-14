@@ -11,8 +11,11 @@ import uvicorn
 
 load_dotenv()
 
-from backend.api import camera_router, schedule_router, detection_router
-from backend.data_process import db
+# Import from new modular API structure
+from backend.api import (
+    camera_router, config_router, schedule_router, 
+    detection_router, history_router
+)
 
 BACKEND_DIR = Path(__file__).parent
 
@@ -38,14 +41,16 @@ def get_static_dir():
 
 
 def create_app() -> FastAPI:
-    db.init_db()
+    # Removed: db.init_db() - Now using CSV-only storage
     
     app = FastAPI(title="cam_mana", description="ONVIF Camera Control & Streaming API", version="2.0.0")
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
     
     app.include_router(camera_router)
+    app.include_router(config_router)
     app.include_router(schedule_router)
     app.include_router(detection_router)
+    app.include_router(history_router)
     
     static_dir = get_static_dir()
     if static_dir:

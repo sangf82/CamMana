@@ -1,6 +1,6 @@
-# CamMana Backend Package
-from backend.camera_config import ONVIFCameraManager, CameraConfig, VideoStreamer
-from backend.detect_car import DetectionService, get_detection_service
-from backend.data_process import init_db
+"""Backend Package - Camera Management System"""
 
-__all__ = ['ONVIFCameraManager', 'CameraConfig', 'VideoStreamer', 'DetectionService', 'get_detection_service', 'init_db']
+# Import detection service
+from backend.detect_car import DetectionService, get_detection_service
+
+__all__ = ['DetectionService', 'get_detection_service']

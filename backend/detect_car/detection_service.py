@@ -12,12 +12,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 from backend.detect_car.car_detect import CarDetector
 from backend.detect_car.info_detect import detect_plate, detect_colors, count_wheels
-from backend.data_process import csv_storage as storage
+from backend import data_process as storage
 
 IOU_THRESHOLD = 0.70
 AUTO_DETECTION_INTERVAL = 0.5
 MAX_VIDEO_DURATION = 5.0
-CAPTURE_DIR = Path("database/captured_car")
+CAPTURE_DIR = Path("database/car_history")
 
 @dataclass
 class DetectionState:

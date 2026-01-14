@@ -1,40 +1,14 @@
-"""CSV Storage Module - Daily CSV files for captured car data"""
+"""Captured cars storage and detection logs"""
 import csv
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
-import threading
+from backend.data_process._common import (
+    CAR_HEADERS, LOG_HEADERS, DATA_DIR, LOGS_DIR, _generate_id, _read_csv, 
+    _get_today_date, _ensure_dirs, _write_lock
+)
 
-# Storage paths
-DATA_DIR = Path(__file__).parent.parent.parent / "database" / "data"
-LOGS_DIR = DATA_DIR / "logs"
-
-# Thread lock for file writes
-_write_lock = threading.Lock()
-
-# CSV Headers
-CAR_HEADERS = [
-    'id', 'timestamp', 'folder_path', 'plate_number', 'primary_color', 
-    'wheel_count', 'front_cam_id', 'side_cam_id', 'confidence', 
-    'class_name', 'bbox'
-]
-
-LOG_HEADERS = ['timestamp', 'camera_id', 'event_type', 'details']
-
-CAMERA_HEADERS = ['id', 'name', 'ip', 'port', 'user', 'password', 'location', 'type', 'status', 'tag', 'username', 'brand', 'cam_id', 'location_id']
-LOCATION_HEADERS = ['id', 'name']
-TYPE_HEADERS = ['id', 'name']
-REGISTERED_CAR_HEADERS = ['id', 'plate_number', 'owner', 'model', 'color', 'notes', 'created_at', 'box_dimensions', 'standard_volume']
-
-def _ensure_dirs():
-    """Ensure data directories exist"""
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
-
-def _get_today_date() -> str:
-    """Get today's date string for filename"""
-    return datetime.now().strftime("%Y_%m_%d")
 
 def _get_car_csv_path(date: Optional[str] = None) -> Path:
     """Get path to car CSV file for given date (default: today)"""
@@ -42,16 +16,13 @@ def _get_car_csv_path(date: Optional[str] = None) -> Path:
     date_str = date or _get_today_date()
     return DATA_DIR / f"captured_cars_{date_str}.csv"
 
+
 def _get_log_csv_path(date: Optional[str] = None) -> Path:
     """Get path to log CSV file for given date (default: today)"""
     _ensure_dirs()
     date_str = date or _get_today_date()
     return LOGS_DIR / f"detection_logs_{date_str}.csv"
 
-def _get_config_csv_path(filename: str) -> Path:
-    """Get path to config CSV files"""
-    _ensure_dirs()
-    return DATA_DIR / filename
 
 def _init_csv_if_needed(filepath: Path, headers: List[str]):
     """Create CSV file with headers if it doesn't exist"""
@@ -60,92 +31,6 @@ def _init_csv_if_needed(filepath: Path, headers: List[str]):
             writer = csv.writer(f)
             writer.writerow(headers)
 
-def _generate_id() -> str:
-    """Generate unique ID based on timestamp"""
-    import uuid
-    return f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
-
-def _read_csv(path: Path) -> List[Dict[str, Any]]:
-    """Generic CSV reader"""
-    if not path.exists():
-        return []
-    with open(path, 'r', encoding='utf-8') as f:
-        return list(csv.DictReader(f))
-
-def _write_csv(path: Path, headers: List[str], data: List[Dict[str, Any]]):
-    """Generic CSV writer"""
-    with _write_lock:
-        with open(path, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.DictWriter(f, fieldnames=headers, extrasaction='ignore')
-            writer.writeheader()
-            writer.writerows(data)
-
-# ========== Configurations (Cameras, Locations, Types, Registry) ==========
-
-def get_cameras_config() -> List[Dict[str, Any]]:
-    path = _get_config_csv_path("cameras.csv")
-    _init_csv_if_needed(path, CAMERA_HEADERS)
-    return _read_csv(path)
-
-def save_cameras_config(cameras: List[Dict[str, Any]]):
-    _write_csv(_get_config_csv_path("cameras.csv"), CAMERA_HEADERS, cameras)
-
-def get_locations() -> List[Dict[str, str]]:
-    path = _get_config_csv_path("locations.csv")
-    _init_csv_if_needed(path, LOCATION_HEADERS)
-    data = _read_csv(path)
-    # Migration: if no ID, generate one on the fly (won't save until next write, or we can save now)
-    # Simple approach: return objects.
-    return data
-
-def save_locations(locations: List[Dict[str, str]]):
-    # Ensure IDs
-    for loc in locations:
-        if not loc.get('id'):
-            loc['id'] = _generate_id()
-    _write_csv(_get_config_csv_path("locations.csv"), LOCATION_HEADERS, locations)
-
-def get_cam_types() -> List[Dict[str, str]]:
-    path = _get_config_csv_path("camtypes.csv")
-    _init_csv_if_needed(path, TYPE_HEADERS)
-    return _read_csv(path)
-
-def save_cam_types(types: List[Dict[str, str]]):
-    # Ensure IDs
-    for t in types:
-        if not t.get('id'):
-            t['id'] = _generate_id()
-    _write_csv(_get_config_csv_path("camtypes.csv"), TYPE_HEADERS, types)
-
-def get_registered_cars() -> List[Dict[str, Any]]:
-    path = _get_config_csv_path("registered_cars.csv")
-    _init_csv_if_needed(path, REGISTERED_CAR_HEADERS)
-    return _read_csv(path)
-
-def save_registered_cars(cars: List[Dict[str, Any]]):
-    """Save registered cars, ensuring every item has a unique ID"""
-    seen_ids = set()
-    cleaned_cars = []
-    
-    for car in cars:
-        current_id = str(car.get('id', '')).strip()
-        
-        # Determine if ID needs generation (missing or duplicate)
-        if not current_id or current_id in seen_ids:
-            new_id = _generate_id()
-            # Paranoid check ensuring the generated ID isn't somehow already seen (unlikely with UUID)
-            while new_id in seen_ids:
-                new_id = _generate_id()
-            car['id'] = new_id
-        else:
-            car['id'] = current_id
-            
-        seen_ids.add(car['id'])
-        cleaned_cars.append(car)
-            
-    _write_csv(_get_config_csv_path("registered_cars.csv"), REGISTERED_CAR_HEADERS, cleaned_cars)
-
-# ========== Captured Cars ==========
 
 def save_captured_car(data: Dict[str, Any]) -> str:
     """Save captured car data to today's CSV file"""
@@ -176,6 +61,7 @@ def save_captured_car(data: Dict[str, Any]) -> str:
     
     return record_id
 
+
 def get_captured_cars(date: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
     """Get captured cars from CSV file for given date (default: today)"""
     csv_path = _get_car_csv_path(date)
@@ -204,10 +90,9 @@ def get_captured_cars(date: Optional[str] = None, limit: int = 50) -> List[Dict[
     # Return most recent first, limited
     return list(reversed(cars))[:limit]
 
+
 def get_captured_cars_range(start_date: str, end_date: str) -> List[Dict[str, Any]]:
     """Get captured cars for a date range (format: YYYY_MM_DD)"""
-    from datetime import timedelta
-    
     start = datetime.strptime(start_date, "%Y_%m_%d")
     end = datetime.strptime(end_date, "%Y_%m_%d")
     
@@ -221,11 +106,13 @@ def get_captured_cars_range(start_date: str, end_date: str) -> List[Dict[str, An
     
     return all_cars
 
+
 def search_by_plate(plate_number: str, date: Optional[str] = None) -> List[Dict[str, Any]]:
     """Search cars by plate number"""
     cars = get_captured_cars(date=date, limit=1000)
     plate_lower = plate_number.lower()
     return [c for c in cars if plate_lower in (c.get('plate_number', '') or '').lower()]
+
 
 def get_available_dates() -> List[str]:
     """Get list of dates that have CSV data"""
@@ -241,8 +128,24 @@ def get_available_dates() -> List[str]:
             dates.append(date_str)
     return sorted(dates, reverse=True)
 
-# ========== Detection Logs ==========
 
+def get_daily_stats(date: Optional[str] = None) -> Dict[str, Any]:
+    """Get statistics for a specific date"""
+    cars = get_captured_cars(date=date, limit=10000)
+    
+    plates_detected = sum(1 for c in cars if c.get('plate_number'))
+    colors_detected = sum(1 for c in cars if c.get('primary_color'))
+    
+    return {
+        'date': date or _get_today_date(),
+        'total_cars': len(cars),
+        'plates_detected': plates_detected,
+        'colors_detected': colors_detected,
+        'detection_rate': round(plates_detected / len(cars) * 100, 1) if cars else 0
+    }
+
+
+# Detection Logs
 def log_detection_event(camera_id: str, event_type: str, details: Optional[Dict] = None):
     """Log detection event to today's log CSV"""
     csv_path = _get_log_csv_path()
@@ -259,6 +162,7 @@ def log_detection_event(camera_id: str, event_type: str, details: Optional[Dict]
         with open(csv_path, 'a', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             writer.writerow(row)
+
 
 def get_detection_logs(camera_id: Optional[str] = None, date: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
     """Get detection logs from CSV file"""
@@ -284,24 +188,3 @@ def get_detection_logs(camera_id: Optional[str] = None, date: Optional[str] = No
     
     # Return most recent first, limited
     return list(reversed(logs))[:limit]
-
-# ========== Stats ==========
-
-def get_daily_stats(date: Optional[str] = None) -> Dict[str, Any]:
-    """Get statistics for a specific date"""
-    cars = get_captured_cars(date=date, limit=10000)
-    
-    plates_detected = sum(1 for c in cars if c.get('plate_number'))
-    colors_detected = sum(1 for c in cars if c.get('primary_color'))
-    
-    return {
-        'date': date or _get_today_date(),
-        'total_cars': len(cars),
-        'plates_detected': plates_detected,
-        'colors_detected': colors_detected,
-        'detection_rate': round(plates_detected / len(cars) * 100, 1) if cars else 0
-    }
-
-# Initialize directories on import
-_ensure_dirs()
-print(f"[cam_mana] Data directory: {DATA_DIR}")

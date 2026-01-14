@@ -1,12 +1,26 @@
-"""Database Utility Module - CSV Adapter
-Wrapper to use CSV files for Camera Configuration.
-"""
+"""Camera configuration operations - CSV storage"""
 from typing import Optional, List, Dict, Any
-from backend.data_process import csv_storage
+from backend.data_process._common import (
+    CAMERA_HEADERS, _generate_id, _read_csv, _write_csv, _get_config_csv_path
+)
 
-# Camera CRUD (Adapting from SQLite to CSV)
+
+def get_cameras_config() -> List[Dict[str, Any]]:
+    """Get all camera configurations"""
+    path = _get_config_csv_path("cameras.csv")
+    from backend.data_process._common import _init_csv_if_needed
+    _init_csv_if_needed(path, CAMERA_HEADERS)
+    return _read_csv(path)
+
+
+def save_cameras_config(cameras: List[Dict[str, Any]]):
+    """Save cameras configuration list"""
+    _write_csv(_get_config_csv_path("cameras.csv"), CAMERA_HEADERS, cameras)
+
+
 def save_camera(data: Dict[str, Any]) -> bool:
-    cameras = csv_storage.get_cameras_config()
+    """Save or update a single camera configuration"""
+    cameras = get_cameras_config()
     
     # Check if update or insert
     existing_idx = next((i for i, c in enumerate(cameras) if str(c['id']) == str(data['id'])), -1)
@@ -66,35 +80,32 @@ def save_camera(data: Dict[str, Any]) -> bool:
         
         cameras.append(new_cam)
         
-    csv_storage.save_cameras_config(cameras)
+    save_cameras_config(cameras)
     return True
+
 
 def get_camera(camera_id: str) -> Optional[Dict[str, Any]]:
-    cameras = csv_storage.get_cameras_config()
+    """Get camera configuration by ID"""
+    cameras = get_cameras_config()
     return next((c for c in cameras if c['id'] == camera_id), None)
 
+
 def get_all_cameras() -> List[Dict[str, Any]]:
-    return csv_storage.get_cameras_config()
+    """Get all cameras (alias for get_cameras_config)"""
+    return get_cameras_config()
+
 
 def get_cameras_by_tag(tag: str) -> List[Dict[str, Any]]:
-    cameras = csv_storage.get_cameras_config()
+    """Get cameras filtered by tag"""
+    cameras = get_cameras_config()
     return [c for c in cameras if c.get('tag') == tag]
 
+
 def delete_camera(camera_id: str) -> bool:
-    cameras = csv_storage.get_cameras_config()
+    """Delete camera by ID"""
+    cameras = get_cameras_config()
     new_cameras = [c for c in cameras if c['id'] != camera_id]
     if len(cameras) != len(new_cameras):
-        csv_storage.save_cameras_config(new_cameras)
+        save_cameras_config(new_cameras)
         return True
     return False
-
-def update_camera_detection_mode(camera_id: str, mode: str) -> bool:
-    # Note: Detection mode is currently transient or part of the full object save.
-    # We will just ignore this specific call for now or implement if 'detection_mode' 
-    # becomes a stored field in the CSV headers.
-    # The current request asked for: list of local, list of cam type, etc.
-    # We will trust the main save_camera flow.
-    return True
-
-def init_db():
-    pass # No-op for CSV

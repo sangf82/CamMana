@@ -1,55 +1,26 @@
-import os
+"""Camera management API endpoints"""
 import uuid
 import asyncio
-from typing import Optional, List, Dict, Any, Union
-from fastapi import APIRouter, HTTPException, File, UploadFile
-from fastapi.responses import StreamingResponse, JSONResponse, Response
-from pydantic import BaseModel
+from typing import Optional
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse, Response
 
 from backend.camera_config.camera import ONVIFCameraManager, CameraConfig
 from backend.camera_config.streamer import VideoStreamer
 from backend.detect_car.detection_service import get_detection_service
-from backend.data_process import db, csv_storage
+from backend import data_process
+from backend.api._shared import (
+    cameras, get_camera_state,
+    CameraConnectRequest, PTZMoveRequest,
+    UpdateDetectionModeRequest, UpdateCameraTagRequest
+)
 
-# Request Models
-class CameraConnectRequest(BaseModel):
-    ip: str
-    port: int = 8899
-    user: str = "admin"
-    password: str = ""
-    name: str = "Camera"
-    tag: Optional[str] = None
-    detection_mode: str = "disabled"
-
-class PTZMoveRequest(BaseModel):
-    speed: float = 0.5
-
-class UpdateDetectionModeRequest(BaseModel):
-    detection_mode: str
-
-class UpdateCameraTagRequest(BaseModel):
-    tag: Optional[str]
-
-class ConfigItem(BaseModel):
-    id: Union[int, str]
-    name: str
-
-# Routers
 camera_router = APIRouter(prefix="/api/cameras", tags=["cameras"])
-schedule_router = APIRouter(prefix="/api", tags=["schedule"])
-detection_router = APIRouter(prefix="/api", tags=["detection"])
 
-# In-memory camera state
-cameras = {}
-
-def get_camera_state(camera_id: str):
-    if camera_id not in cameras:
-        raise HTTPException(status_code=404, detail="Camera not found")
-    return cameras[camera_id]
-
-# Camera Endpoints
+# Camera Management Endpoints
 @camera_router.get("")
 async def get_cameras():
+    """Get all connected cameras"""
     result = []
     detection_service = get_detection_service()
     for cam_id, cam in cameras.items():
@@ -70,6 +41,7 @@ async def get_cameras():
 
 @camera_router.post("")
 async def save_camera_config(camera: dict):
+    """Save or update camera configuration"""
     # Ensure ID
     if 'id' not in camera or not camera['id']:
         camera['id'] = str(uuid.uuid4())
@@ -77,18 +49,17 @@ async def save_camera_config(camera: dict):
     # Resolve Location ID from Location Name
     loc_name = camera.get('location')
     if loc_name:
-        # Load locations to find ID
-        locations = csv_storage.get_locations()
-        # Find matching location
+        locations = data_process.get_locations()
         match = next((l for l in locations if l.get('name') == loc_name), None)
         if match and match.get('id'):
             camera['location_id'] = match['id']
             
-    db.save_camera(camera)
+    data_process.save_camera(camera)
     return {"success": True, "id": camera['id']}
 
 @camera_router.delete("/{camera_id}")
 async def delete_camera(camera_id: str):
+    """Delete camera"""
     # Disconnect if active
     if camera_id in cameras:
         cam = cameras[camera_id]
@@ -98,12 +69,13 @@ async def delete_camera(camera_id: str):
         del cameras[camera_id]
     
     # Remove from storage
-    db.delete_camera(camera_id) 
+    data_process.delete_camera(camera_id) 
     return {"success": True}
 
 @camera_router.get("/saved")
 async def get_saved_cameras():
-    saved = db.get_all_cameras()
+    """Get all saved camera configurations"""
+    saved = data_process.get_all_cameras()
     # Build a lookup of active cameras by IP for reliable matching
     active_by_ip = {cam["config"].ip: (cam_id, cam) for cam_id, cam in cameras.items()}
     
@@ -124,77 +96,9 @@ async def get_saved_cameras():
             cam['status'] = 'Offline'
     return saved
 
-# --- Configuration Endpoints (Locations, Types, Registry) ---
-
-@camera_router.get("/locations")
-async def get_locations():
-    return csv_storage.get_locations()
-
-@camera_router.post("/locations")
-async def save_locations(locations: List[Dict[str, Any]]):
-    print(f"Received locations: {locations}")
-    
-    # Save locations first to ensure IDs are generated if needed
-    csv_storage.save_locations(locations)
-    
-    # Reload locations to get stable IDs/names map
-    saved_locations = csv_storage.get_locations() # [{id: '123', name: 'A'}, ...]
-    
-    # Map ID -> Name
-    loc_id_to_name = {str(loc.get('id')): loc.get('name') for loc in saved_locations if loc.get('id')}
-    # Map Name -> ID (for backfilling legacy cameras)
-    loc_name_to_id = {loc.get('name'): str(loc.get('id')) for loc in saved_locations if loc.get('name')}
-    
-    # Sync Cameras
-    all_cameras = csv_storage.get_cameras_config()
-    updated = False
-    
-    for cam in all_cameras:
-        cam_loc_id = str(cam.get('location_id', ''))
-        cam_loc_name = cam.get('location', '')
-        
-        # Scenario 1: Camera has ID -> Sync Name from Location
-        if cam_loc_id and cam_loc_id in loc_id_to_name:
-            current_known_name = loc_id_to_name[cam_loc_id]
-            if cam_loc_name != current_known_name:
-                cam['location'] = current_known_name
-                updated = True
-                
-        # Scenario 2: Camera has NO ID (or invalid) -> Backfill ID from Name
-        elif cam_loc_name and cam_loc_name in loc_name_to_id:
-            new_id = loc_name_to_id[cam_loc_name]
-            # Only update if it was missing or different
-            if cam_loc_id != new_id:
-                cam['location_id'] = new_id
-                updated = True
-                
-    if updated:
-        csv_storage.save_cameras_config(all_cameras)
-        print("Synced cameras with new location configurations")
-
-    return {"success": True}
-
-@camera_router.get("/types")
-async def get_cam_types():
-    return csv_storage.get_cam_types()
-
-@camera_router.post("/types")
-async def save_cam_types(types: List[Dict[str, Any]]):
-    print(f"Received types: {types}")
-    csv_storage.save_cam_types(types)
-    return {"success": True}
-
-@camera_router.get("/registered_cars")
-async def get_registered_cars():
-    return csv_storage.get_registered_cars()
-
-@camera_router.post("/registered_cars")
-async def save_registered_cars(cars: List[Dict[str, Any]]):
-    csv_storage.save_registered_cars(cars)
-    return {"success": True}
-
 @camera_router.post("/connect")
 async def connect_camera(request: CameraConnectRequest):
+    """Connect to an ONVIF camera"""
     # Check if already connected
     for cam_id, cam in cameras.items():
         if cam["config"].ip == request.ip:
@@ -223,7 +127,7 @@ async def connect_camera(request: CameraConnectRequest):
         streamer = VideoStreamer(manager.stream_uri)
         
         # Check if camera already exists in saved cameras by IP - reuse that ID
-        existing_cameras = db.get_all_cameras()
+        existing_cameras = data_process.get_all_cameras()
         existing_cam = next((c for c in existing_cameras if c.get('ip') == request.ip), None)
         
         if existing_cam and existing_cam.get('id'):
@@ -245,29 +149,27 @@ async def connect_camera(request: CameraConnectRequest):
             'detection_mode': request.detection_mode
         }
         
-        # Resolve Location ID based on Request Name (if it's a name) for immediate sync
-        # If the request comes with a location name (which might be in request.name or implicit),
-        # but here the request is CameraConnectRequest which lacks 'location'.
-        # However, db.save_camera merges with existing data if possible, OR we should fetch location from DB if it exists 
-        # and we are just re-connecting. 
-        # Actually, CameraConnectRequest is for connecting, typically from the "Add Camera" dialog which MIGHT include location.
-        # But looking at CameraConnectRequest model, it doesn't have 'location'.
-        # Ah, the user might be using the "Edit/Add Saved Camera" list endpoint @camera_router.post("")
-        
-        # Let's fix the schema for save_camera_config first as that's where the user 'adds' or 'updates' via the list.
-        # For THIS connect endpoint, we are just connecting. We should preserve existing location info from DB if it exists.
+        # Preserve existing location info from DB if it exists
+        cam_code = None
+        cam_location = None
         if existing_cam:
              cam_data['location'] = existing_cam.get('location')
              cam_data['location_id'] = existing_cam.get('location_id')
              cam_data['type'] = existing_cam.get('type')
              cam_data['brand'] = existing_cam.get('brand')
+             cam_code = existing_cam.get('cam_id')
+             cam_location = existing_cam.get('location')
         
-        db.save_camera(cam_data)
+        # Set camera info on streamer for image naming
+        streamer.set_camera_info(cam_code=cam_code, location=cam_location)
+        
+        data_process.save_camera(cam_data)
         result["id"] = camera_id
     return result
 
 @camera_router.post("/{camera_id}/disconnect")
 async def disconnect_camera(camera_id: str):
+    """Disconnect camera"""
     cam = get_camera_state(camera_id)
     get_detection_service().unregister_camera(camera_id)
     if cam["streamer"]: cam["streamer"].stop()
@@ -277,6 +179,7 @@ async def disconnect_camera(camera_id: str):
 
 @camera_router.post("/{camera_id}/detection_mode")
 async def update_detection_mode(camera_id: str, request: UpdateDetectionModeRequest):
+    """Update camera detection mode"""
     cam = get_camera_state(camera_id)
     if request.detection_mode not in ("auto", "manual", "disabled"):
         raise HTTPException(status_code=400, detail="Invalid detection mode")
@@ -290,11 +193,11 @@ async def update_detection_mode(camera_id: str, request: UpdateDetectionModeRequ
         detection_service.stop_auto_detection(camera_id)
     
     cam["detection_mode"] = request.detection_mode
-    db.update_camera_detection_mode(camera_id, request.detection_mode)
     return {"success": True, "detection_mode": request.detection_mode}
 
 @camera_router.post("/{camera_id}/tag")
 async def update_camera_tag(camera_id: str, request: UpdateCameraTagRequest):
+    """Update camera tag"""
     get_camera_state(camera_id)
     if request.tag and request.tag not in ("front_cam", "side_cam"):
         raise HTTPException(status_code=400, detail="Invalid tag")
@@ -304,6 +207,7 @@ async def update_camera_tag(camera_id: str, request: UpdateCameraTagRequest):
 # Stream Endpoints
 @camera_router.post("/{camera_id}/stream/start")
 async def start_stream(camera_id: str):
+    """Start video stream"""
     streamer = get_camera_state(camera_id)["streamer"]
     if not streamer:
         raise HTTPException(status_code=400, detail="Streamer not initialized")
@@ -311,12 +215,14 @@ async def start_stream(camera_id: str):
 
 @camera_router.post("/{camera_id}/stream/stop")
 async def stop_stream(camera_id: str):
+    """Stop video stream"""
     streamer = get_camera_state(camera_id)["streamer"]
     if streamer: streamer.stop()
     return {"success": True}
 
 @camera_router.get("/{camera_id}/stream")
 async def video_feed(camera_id: str):
+    """Get video feed (MJPEG stream)"""
     streamer = get_camera_state(camera_id)["streamer"]
     if not streamer or not streamer.is_streaming:
         if streamer: streamer.start()
@@ -334,6 +240,7 @@ async def video_feed(camera_id: str):
 
 @camera_router.get("/{camera_id}/snapshot")
 async def get_snapshot(camera_id: str):
+    """Get single frame snapshot"""
     streamer = get_camera_state(camera_id)["streamer"]
     if not streamer:
         raise HTTPException(status_code=400, detail="No streamer")
@@ -344,6 +251,7 @@ async def get_snapshot(camera_id: str):
 
 @camera_router.post("/{camera_id}/capture")
 async def capture_image(camera_id: str):
+    """Capture image to disk"""
     streamer = get_camera_state(camera_id)["streamer"]
     if not streamer:
         raise HTTPException(status_code=400, detail="No streamer")
@@ -352,102 +260,48 @@ async def capture_image(camera_id: str):
 # PTZ Control Endpoints
 @camera_router.post("/{camera_id}/ptz/up")
 async def ptz_up(camera_id: str, request: PTZMoveRequest):
+    """Move camera up"""
     return get_camera_state(camera_id)["manager"].move_up(request.speed)
 
 @camera_router.post("/{camera_id}/ptz/down")
 async def ptz_down(camera_id: str, request: PTZMoveRequest):
+    """Move camera down"""
     return get_camera_state(camera_id)["manager"].move_down(request.speed)
 
 @camera_router.post("/{camera_id}/ptz/left")
 async def ptz_left(camera_id: str, request: PTZMoveRequest):
+    """Move camera left"""
     return get_camera_state(camera_id)["manager"].move_left(request.speed)
 
 @camera_router.post("/{camera_id}/ptz/right")
 async def ptz_right(camera_id: str, request: PTZMoveRequest):
+    """Move camera right"""
     return get_camera_state(camera_id)["manager"].move_right(request.speed)
 
 @camera_router.post("/{camera_id}/ptz/zoom-in")
 async def ptz_zoom_in(camera_id: str, request: PTZMoveRequest):
+    """Zoom in"""
     return get_camera_state(camera_id)["manager"].zoom_in(request.speed)
 
 @camera_router.post("/{camera_id}/ptz/zoom-out")
 async def ptz_zoom_out(camera_id: str, request: PTZMoveRequest):
+    """Zoom out"""
     return get_camera_state(camera_id)["manager"].zoom_out(request.speed)
 
 @camera_router.post("/{camera_id}/ptz/stop")
 async def ptz_stop(camera_id: str):
+    """Stop PTZ movement"""
     return get_camera_state(camera_id)["manager"].ptz_stop()
 
 # Detection Endpoints
 @camera_router.get("/{camera_id}/detect")
 async def detect_car(camera_id: str):
+    """Run vehicle detection"""
     get_camera_state(camera_id)
     return get_detection_service().detect(camera_id)
 
-@camera_router.post("/{camera_id}/capture_with_detection")
+@camera_router. post("/{camera_id}/capture_with_detection")
 async def capture_with_detection(camera_id: str, force: bool = False):
+    """Capture image with vehicle detection"""
     get_camera_state(camera_id)
     return get_detection_service().capture_with_detection(camera_id, force=force)
-
-@detection_router.get("/captured_cars")
-async def get_captured_cars(limit: int = 50, date: Optional[str] = None):
-    return csv_storage.get_captured_cars(date=date, limit=limit)
-
-@detection_router.get("/captured_cars/search")
-async def search_captured_cars(plate: str, date: Optional[str] = None):
-    return csv_storage.search_by_plate(plate, date=date)
-
-@detection_router.get("/detection_logs")
-async def get_detection_logs(camera_id: Optional[str] = None, date: Optional[str] = None, limit: int = 100):
-    return csv_storage.get_detection_logs(camera_id=camera_id, date=date, limit=limit)
-
-# Schedule Endpoints
-@schedule_router.get("/schedule")
-async def get_schedule():
-    try:
-        import pandas as pd
-        import numpy as np
-        
-        file_path = os.getenv("SCHEDULE_FILE_PATH", "database/schedule/CCN_template.xlsx")
-        if not os.path.isabs(file_path):
-            file_path = os.path.join(os.getcwd(), file_path)
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Schedule file not found: {file_path}")
-        
-        df = pd.read_excel(file_path)
-        df.columns = [str(c).strip() for c in df.columns]
-        
-        rename_map = {}
-        for col in df.columns:
-            col_lower = col.lower()
-            if 'stt' in col_lower: rename_map[col] = 'stt'
-            elif 'thời gian' in col_lower or 'measure time' in col_lower: rename_map[col] = 'time_in'
-            elif 'biển số' in col_lower or 'plate' in col_lower: rename_map[col] = 'plate'
-            elif 'loại xe' in col_lower or 'truck model' in col_lower: rename_map[col] = 'vehicle_type'
-            elif 'kích thước' in col_lower: rename_map[col] = 'dimensions'
-            elif 'thể tích' in col_lower: rename_map[col] = 'volume'
-            elif 'trạng thái' in col_lower or 'status' in col_lower: rename_map[col] = 'status_validity'
-            elif 'ghi chú' in col_lower or 'notes' in col_lower: rename_map[col] = 'notes'
-        
-        df.rename(columns=rename_map, inplace=True)
-        df.replace([np.inf, -np.inf], np.nan, inplace=True)
-        df = df.astype(object).where(pd.notnull(df), None)
-        if 'time_in' in df.columns:
-            df['time_in'] = df['time_in'].astype(str)
-        
-        return df.to_dict(orient='records')
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"detail": str(e)})
-
-@schedule_router.post("/schedule/upload")
-async def upload_schedule(file: UploadFile = File(...)):
-    try:
-        file_path = os.getenv("SCHEDULE_FILE_PATH", "database/schedule/CCN_template.xlsx")
-        if not os.path.isabs(file_path):
-            file_path = os.path.join(os.getcwd(), file_path)
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
-        return {"success": True, "filename": file.filename}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"detail": str(e)})

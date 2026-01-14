@@ -1,28 +1,63 @@
-# Data Processing Package
-# db.py handles camera configuration (SQLite)
-# csv_storage.py handles captured car data (daily CSV files)
+"""Data Processing Package - Modular CSV Storage
 
-from backend.data_process.db import (
-    init_db, save_camera, get_camera, get_all_cameras,
-    get_cameras_by_tag, delete_camera, update_camera_detection_mode
+This package provides data storage operations organized by feature.
+All CSV operations are thread-safe and use date-based file naming where appropriate.
+"""
+
+# Cameras
+from backend.data_process.cameras import (
+    get_cameras_config, save_cameras_config, save_camera,
+    get_camera, get_all_cameras, get_cameras_by_tag, delete_camera
 )
 
-from backend.data_process.csv_storage import (
-    save_captured_car, get_captured_cars, search_by_plate,
-    log_detection_event, get_detection_logs, get_available_dates,
-    get_daily_stats, get_captured_cars_range
+# Registered Cars
+from backend.data_process.registered_cars import (
+    get_registered_cars, save_registered_cars, import_registered_cars,
+    get_available_registered_cars_dates
 )
 
-# Export csv_storage module directly
-from backend.data_process import csv_storage
+# History
+from backend.data_process.history import (
+    get_history_data, save_history_record, save_history_data,
+    get_history_date_range, get_available_history_dates
+)
+
+# Captured Cars & Logs
+from backend.data_process.captured_cars import (
+    save_captured_car, get_captured_cars, get_captured_cars_range,
+    search_by_plate, get_available_dates, get_daily_stats,
+    log_detection_event, get_detection_logs
+)
+
+# Configuration
+from backend.data_process.config import (
+    get_locations, save_locations, get_cam_types, save_cam_types
+)
+
+# Report (placeholder)
+from backend.data_process import report
 
 __all__ = [
-    # DB (cameras only)
-    'init_db', 'save_camera', 'get_camera', 'get_all_cameras',
-    'get_cameras_by_tag', 'delete_camera', 'update_camera_detection_mode',
-    # CSV Storage (captured cars & logs)
-    'save_captured_car', 'get_captured_cars', 'search_by_plate',
-    'log_detection_event', 'get_detection_logs', 'get_available_dates',
-    'get_daily_stats', 'get_captured_cars_range',
-    'csv_storage'
+    # Cameras
+    'get_cameras_config', 'save_cameras_config', 'save_camera',
+    'get_camera', 'get_all_cameras', 'get_cameras_by_tag', 'delete_camera',
+    
+   # Registered Cars
+    'get_registered_cars', 'save_registered_cars', 'import_registered_cars',
+    'get_available_registered_cars_dates',
+    
+    # History
+    'get_history_data', 'save_history_record', 'save_history_data',
+    'get_history_date_range', 'get_available_history_dates',
+    
+    # Captured Cars & Logs
+    'save_captured_car', 'get_captured_cars', 'get_captured_cars_range',
+    'search_by_plate', 'get_available_dates', 'get_daily_stats',
+    'log_detection_event', 'get_detection_logs',
+    
+    # Configuration
+    'get_locations', 'save_locations', 'get_cam_types', 'save_cam_types',
+    
+    # Report module
+    'report'
 ]
