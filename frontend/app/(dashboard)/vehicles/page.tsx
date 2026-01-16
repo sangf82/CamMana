@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { Add, Edit, Delete, LocalShipping, Description, Warning, Search, Download, ChevronLeft, ExpandLess, FilterList, UploadFile } from '@mui/icons-material'
+import { Add, Edit, Delete, LocalShipping, Description, Warning, Search, Download, ChevronLeft, ExpandLess, FilterList, UploadFile, ExpandMore } from '@mui/icons-material'
 import DataTable from '../../../components/ui/data-table'
 import Dialog from '../../../components/ui/dialog'
 import { toast } from 'sonner'
@@ -189,13 +189,13 @@ export default function VehiclesPage() {
       })
   }
 
-  const contractors = ['All', ...Array.from(new Set(data.map(d => d.contractor)))]
-  const vehicleTypes = ['All', ...Array.from(new Set(data.map(d => d.truckModel)))]
+  const contractors = ['All', ...Array.from(new Set(data.map(d => d.contractor?.trim() || 'None')))]
+  const vehicleTypes = ['All', ...Array.from(new Set(data.map(d => d.truckModel?.trim() || 'None')))]
 
   const filteredData = data.filter(item => {
     const matchesSearch = item.plate.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesContractor = filterContractor === 'All' || item.contractor === filterContractor
-    const matchesType = filterType === 'All' || item.truckModel === filterType
+    const matchesContractor = filterContractor === 'All' || (item.contractor?.trim() || 'None') === filterContractor
+    const matchesType = filterType === 'All' || (item.truckModel?.trim() || 'None') === filterType
     return matchesSearch && matchesContractor && matchesType
   })
 
@@ -491,42 +491,52 @@ export default function VehiclesPage() {
             <div className="flex items-center gap-3">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest whitespace-nowrap">Nhà thầu</label>
                 <div className="relative">
-                    <select 
-                        className="appearance-none bg-background border border-border rounded-md pl-3 pr-10 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none min-w-[200px] cursor-pointer"
-                        value={pendingFilterContractor}
-                        onChange={(e) => { setPendingFilterContractor(e.target.value); setIsContractorOpen(false); }}
-                        onFocus={() => setIsContractorOpen(true)}
-                        onBlur={() => setIsContractorOpen(false)}
+                    <button 
+                        onClick={() => { setIsContractorOpen(!isContractorOpen); setIsTypeOpen(false); }}
+                        className="w-full flex items-center justify-between min-w-[200px] px-3 py-1.5 bg-background border border-border rounded-md text-sm font-semibold focus:border-primary transition-all"
                     >
-                        {contractors.map(c => <option key={c} value={c}>{c === 'All' ? 'Tất cả nhà thầu' : c}</option>)}
-                    </select>
-                    <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none text-muted-foreground">
-                        <ChevronLeft 
-                            fontSize="small" 
-                            className={`opacity-70 transition-transform duration-200 ${isContractorOpen ? '-rotate-90' : ''}`} 
-                        />
-                    </div>
+                        <span>{pendingFilterContractor === 'All' ? 'Tất cả nhà thầu' : pendingFilterContractor}</span>
+                        <ExpandMore className={`transition-transform duration-200 ${isContractorOpen ? 'rotate-180' : ''}`} fontSize="small" />
+                    </button>
+                    {isContractorOpen && (
+                        <div className="absolute top-full left-0 w-full z-[100] mt-1 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                            {contractors.map(c => (
+                                <button 
+                                    key={c}
+                                    onClick={() => { setPendingFilterContractor(c); setIsContractorOpen(false); }}
+                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${pendingFilterContractor === c ? 'text-primary bg-primary/5' : 'text-muted-foreground'}`}
+                                >
+                                    {c === 'All' ? 'Tất cả nhà thầu' : c}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 
             <div className="flex items-center gap-3">
                 <label className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest whitespace-nowrap">Loại xe</label>
                 <div className="relative">
-                    <select 
-                        className="appearance-none bg-background border border-border rounded-md pl-3 pr-10 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none min-w-[200px] cursor-pointer"
-                        value={pendingFilterType}
-                        onChange={(e) => { setPendingFilterType(e.target.value); setIsTypeOpen(false); }}
-                        onFocus={() => setIsTypeOpen(true)}
-                        onBlur={() => setIsTypeOpen(false)}
+                    <button 
+                        onClick={() => { setIsTypeOpen(!isTypeOpen); setIsContractorOpen(false); }}
+                        className="w-full flex items-center justify-between min-w-[200px] px-3 py-1.5 bg-background border border-border rounded-md text-sm font-semibold focus:border-primary transition-all"
                     >
-                        {vehicleTypes.map(v => <option key={v} value={v}>{v === 'All' ? 'Tất cả loại xe' : v}</option>)}
-                    </select>
-                    <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none text-muted-foreground">
-                        <ChevronLeft 
-                            fontSize="small" 
-                            className={`opacity-70 transition-transform duration-200 ${isTypeOpen ? '-rotate-90' : ''}`} 
-                        />
-                    </div>
+                        <span>{pendingFilterType === 'All' ? 'Tất cả loại xe' : pendingFilterType}</span>
+                        <ExpandMore className={`transition-transform duration-200 ${isTypeOpen ? 'rotate-180' : ''}`} fontSize="small" />
+                    </button>
+                    {isTypeOpen && (
+                        <div className="absolute top-full left-0 w-full z-[100] mt-1 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                            {vehicleTypes.map(v => (
+                                <button 
+                                    key={v}
+                                    onClick={() => { setPendingFilterType(v); setIsTypeOpen(false); }}
+                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${pendingFilterType === v ? 'text-primary bg-primary/5' : 'text-muted-foreground'}`}
+                                >
+                                    {v === 'All' ? 'Tất cả loại xe' : v}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 

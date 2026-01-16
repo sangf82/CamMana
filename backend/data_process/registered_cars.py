@@ -1,10 +1,21 @@
-"""Registered cars data operations - Date-based CSV storage"""
+"""Registered cars data operations - Date-based CSV storage
+
+File lifecycle:
+- Each day generates a new file
+- Files expire after 48 hours and are automatically cleaned up
+- New day file imports all data from previous day (if no user import)
+- User imports use smart merge: keep existing+new, update matching, remove missing
+"""
 from pathlib import Path
-from datetime import datetime
-from typing import Optional, List, Dict, Any
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict, Any, Union
+from backend.schemas import RegisteredCar
 from backend.data_process._common import (
-    REGISTERED_CAR_HEADERS, DATA_DIR, _generate_id, _read_csv, _write_csv, _ensure_dirs
+    REGISTERED_CAR_HEADERS, DATA_DIR, _generate_id, _read_csv, _write_csv, _ensure_dirs, _init_csv_if_needed
 )
+
+# Files older than this will be cleaned up
+EXPIRATION_HOURS = 48
 
 
 def _get_registered_cars_csv_path(date: Optional[str] = None) -> Path:
@@ -21,7 +32,7 @@ def _get_registered_cars_csv_path(date: Optional[str] = None) -> Path:
     return DATA_DIR / f"registered_cars_{date_str}.csv"
 
 
-def get_registered_cars(date: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_registered_cars(date: Optional[str] = None) -> List[RegisteredCar]:
     """Get registered cars from CSV file for given date (default: today)
     
     Auto-migration: If today's file doesn't exist, copies from previous day
@@ -36,22 +47,24 @@ def get_registered_cars(date: Optional[str] = None) -> List[Dict[str, Any]]:
                 # Update created_at to today's date
                 today_str = datetime.now().strftime("%d-%m-%Y")
                 for car in old_cars:
-                    car['created_at'] = today_str
+                    car.created_at = today_str
                 # Save to today's file
                 save_registered_cars(old_cars, date=None)
                 return old_cars
         return []
     
-    return _read_csv(csv_path)
+    data = _read_csv(csv_path)
+    return [RegisteredCar(**item) for item in data]
 
 
-def save_registered_cars(cars: List[Dict[str, Any]], date: Optional[str] = None):
+def save_registered_cars(cars: List[RegisteredCar], date: Optional[str] = None):
     """Save registered cars, ensuring every item has a unique ID"""
     seen_ids = set()
-    cleaned_cars = []
+    cleaned_data = []
     
     for car in cars:
-        current_id = str(car.get('id', '')).strip()
+        # Pydantic model access
+        current_id = str(car.id or '').strip()
         
         # Determine if ID needs generation (missing or duplicate)
         if not current_id or current_id in seen_ids:
@@ -59,15 +72,16 @@ def save_registered_cars(cars: List[Dict[str, Any]], date: Optional[str] = None)
             # Paranoid check ensuring the generated ID isn't somehow already seen
             while new_id in seen_ids:
                 new_id = _generate_id()
-            car['id'] = new_id
+            car.id = new_id
         else:
-            car['id'] = current_id
+            # Normalize ID string if needed?
+            pass
             
-        seen_ids.add(car['id'])
-        cleaned_cars.append(car)
+        seen_ids.add(str(car.id))
+        cleaned_data.append(car.model_dump())
     
     csv_path = _get_registered_cars_csv_path(date)
-    _write_csv(csv_path, REGISTERED_CAR_HEADERS, cleaned_cars)
+    _write_csv(csv_path, REGISTERED_CAR_HEADERS, cleaned_data)
 
 
 def import_registered_cars(new_cars: List[Dict[str, Any]], date: Optional[str] = None) -> Dict[str, Any]:
@@ -87,8 +101,8 @@ def import_registered_cars(new_cars: List[Dict[str, Any]], date: Optional[str] =
     existing_cars = get_registered_cars(date)
     
     # Create lookup by plate_number
-    existing_by_plate = {car['plate_number']: car for car in existing_cars}
-    new_by_plate = {car['plate_number']: car for car in new_cars}
+    existing_by_plate = {car.plate_number: car for car in existing_cars}
+    new_by_plate = {car.get('plate_number'): car for car in new_cars if car.get('plate_number')}
     
     # Track changes
     added = []
@@ -99,22 +113,31 @@ def import_registered_cars(new_cars: List[Dict[str, Any]], date: Optional[str] =
     current_date = date or datetime.now().strftime("%d-%m-%Y")
     
     # Process new cars
-    for plate, new_car in new_by_plate.items():
-        new_car['created_at'] = current_date  # Always update to current date
+    for plate, new_car_dict in new_by_plate.items():
+        new_car_dict['created_at'] = current_date  # Always update to current date
         
         if plate in existing_by_plate:
             # Keep existing ID, update data
             existing_car = existing_by_plate[plate]
-            new_car['id'] = existing_car['id']
+            new_car_dict['id'] = existing_car.id
             
-            # Check if actually updated
-            if new_car != existing_car:
+            # Check if actually updated -- compare dicts
+            existing_dict = existing_car.model_dump()
+            # Normalize for comparison (some fields optional)
+            is_diff = False
+            for k, v in new_car_dict.items():
+                if k in existing_dict and str(existing_dict[k]) != str(v):
+                     is_diff = True
+                     break
+            
+            if is_diff:
                 updated.append(plate)
         else:
             # New car
             added.append(plate)
         
-        final_cars.append(new_car)
+        # Convert to Pydantic
+        final_cars.append(RegisteredCar(**new_car_dict))
     
     # Find deleted cars (in old but not in new)
     for plate in existing_by_plate:
@@ -165,6 +188,78 @@ def get_available_registered_cars_dates() -> List[str]:
 def _get_previous_registered_cars_date() -> Optional[str]:
     """Get the most recent registered cars file date before today"""
     dates = get_available_registered_cars_dates()
-    if dates:
-        return dates[0]  # Already sorted newest first
+    today_str = datetime.now().strftime("%d-%m-%Y")
+    for d in dates:
+        if d != today_str:
+            return d
     return None
+
+
+def cleanup_expired_files() -> int:
+    """Remove registered cars CSV files older than 48 hours.
+    
+    Returns: Number of files deleted
+    """
+    _ensure_dirs()
+    csv_files = list(DATA_DIR.glob("registered_cars_*.csv"))
+    now = datetime.now()
+    deleted_count = 0
+    
+    for f in csv_files:
+        name = f.stem  # registered_cars_dd-mm-yyyy
+        parts = name.split('_', 2)
+        if len(parts) >= 3 and parts[0] == 'registered' and parts[1] == 'cars':
+            date_str = parts[2]
+            try:
+                file_date = datetime.strptime(date_str, "%d-%m-%Y")
+                age = now - file_date
+                if age > timedelta(hours=EXPIRATION_HOURS):
+                    f.unlink()
+                    deleted_count += 1
+            except ValueError:
+                pass  # Skip files with invalid date format
+    
+    return deleted_count
+
+
+def initialize_today_file() -> bool:
+    """Initialize today's registered cars file if it doesn't exist.
+    
+    Behavior:
+    - If today's file exists, do nothing
+    - If today's file doesn't exist, copy all data from previous day
+    - Creates empty file with headers if no previous data exists
+    
+    Returns: True if a new file was created
+    """
+    today_str = datetime.now().strftime("%d-%m-%Y")
+    csv_path = _get_registered_cars_csv_path(today_str)
+    
+    if csv_path.exists():
+        return False  # Already exists
+    
+    # Clean up expired files first
+    cleanup_expired_files()
+    
+    # Try to get previous day's data
+    previous_date = _get_previous_registered_cars_date()
+    
+    if previous_date:
+        # Import all data from previous day
+        old_cars = []
+        old_path = _get_registered_cars_csv_path(previous_date)
+        if old_path.exists():
+            data = _read_csv(old_path)
+            old_cars = [RegisteredCar(**item) for item in data]
+        
+        # Update created_at to today
+        for car in old_cars:
+            car.created_at = today_str
+        
+        # Save to today's file
+        save_registered_cars(old_cars, date=today_str)
+    else:
+        # No previous data, create empty file with headers
+        _init_csv_if_needed(csv_path, REGISTERED_CAR_HEADERS)
+    
+    return True

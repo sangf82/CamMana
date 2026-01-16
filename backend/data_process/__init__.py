@@ -13,13 +13,18 @@ from backend.data_process.cameras import (
 # Registered Cars
 from backend.data_process.registered_cars import (
     get_registered_cars, save_registered_cars, import_registered_cars,
-    get_available_registered_cars_dates
+    get_available_registered_cars_dates,
+    cleanup_expired_files as cleanup_registered_cars_files,
+    initialize_today_file as initialize_registered_cars_today
 )
 
 # History
 from backend.data_process.history import (
     get_history_data, save_history_record, save_history_data,
-    get_history_date_range, get_available_history_dates
+    get_history_date_range, get_available_history_dates,
+    update_history_record,
+    cleanup_expired_files as cleanup_history_files,
+    initialize_today_file as initialize_history_today
 )
 
 # Captured Cars & Logs
@@ -45,10 +50,13 @@ __all__ = [
    # Registered Cars
     'get_registered_cars', 'save_registered_cars', 'import_registered_cars',
     'get_available_registered_cars_dates',
+    'cleanup_registered_cars_files', 'initialize_registered_cars_today',
     
     # History
     'get_history_data', 'save_history_record', 'save_history_data',
     'get_history_date_range', 'get_available_history_dates',
+    'update_history_record',
+    'cleanup_history_files', 'initialize_history_today',
     
     # Captured Cars & Logs
     'save_captured_car', 'get_captured_cars', 'get_captured_cars_range',

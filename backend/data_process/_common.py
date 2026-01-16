@@ -24,9 +24,9 @@ CAR_HEADERS = ['id', 'timestamp', 'folder_path', 'plate_number', 'primary_color'
 
 LOG_HEADERS = ['timestamp', 'camera_id', 'event_type', 'details']
 
-LOCATION_HEADERS = ['id', 'name']
+LOCATION_HEADERS = ['id', 'name', 'tag']
 
-TYPE_HEADERS = ['id', 'name']
+TYPE_HEADERS = ['id', 'name', 'functions']
 
 
 # Helper functions

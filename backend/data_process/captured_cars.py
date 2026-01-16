@@ -3,10 +3,11 @@ import csv
 import json
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
+from backend.schemas import CapturedCar, LogRecord
 from backend.data_process._common import (
     CAR_HEADERS, LOG_HEADERS, DATA_DIR, LOGS_DIR, _generate_id, _read_csv, 
-    _get_today_date, _ensure_dirs, _write_lock
+    _get_today_date, _ensure_dirs, _write_lock, _init_csv_if_needed
 )
 
 
@@ -14,6 +15,7 @@ def _get_car_csv_path(date: Optional[str] = None) -> Path:
     """Get path to car CSV file for given date (default: today)"""
     _ensure_dirs()
     date_str = date or _get_today_date()
+    # Support underscore format used internally
     return DATA_DIR / f"captured_cars_{date_str}.csv"
 
 
@@ -24,33 +26,37 @@ def _get_log_csv_path(date: Optional[str] = None) -> Path:
     return LOGS_DIR / f"detection_logs_{date_str}.csv"
 
 
-def _init_csv_if_needed(filepath: Path, headers: List[str]):
-    """Create CSV file with headers if it doesn't exist"""
-    if not filepath.exists():
-        with open(filepath, 'w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(headers)
-
-
-def save_captured_car(data: Dict[str, Any]) -> str:
+def save_captured_car(data: Union[Dict[str, Any], CapturedCar]) -> str:
     """Save captured car data to today's CSV file"""
     csv_path = _get_car_csv_path()
     _init_csv_if_needed(csv_path, CAR_HEADERS)
     
+    # Handle both Dict and Pydantic input
+    if isinstance(data, CapturedCar):
+        car_dict = data.model_dump()
+    else:
+        car_dict = data
+
     record_id = _generate_id()
-    bbox_str = json.dumps(data.get('bbox')) if data.get('bbox') else ''
+    
+    # Ensure ID in the return/object? 
+    # Logic in API might expect ID back.
+    
+    # Handle bbox serialization
+    bbox_val = car_dict.get('bbox')
+    bbox_str = json.dumps(bbox_val) if bbox_val else ''
     
     row = [
         record_id,
-        data.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
-        data.get('folder_path', ''),
-        data.get('plate_number', ''),
-        data.get('primary_color', ''),
-        data.get('wheel_count', ''),
-        data.get('front_cam_id', ''),
-        data.get('side_cam_id', ''),
-        data.get('confidence', ''),
-        data.get('class_name', ''),
+        car_dict.get('timestamp', datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        car_dict.get('folder_path', ''),
+        car_dict.get('plate_number', ''),
+        car_dict.get('primary_color', ''),
+        car_dict.get('wheel_count', ''),
+        car_dict.get('front_cam_id', ''),
+        car_dict.get('side_cam_id', ''),
+        car_dict.get('confidence', ''),
+        car_dict.get('class_name', ''),
         bbox_str
     ]
     
@@ -62,7 +68,7 @@ def save_captured_car(data: Dict[str, Any]) -> str:
     return record_id
 
 
-def get_captured_cars(date: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+def get_captured_cars(date: Optional[str] = None, limit: int = 50) -> List[CapturedCar]:
     """Get captured cars from CSV file for given date (default: today)"""
     csv_path = _get_car_csv_path(date)
     if not csv_path.exists():
@@ -85,16 +91,19 @@ def get_captured_cars(date: Optional[str] = None, limit: int = 50) -> List[Dict[
                     car['confidence'] = float(car['confidence'])
                 except:
                     pass
-            cars.append(car)
+            cars.append(CapturedCar(**car))
     
     # Return most recent first, limited
     return list(reversed(cars))[:limit]
 
 
-def get_captured_cars_range(start_date: str, end_date: str) -> List[Dict[str, Any]]:
+def get_captured_cars_range(start_date: str, end_date: str) -> List[CapturedCar]:
     """Get captured cars for a date range (format: YYYY_MM_DD)"""
-    start = datetime.strptime(start_date, "%Y_%m_%d")
-    end = datetime.strptime(end_date, "%Y_%m_%d")
+    try:
+        start = datetime.strptime(start_date, "%Y_%m_%d")
+        end = datetime.strptime(end_date, "%Y_%m_%d")
+    except ValueError:
+        return []
     
     all_cars = []
     current = start
@@ -107,11 +116,11 @@ def get_captured_cars_range(start_date: str, end_date: str) -> List[Dict[str, An
     return all_cars
 
 
-def search_by_plate(plate_number: str, date: Optional[str] = None) -> List[Dict[str, Any]]:
+def search_by_plate(plate_number: str, date: Optional[str] = None) -> List[CapturedCar]:
     """Search cars by plate number"""
     cars = get_captured_cars(date=date, limit=1000)
     plate_lower = plate_number.lower()
-    return [c for c in cars if plate_lower in (c.get('plate_number', '') or '').lower()]
+    return [c for c in cars if plate_lower in (c.plate_number or '').lower()]
 
 
 def get_available_dates() -> List[str]:
@@ -133,8 +142,8 @@ def get_daily_stats(date: Optional[str] = None) -> Dict[str, Any]:
     """Get statistics for a specific date"""
     cars = get_captured_cars(date=date, limit=10000)
     
-    plates_detected = sum(1 for c in cars if c.get('plate_number'))
-    colors_detected = sum(1 for c in cars if c.get('primary_color'))
+    plates_detected = sum(1 for c in cars if c.plate_number)
+    colors_detected = sum(1 for c in cars if c.primary_color)
     
     return {
         'date': date or _get_today_date(),
@@ -164,7 +173,7 @@ def log_detection_event(camera_id: str, event_type: str, details: Optional[Dict]
             writer.writerow(row)
 
 
-def get_detection_logs(camera_id: Optional[str] = None, date: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+def get_detection_logs(camera_id: Optional[str] = None, date: Optional[str] = None, limit: int = 100) -> List[LogRecord]:
     """Get detection logs from CSV file"""
     csv_path = _get_log_csv_path(date)
     if not csv_path.exists():
@@ -174,17 +183,17 @@ def get_detection_logs(camera_id: Optional[str] = None, date: Optional[str] = No
     with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            log = dict(row)
+            log_dict = dict(row)
             # Filter by camera_id if specified
-            if camera_id and log.get('camera_id') != camera_id:
+            if camera_id and log_dict.get('camera_id') != camera_id:
                 continue
             # Parse details JSON
-            if log.get('details'):
+            if log_dict.get('details'):
                 try:
-                    log['details'] = json.loads(log['details'])
+                    log_dict['details'] = json.loads(log_dict['details'])
                 except:
                     pass
-            logs.append(log)
+            logs.append(LogRecord(**log_dict))
     
     # Return most recent first, limited
     return list(reversed(logs))[:limit]

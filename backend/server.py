@@ -14,7 +14,7 @@ load_dotenv()
 # Import from new modular API structure
 from backend.api import (
     camera_router, config_router, schedule_router, 
-    detection_router, history_router
+    detection_router, history_router, pipeline_router, checkin_router
 )
 
 BACKEND_DIR = Path(__file__).parent
@@ -51,6 +51,17 @@ def create_app() -> FastAPI:
     app.include_router(schedule_router)
     app.include_router(detection_router)
     app.include_router(history_router)
+    app.include_router(pipeline_router)
+    app.include_router(checkin_router)
+    
+    # Serve captured car images from car_history folder
+    @app.get("/api/images/{date_folder}/{car_folder}/{filename}")
+    async def serve_car_image(date_folder: str, car_folder: str, filename: str):
+        """Serve captured car images for evidence display"""
+        image_path = Path("database/car_history") / date_folder / car_folder / filename
+        if image_path.exists() and image_path.is_file():
+            return FileResponse(image_path, media_type="image/jpeg")
+        raise HTTPException(status_code=404, detail="Image not found")
     
     static_dir = get_static_dir()
     if static_dir:
@@ -77,6 +88,7 @@ app = create_app()
 
 def run_server(host: str = "127.0.0.1", port: int = 8000):
     import signal
+    from backend import data_process
     
     def signal_handler(sig, frame):
         raise SystemExit(0)
@@ -86,6 +98,15 @@ def run_server(host: str = "127.0.0.1", port: int = 8000):
     
     # Clean pycache on start
     clean_pycache()
+    
+    # Initialize today's CSV files (auto-migration and cleanup)
+    try:
+        if data_process.initialize_registered_cars_today():
+            print("[cam_mana] Created today's registered cars file")
+        if data_process.initialize_history_today():
+            print("[cam_mana] Created today's history file")
+    except Exception as e:
+        print(f"[cam_mana] Warning: Failed to initialize daily files: {e}")
     
     try:
         print("[cam_mana] Starting backend...")

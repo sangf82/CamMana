@@ -1,24 +1,25 @@
 """Camera management API endpoints"""
 import uuid
 import asyncio
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse, Response
 
 from backend.camera_config.camera import ONVIFCameraManager, CameraConfig
 from backend.camera_config.streamer import VideoStreamer
-from backend.detect_car.detection_service import get_detection_service
+from backend.car_process.core.detection_service import get_detection_service
 from backend import data_process
-from backend.api._shared import (
-    cameras, get_camera_state,
-    CameraConnectRequest, PTZMoveRequest,
+from backend.schemas import (
+    Camera, CameraCreate, CameraUpdate, 
+    CameraConnectRequest, PTZMoveRequest, 
     UpdateDetectionModeRequest, UpdateCameraTagRequest
 )
+from backend.api._shared import cameras, get_camera_state
 
 camera_router = APIRouter(prefix="/api/cameras", tags=["cameras"])
 
 # Camera Management Endpoints
-@camera_router.get("")
+@camera_router.get("", response_model=List[dict])
 async def get_cameras():
     """Get all connected cameras"""
     result = []
@@ -40,22 +41,28 @@ async def get_cameras():
     return result
 
 @camera_router.post("")
-async def save_camera_config(camera: dict):
+async def save_camera_config(camera: CameraCreate):
     """Save or update camera configuration"""
-    # Ensure ID
-    if 'id' not in camera or not camera['id']:
-        camera['id'] = str(uuid.uuid4())
+    # Convert to dict for processing
+    cam_data = camera.model_dump()
     
-    # Resolve Location ID from Location Name
-    loc_name = camera.get('location')
+    # Ensure ID
+    if not cam_data.get('id'):
+        cam_data['id'] = str(uuid.uuid4())
+    
+    # Resolve Location ID and TAG from Location Name
+    loc_name = cam_data.get('location')
     if loc_name:
         locations = data_process.get_locations()
         match = next((l for l in locations if l.get('name') == loc_name), None)
-        if match and match.get('id'):
-            camera['location_id'] = match['id']
+        if match:
+            if match.get('id'):
+                cam_data['location_id'] = match['id']
+            if match.get('tag'):
+                cam_data['tag'] = match['tag']
             
-    data_process.save_camera(camera)
-    return {"success": True, "id": camera['id']}
+    data_process.save_camera(cam_data)
+    return {"success": True, "id": cam_data['id']}
 
 @camera_router.delete("/{camera_id}")
 async def delete_camera(camera_id: str):
@@ -72,28 +79,29 @@ async def delete_camera(camera_id: str):
     data_process.delete_camera(camera_id) 
     return {"success": True}
 
-@camera_router.get("/saved")
+@camera_router.get("/saved", response_model=List[Camera])
 async def get_saved_cameras():
     """Get all saved camera configurations"""
-    saved = data_process.get_all_cameras()
+    saved = data_process.get_all_cameras() # Returns List[Camera]
+    
     # Build a lookup of active cameras by IP for reliable matching
     active_by_ip = {cam["config"].ip: (cam_id, cam) for cam_id, cam in cameras.items()}
     
     for cam in saved:
-        saved_ip = cam.get('ip')
+        saved_ip = cam.ip
         if saved_ip in active_by_ip:
             cam_id, active_cam = active_by_ip[saved_ip]
             streamer = active_cam.get("streamer")
             manager = active_cam.get("manager")
             
             if streamer and streamer.is_streaming:
-                cam['status'] = 'Online'
+                cam.status = 'Online'
             elif manager and manager.connected:
-                cam['status'] = 'Connected'
+                cam.status = 'Connected'
             else:
-                cam['status'] = 'Local'
+                cam.status = 'Local'
         else:
-            cam['status'] = 'Offline'
+            cam.status = 'Offline'
     return saved
 
 @camera_router.post("/connect")
@@ -128,10 +136,10 @@ async def connect_camera(request: CameraConnectRequest):
         
         # Check if camera already exists in saved cameras by IP - reuse that ID
         existing_cameras = data_process.get_all_cameras()
-        existing_cam = next((c for c in existing_cameras if c.get('ip') == request.ip), None)
+        existing_cam = next((c for c in existing_cameras if c.ip == request.ip), None)
         
-        if existing_cam and existing_cam.get('id'):
-            camera_id = existing_cam['id']
+        if existing_cam and existing_cam.id:
+            camera_id = str(existing_cam.id)
         else:
             camera_id = str(uuid.uuid4())
         
@@ -153,12 +161,12 @@ async def connect_camera(request: CameraConnectRequest):
         cam_code = None
         cam_location = None
         if existing_cam:
-             cam_data['location'] = existing_cam.get('location')
-             cam_data['location_id'] = existing_cam.get('location_id')
-             cam_data['type'] = existing_cam.get('type')
-             cam_data['brand'] = existing_cam.get('brand')
-             cam_code = existing_cam.get('cam_id')
-             cam_location = existing_cam.get('location')
+             cam_data['location'] = existing_cam.location
+             cam_data['location_id'] = existing_cam.location_id
+             cam_data['type'] = existing_cam.type
+             cam_data['brand'] = existing_cam.brand
+             cam_code = existing_cam.cam_id
+             cam_location = existing_cam.location
         
         # Set camera info on streamer for image naming
         streamer.set_camera_info(cam_code=cam_code, location=cam_location)
@@ -305,3 +313,4 @@ async def capture_with_detection(camera_id: str, force: bool = False):
     """Capture image with vehicle detection"""
     get_camera_state(camera_id)
     return get_detection_service().capture_with_detection(camera_id, force=force)
+

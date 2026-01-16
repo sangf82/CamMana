@@ -1,4 +1,9 @@
-"""Detection Service - Orchestrates car detection with IoU-based deduplication"""
+"""
+Detection Service - Orchestrates car detection with IoU-based deduplication
+
+Migrated to backend/car_process/core/
+Updated to use new function modules.
+"""
 import cv2
 import json
 import time
@@ -10,9 +15,14 @@ from typing import Optional, Dict, Any, Callable
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
 
-from backend.detect_car.car_detect import CarDetector
-from backend.detect_car.info_detect import detect_plate, detect_colors, count_wheels
-from backend import data_process as storage
+# Updated imports - use new car_process modules
+from backend.car_process.functions import (
+    CarDetectionFunction,
+    detect_plate,
+    detect_colors,
+    count_wheels
+)
+import backend.data_process as storage
 
 IOU_THRESHOLD = 0.70
 AUTO_DETECTION_INTERVAL = 0.5
@@ -32,7 +42,8 @@ class DetectionState:
 
 class DetectionService:
     def __init__(self):
-        self.detector = CarDetector(confidence=0.3, detect_trucks=True)  # Lower threshold for front/back views
+        # Use new CarDetectionFunction
+        self.detector = CarDetectionFunction(confidence=0.3, detect_trucks=True)
         self.states: Dict[str, DetectionState] = {}
         self._streamers: Dict[str, Any] = {}
         self._camera_tags: Dict[str, str] = {}
@@ -297,6 +308,7 @@ class DetectionService:
         kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
         return cv2.filter2D(image, -1, kernel)
 
+# Singleton instance
 _detection_service: Optional[DetectionService] = None
 
 def get_detection_service() -> DetectionService:
@@ -304,3 +316,5 @@ def get_detection_service() -> DetectionService:
     if _detection_service is None:
         _detection_service = DetectionService()
     return _detection_service
+
+__all__ = ['DetectionService', 'get_detection_service', 'DetectionState']

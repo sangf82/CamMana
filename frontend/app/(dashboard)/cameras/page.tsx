@@ -6,15 +6,16 @@ import Dialog from '../../../components/ui/dialog'
 import { toast } from 'sonner'
 
 // --- Types ---
-// --- Types ---
 interface LocationItem {
     id: string | number
     name: string
+    tag?: string  // Cơ bản | Cổng vào | Cổng ra | Đo thể tích
 }
 
 interface TypeItem {
     id: string | number
     name: string
+    functions: string // comma separated IDs
 }
 
 interface Camera {
@@ -23,17 +24,20 @@ interface Camera {
   ip: string
   location: string
   status: 'Online' | 'Offline' | 'Connected' | 'Local'
-  type: string
+  type: string // Stores the TypeItem.name
   username?: string
   password?: string
   brand?: string
   cam_id?: string
 }
 
-const DEFAULT_TYPES_NAMES = [
-    'Nhận diện xe & biển số',
-    'Nhận diện màu & số bánh',
-    'Tính toán thể tích'
+const SMART_FUNCTIONS = [
+    { id: 'car_detect', name: 'Nhận diện xe (Real-time)', desc: 'Phát hiện phương tiện từ luồng video trực tiếp' },
+    { id: 'plate_detect', name: 'Nhận diện biển số', desc: 'Tự động trích xuất biển số xe từ hình ảnh' },
+    { id: 'color_detect', name: 'Nhận diện màu xe', desc: 'Phân tích màu sắc chủ đạo của phương tiện' },
+    { id: 'wheel_detect', name: 'Nhận diện số bánh', desc: 'Đếm số bánh và nhận diện loại trục xe' },
+    { id: 'box_detect', name: 'Kích thước thùng xe', desc: 'Tính toán dài x rộng x cao của thùng xe' },
+    { id: 'volume_detect', name: 'Tính thể tích vật liệu', desc: 'Ước tính thể tích hàng hóa trong thùng xe' },
 ]
 
 export default function CamerasPage() {
@@ -50,16 +54,30 @@ export default function CamerasPage() {
   
   // Delete confirm states
   const [deleteCamId, setDeleteCamId] = useState<number | null>(null)
-  const [deleteLocId, setDeleteLocId] = useState<string | number | null>(null) // Use ID for location
-  const [deleteLocName, setDeleteLocName] = useState<string>('') // For display only
+  const [deleteLocId, setDeleteLocId] = useState<string | number | null>(null)
+  const [deleteLocName, setDeleteLocName] = useState<string>('')
 
-  // New Input States
+  // New Location Inputs
   const [newLocation, setNewLocation] = useState('')
-  // For editing location
+  const [newLocationTag, setNewLocationTag] = useState('Cơ bản')
   const [editLocIndex, setEditLocIndex] = useState<number | null>(null)
   const [tempLocName, setTempLocName] = useState('')
-  const [isLocInputFocused, setIsLocInputFocused] = useState(false)
+  const [tempLocTag, setTempLocTag] = useState('')
+
+  // New Type Inputs
+  const [newTypeName, setNewTypeName] = useState('')
+  const [newTypeFunctions, setNewTypeFunctions] = useState<string[]>([])
+  const [editTypeIndex, setEditTypeIndex] = useState<number | null>(null)
+  const [tempTypeName, setTempTypeName] = useState('')
+  const [tempTypeFunctions, setTempTypeFunctions] = useState<string[]>([])
+
   const [showPassword, setShowPassword] = useState(false)
+  const [isNewTypeDropdownOpen, setIsNewTypeDropdownOpen] = useState(false)
+  const [editTypeDropdownIndex, setEditTypeDropdownIndex] = useState<number | null>(null)
+  const [isNewLocDropdownOpen, setIsNewLocDropdownOpen] = useState(false)
+  const [editLocDropdownIndex, setEditLocDropdownIndex] = useState<number | null>(null)
+  const [isCamLocOpen, setIsCamLocOpen] = useState(false)
+  const [isCamTypeOpen, setIsCamTypeOpen] = useState(false)
 
   // --- 1. Load Data from API ---
   const fetchInitialData = async () => {
@@ -71,7 +89,10 @@ export default function CamerasPage() {
         ])
 
         if (locRes.ok) setLocations(await locRes.json())
-        if (typeRes.ok) setCamTypes(await typeRes.json())
+        if (typeRes.ok) {
+            const types = await typeRes.json()
+            setCamTypes(types.map((t: any) => ({ ...t, functions: t.functions || '' })))
+        }
         if (camRes.ok) setData(await camRes.json())
     } catch (error) {
         console.error("Failed to load initial data", error)
@@ -82,12 +103,9 @@ export default function CamerasPage() {
     fetchInitialData()
   }, [])
 
-  // --- 2. API Operations ---
-  
-  // --- 2. API Operations ---
-  
+  // --- 2. API Update Wrappers ---
   const updateLocations = async (updatedLocs: LocationItem[]) => {
-      setLocations(updatedLocs) // Optimistic update
+      setLocations(updatedLocs)
       const promise = fetch('/api/cameras/locations', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -99,16 +117,17 @@ export default function CamerasPage() {
         error: 'Lỗi khi cập nhật vị trí'
       })
       await promise
+      window.dispatchEvent(new CustomEvent('cammana_locations_updated'))
   }
 
   const updateTypes = async (updatedTypes: TypeItem[]) => {
-      setCamTypes(updatedTypes) // Optimistic update
+      setCamTypes(updatedTypes)
       const promise = fetch('/api/cameras/types', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updatedTypes)
       })
-       toast.promise(promise, {
+      toast.promise(promise, {
         loading: 'Đang cập nhật loại camera...',
         success: 'Đã cập nhật danh sách loại camera',
         error: 'Lỗi khi cập nhật loại camera'
@@ -116,9 +135,9 @@ export default function CamerasPage() {
       await promise
   }
 
-  // --- CRUD Handlers (Cameras) ---
+  // --- 3. Camera CRUD ---
   const handleEdit = async (item: Camera) => {
-    // Ensure locations are up-to-date before opening
+    // Refresh dependencies
     const res = await fetch('/api/cameras/locations')
     if(res.ok) setLocations(await res.json())
     
@@ -126,25 +145,34 @@ export default function CamerasPage() {
     setIsCamDialogOpen(true)
   }
 
-  const handleDelete = (id: number) => {
-    setDeleteCamId(id)
+  const openAddDialog = async () => {
+    const res = await fetch('/api/cameras/locations')
+    if(res.ok) setLocations(await res.json())
+
+    setEditingItem({ 
+        id: 0, 
+        name: '', 
+        ip: '', 
+        location: locations[0]?.name || '', 
+        status: 'Offline', 
+        type: camTypes[0]?.name || '', 
+        username: '', 
+        password: '', 
+        brand: '', 
+        cam_id: '' 
+    })
+    setIsCamDialogOpen(true)
   }
 
   const executeDeleteCamera = () => {
     if (deleteCamId !== null) {
         const id = deleteCamId
-        // Optimistic
         setData(prev => prev.filter(item => item.id !== id))
-        
         const promise = fetch(`/api/cameras/${id}`, { method: 'DELETE' })
-        
         toast.promise(promise, {
             loading: 'Đang xóa camera...',
             success: 'Đã xóa camera thành công',
-            error: (err) => {
-                fetchInitialData() // Revert
-                return 'Lỗi khi xóa camera'
-            }
+            error: 'Lỗi khi xóa camera'
         })
         setDeleteCamId(null)
     }
@@ -155,17 +183,10 @@ export default function CamerasPage() {
     if (!editingItem) return
 
     const isNew = !editingItem.id
-    const camToSave = { 
-        ...editingItem, 
-        id: isNew ? Date.now() : editingItem.id // Temp ID for new, backend uses UUID or keeps generic ID
-    }
+    const camToSave = { ...editingItem, id: isNew ? Date.now() : editingItem.id }
 
-    // Optimistic Update
-    if (isNew) {
-        setData(prev => [camToSave, ...prev])
-    } else {
-        setData(prev => prev.map(item => item.id === camToSave.id ? camToSave : item))
-    }
+    if (isNew) setData(prev => [camToSave, ...prev])
+    else setData(prev => prev.map(item => item.id === camToSave.id ? camToSave : item))
     
     setIsCamDialogOpen(false)
     setEditingItem(null)
@@ -179,616 +200,502 @@ export default function CamerasPage() {
     toast.promise(promise, {
         loading: isNew ? 'Đang thêm camera...' : 'Đang lưu camera...',
         success: isNew ? 'Đã thêm camera mới' : 'Đã cập nhật camera',
-        error: (err) => {
-             fetchInitialData()
-            return 'Lỗi khi lưu camera'
-        }
+        error: 'Lỗi khi lưu camera'
     })
-    
-    try {
-        const res = await promise
-        if (res.ok) {
-             fetchInitialData()
-        }
-    } catch (e) {
-        console.error("Save failed", e)
-    }
+    await promise
+    fetchInitialData()
   }
 
-  const openAddDialog = async () => {
-    // Ensure locations are up-to-date before opening
-    const res = await fetch('/api/cameras/locations')
-    if(res.ok) setLocations(await res.json())
-
-    setEditingItem({ id: 0, name: '', ip: '', location: locations[0]?.name || '', status: 'Offline', type: camTypes[0]?.name || '', username: '', password: '', brand: '', cam_id: '' })
-    setIsCamDialogOpen(true)
-  }
-
-  // --- CRUD Handlers (Locations & Types) ---
-  // --- CRUD Handlers (Locations & Types) ---
+  // --- 4. Location Handlers ---
   const handleAddLocation = () => {
-      if (newLocation && !locations.some(l => l.name === newLocation)) {
-          // Add new with temp ID (or no ID)
-          updateLocations([...locations, { id: Date.now().toString(), name: newLocation }])
-          setNewLocation('')
-      }
-  }
-
-  const handleDeleteLocation = (id: string | number, name: string) => {
-      setDeleteLocId(id)
-      setDeleteLocName(name)
-  }
-
-  const executeDeleteLocation = () => {
-      if (deleteLocId !== null) {
-          updateLocations(locations.filter(l => l.id !== deleteLocId))
-          setDeleteLocId(null)
-          setDeleteLocName('')
-      }
-  }
-
-  const handleStartEditLocation = (index: number, currentName: string) => {
-    setEditLocIndex(index)
-    setTempLocName(currentName)
+    if (newLocation && !locations.some(l => l.name === newLocation)) {
+        updateLocations([...locations, { 
+          id: Date.now().toString(), 
+          name: newLocation,
+          tag: newLocationTag
+        }])
+        setNewLocation('')
+        setNewLocationTag('Cơ bản')
+    }
   }
 
   const handleSaveEditLocation = (index: number) => {
     if (tempLocName && !locations.some((l, i) => i !== index && l.name === tempLocName)) {
         const updated = [...locations]
-        updated[index] = { ...updated[index], name: tempLocName }
+        updated[index] = { ...updated[index], name: tempLocName, tag: tempLocTag }
         updateLocations(updated)
         setEditLocIndex(null)
-        setTempLocName('')
-    } else if (tempLocName === locations[index].name) {
-        setEditLocIndex(null) // No change
-    } else {
-        toast.error('Tên vị trí không hợp lệ hoặc đã tồn tại!')
     }
   }
 
-  const handleToggleType = (name: string) => {
-    const exists = camTypes.find(t => t.name === name)
-    if (exists) {
-        // Remove
-        updateTypes(camTypes.filter(type => type.id !== exists.id))
-    } else {
-        // Add
-        updateTypes([...camTypes, { id: Date.now().toString(), name: name }])
+  const executeDeleteLocation = () => {
+    if (deleteLocId !== null) {
+        updateLocations(locations.filter(l => l.id !== deleteLocId))
+        setDeleteLocId(null)
     }
   }
 
+  // --- 5. Type Handlers ---
+  const handleAddType = () => {
+    if (newTypeName && !camTypes.some(t => t.name === newTypeName)) {
+        updateTypes([...camTypes, {
+            id: Date.now().toString(),
+            name: newTypeName,
+            functions: newTypeFunctions.join(';')
+        }])
+        setNewTypeName('')
+        setNewTypeFunctions([])
+    }
+  }
+
+  const handleToggleTypeFunction = (funcId: string, isNew: boolean = true) => {
+    const current = isNew ? newTypeFunctions : tempTypeFunctions;
+    const setter = isNew ? setNewTypeFunctions : setTempTypeFunctions;
+    if (current.includes(funcId)) setter(current.filter(id => id !== funcId));
+    else if (current.length < 2) setter([...current, funcId]);
+    else toast.error('Tối đa 2 chức năng cho mỗi loại camera');
+  }
+
+  const handleSaveEditType = (index: number) => {
+    if (tempTypeName && !camTypes.some((t, i) => i !== index && t.name === tempTypeName)) {
+        const updated = [...camTypes];
+        updated[index] = { ...updated[index], name: tempTypeName, functions: tempTypeFunctions.join(';') };
+        updateTypes(updated);
+        setEditTypeIndex(null);
+    }
+  }
+
+  const handleDeleteType = (id: string | number) => {
+    updateTypes(camTypes.filter(t => t.id !== id))
+  }
+
+  // --- 6. Scroll & Search ---
   useEffect(() => {
-    const handleScroll = () => {
-      setShowScrollTop(window.scrollY > 300)
-    }
+    const handleScroll = () => setShowScrollTop(window.scrollY > 300)
     window.addEventListener('scroll', handleScroll)
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
   const filteredData = data.filter(item => {
-    const searchLow = searchTerm.toLowerCase()
-    return (
-        item.name.toLowerCase().includes(searchLow) ||
-        item.ip.toLowerCase().includes(searchLow) ||
-        item.location.toLowerCase().includes(searchLow) ||
-        (item.cam_id || '').toLowerCase().includes(searchLow) ||
-        (item.brand || '').toLowerCase().includes(searchLow)
-    )
+    const s = searchTerm.toLowerCase()
+    return item.name.toLowerCase().includes(s) || item.ip.toLowerCase().includes(s) || item.location.toLowerCase().includes(s)
   })
 
-  const handleExportExcel = () => {
-    if (filteredData.length === 0) {
-      toast.error('Không có dữ liệu để xuất')
-      return
-    }
-
-    const headers = [
-      'Trạng thái',
-      'Mã Camera',
-      'Thương hiệu',
-      'Tên Camera',
-      'Địa chỉ IP',
-      'Vị trí',
-      'Loại chuyên dụng'
-    ]
-
-    const rows = filteredData.map(item => [
-      item.status,
-      item.cam_id || '',
-      item.brand || '',
-      item.name,
-      item.ip,
-      item.location,
-      item.type
-    ])
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n')
-
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    
-    link.setAttribute('href', url)
-    link.setAttribute('download', `Danh_sach_camera.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    
-    toast.success('Đã tải xuống danh sách camera')
-  }
-
-
-  // Columns Configuration
+  // --- 7. Table Columns ---
   const columns = [
     { 
       header: 'Trạng thái', 
       width: '100px',
       render: (row: Camera) => {
-        let colorClass = 'bg-gray-500/10 text-gray-500'
-        let dotClass = 'bg-gray-500'
-        let text = row.status
-
-        if (row.status === 'Online') {
-            colorClass = 'bg-green-500/10 text-green-500'
-            dotClass = 'bg-green-500 animate-pulse'
-        } else if (row.status === 'Connected') {
-            colorClass = 'bg-blue-500/10 text-blue-500'
-            dotClass = 'bg-blue-500'
-        } else if (row.status === 'Local') {
-             colorClass = 'bg-yellow-500/10 text-yellow-500'
-             dotClass = 'bg-yellow-500'
-        } else {
-             colorClass = 'bg-red-500/10 text-red-500'
-             dotClass = 'bg-red-500'
+        const statusConfig = {
+          Online: { color: 'bg-green-500/10 text-green-500', dot: 'bg-green-500 animate-pulse' },
+          Connected: { color: 'bg-blue-500/10 text-blue-500', dot: 'bg-blue-500' },
+          Local: { color: 'bg-yellow-500/10 text-yellow-500', dot: 'bg-yellow-500' },
+          Offline: { color: 'bg-red-500/10 text-red-500', dot: 'bg-red-500' }
         }
-
+        const cfg = statusConfig[row.status] || statusConfig.Offline
         return (
-            <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${colorClass}`}>
-               <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${dotClass}`} />
-               {text}
-            </span>
+          <span className={`inline-flex items-center px-2 py-1 rounded text-[10px] font-bold uppercase ${cfg.color}`}>
+            <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${cfg.dot}`} />
+            {row.status}
+          </span>
         )
       }
     },
-
-    { header: 'Mã Camera', accessorKey: 'cam_id' as keyof Camera },
-    { header: 'Thương hiệu', accessorKey: 'brand' as keyof Camera },
-    { header: 'Tên Camera', accessorKey: 'name' as keyof Camera },
-    { header: 'IP Address', accessorKey: 'ip' as keyof Camera },
-    { header: 'Vị trí', accessorKey: 'location' as keyof Camera },
-    { header: 'Loại', accessorKey: 'type' as keyof Camera },
+    { header: 'Mã Camera', accessorKey: 'cam_id' },
+    { header: 'Thương hiệu', accessorKey: 'brand' },
+    { header: 'Tên Camera', accessorKey: 'name' },
+    { header: 'IP Address', accessorKey: 'ip' },
+    { header: 'Vị trí', accessorKey: 'location' },
+    { 
+      header: 'Loại Camera', 
+      render: (row: Camera) => {
+        const typeMatch = camTypes.find(t => t.name === row.type);
+        return (
+          <span className="text-xs font-semibold text-foreground">
+            {typeMatch ? typeMatch.name : (row.type?.includes(';') ? 'Nhiều chức năng' : (row.type || 'Mặc định'))}
+          </span>
+        )
+      }
+    },
     { 
       header: 'Thao tác', 
-      width: '120px',
+      width: '100px',
       render: (row: Camera) => (
         <div className="flex gap-2">
-          <button 
-            onClick={(e) => { e.stopPropagation(); handleEdit(row) }}
-            className="p-1 text-blue-500 hover:bg-blue-500/10 rounded transition-colors"
-          >
-            <Edit fontSize="small" />
-          </button>
-          <button 
-             onClick={(e) => { e.stopPropagation(); handleDelete(row.id) }}
-             className="p-1 text-red-500 hover:bg-red-500/10 rounded transition-colors"
-          >
-            <Delete fontSize="small" />
-          </button>
+          <button onClick={() => handleEdit(row)} className="p-1 text-blue-500 hover:bg-blue-500/10 rounded"><Edit fontSize="small"/></button>
+          <button onClick={() => setDeleteCamId(row.id)} className="p-1 text-red-500 hover:bg-red-500/10 rounded"><Delete fontSize="small"/></button>
         </div>
       )
     }
   ]
 
   return (
-    <div className="h-full flex flex-col p-6 gap-2 overflow-hidden">
-      {/* Header Section */}
+    <div className="h-full flex flex-col p-6 gap-4 overflow-hidden bg-background">
+      {/* Header */}
       <div className="flex justify-between items-center shrink-0">
-          <div className="space-y-1">
-              <h1 className="text-2xl font-bold tracking-tight">Danh sách Camera</h1>
-          </div>
-
+          <h1 className="text-2xl font-bold tracking-tight text-primary">Danh sách Camera</h1>
           <div className="flex items-center gap-3">
-              {/* Search Bar */}
-              <div className="relative group min-w-[300px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors" fontSize="small" />
+              <div className="relative min-w-[300px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" fontSize="small" />
                   <input 
-                      type="text"
-                      placeholder="Tìm kiếm camera, IP, vị trí..."
-                      className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+                      className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-md text-sm outline-none focus:border-primary"
+                      placeholder="Tìm kiếm camera..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                   />
               </div>
-
-              <button 
-                onClick={() => setIsConfigDialogOpen(true)}
-                className="px-4 py-1.5 bg-card border border-border text-foreground hover:bg-muted rounded-md text-sm font-bold flex items-center gap-2 transition-all shadow-sm"
-              >
-                <Settings fontSize="small" /> Cấu hình
-              </button>
-              
-              <button 
-                onClick={openAddDialog}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-1.5 rounded-md text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20 active:scale-95"
-              >
-                <Add fontSize="small" /> Thêm camera
-              </button>
-
-              <button 
-                onClick={handleExportExcel}
-                className="px-4 py-1.5 bg-card border border-border text-foreground hover:bg-muted rounded-md text-sm font-bold flex items-center gap-2 transition-all shadow-sm"
-              >
-                <Download fontSize="small" /> Xuất Excel
-              </button>
+              <button onClick={() => setIsConfigDialogOpen(true)} className="px-4 py-2 bg-card border border-border rounded-md text-sm font-bold flex items-center gap-2 hover:bg-muted transition-all"><Settings fontSize="small" /> Cấu hình</button>
+              <button onClick={openAddDialog} className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-bold flex items-center gap-2 hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"><Add fontSize="small" /> Thêm camera</button>
           </div>
       </div>
 
-      {/* Table Section */}
+      {/* Table */}
       <div className="border border-border rounded-lg bg-card overflow-hidden flex-1 flex flex-col min-h-0">
-        {/* Unified Scroll Container */}
-        <div className="flex-1 overflow-y-scroll overflow-x-auto scrollbar-show-always min-h-0">
-          <table className="text-sm text-left border-collapse table-fixed w-fit min-w-full">
-            {/* Sticky Header */}
-            <thead className="text-[10px] uppercase text-muted-foreground font-bold sticky top-0 bg-muted/90 backdrop-blur-md z-20 border-b border-border">
-              <tr>
-                {columns.map((col, idx) => (
-                  <th key={idx} className="px-4 py-3 whitespace-nowrap" style={{ width: col.width || 'auto' }}>
-                    {col.header}
-                  </th>
-                ))}
-              </tr>
+        <div className="flex-1 overflow-auto scrollbar-show-always">
+          <table className="text-sm text-left border-collapse w-full min-w-max">
+            <thead className="text-[10px] uppercase text-muted-foreground font-bold sticky top-0 bg-muted/95 backdrop-blur-sm z-20 border-b border-border">
+              <tr>{columns.map((c, i) => <th key={i} className="px-4 py-3" style={{ width: (c as any).width }}>{c.header}</th>)}</tr>
             </thead>
-            
-            {/* Data Body */}
             <tbody className="divide-y divide-border">
-              {filteredData.length > 0 ? (
-                filteredData.map((row, rowIdx) => (
-                  <tr 
-                    key={rowIdx} 
-                    className="bg-card hover:bg-muted/5 transition-colors group"
-                  >
-                    {columns.map((col, colIdx) => (
-                      <td key={colIdx} className="px-4 py-2.5 whitespace-nowrap text-foreground font-medium text-xs truncate" style={{ width: col.width || 'auto' }}>
-                        {col.render ? col.render(row) : (row as any)[col.accessorKey!]}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={columns.length} className="px-4 py-12 text-center text-muted-foreground font-medium">
-                    Không có camera nào được cấu hình
-                  </td>
+              {filteredData.map((row, i) => (
+                <tr key={i} className="hover:bg-muted/5 transition-colors">
+                  {columns.map((c, j) => <td key={j} className="px-4 py-2.5 text-xs text-foreground font-medium">{(c as any).render ? (c as any).render(row) : (row as any)[(c as any).accessorKey]}</td>)}
                 </tr>
-              )}
+              ))}
             </tbody>
           </table>
+          {filteredData.length === 0 && <div className="p-12 text-center text-muted-foreground italic">Không tìm thấy camera nào</div>}
         </div>
       </div>
 
-      {/* Floating Scroll to Top Button */}
-      {showScrollTop && (
-        <button
-          onClick={scrollToTop}
-          className="fixed bottom-10 left-1/2 -translate-x-1/2 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-all animate-in fade-in zoom-in duration-300 z-50 flex items-center justify-center border border-primary/20"
-          aria-label="Back to top"
-        >
-          <ExpandLess fontSize="medium" />
-        </button>
-      )}
-
-      {/* --- ADD/EDIT CAMERA DIALOG --- */}
-      <Dialog 
-        isOpen={isCamDialogOpen} 
-        onClose={() => setIsCamDialogOpen(false)} 
-        title={editingItem?.id ? 'Cấu hình Camera' : 'Thêm Camera mới'}
-        maxWidth="sm"
-      >
-        <form onSubmit={handleSaveCamera} className="space-y-4" autoComplete="off">
-           <input autoComplete="false" name="hidden" type="text" style={{display: 'none'}} />
-
-           <div className="space-y-2">
-             <label className="text-sm font-medium text-muted-foreground">Tên Camera <span className="text-red-500">*</span></label>
-             <input 
-               className="w-full p-2 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none"
-               value={editingItem?.name || ''}
-               onChange={e => setEditingItem(prev => ({ ...prev!, name: e.target.value }))}
-               required
-               autoComplete="off"
-               placeholder="Camera Cổng Chính"
-             />
-           </div>
-
-           <div className="space-y-2">
-             <label className="text-sm font-medium text-muted-foreground">Thương hiệu <span className="text-red-500">*</span></label>
-             <input 
-               className="w-full p-2 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none"
-               value={editingItem?.brand || ''}
-               onChange={e => setEditingItem(prev => ({ ...prev!, brand: e.target.value }))}
-               required
-               placeholder="Hikvision/Dahua"
-               autoComplete="off"
-             />
-           </div>
-           
-           <div className="space-y-2">
-             <label className="text-sm font-medium text-muted-foreground">Địa chỉ IP <span className="text-red-500">*</span></label>
-             <input 
-               className="w-full p-2 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none"
-               value={editingItem?.ip || ''}
-               onChange={e => setEditingItem(prev => ({ ...prev!, ip: e.target.value }))}
-               required
-               autoComplete="off"
-             />
-           </div>
-
-           <div className="space-y-2">
-             <label className="text-sm font-medium text-muted-foreground">Tài khoản (Username)</label>
-             <input 
-                className="w-full p-2 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none"
-                value={editingItem?.username || ''}
-                onChange={e => setEditingItem(prev => ({ ...prev!, username: e.target.value }))}
-                autoComplete="new-password" 
-                name="camera_username"
-             />
-           </div>
-
-           <div className="space-y-2">
-             <label className="text-sm font-medium text-muted-foreground">Mật khẩu (Password)</label>
-             <div className="relative">
-               <input 
-                 type={showPassword ? "text" : "password"}
-                 className="w-full p-2 pr-10 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none"
-                 value={editingItem?.password || ''}
-                 onChange={e => setEditingItem(prev => ({ ...prev!, password: e.target.value }))}
-                 autoComplete="new-password"
-                 name="camera_password"
-               />
-               <button
-                 type="button"
-                 onClick={() => setShowPassword(!showPassword)}
-                 className="absolute inset-y-0 right-0 px-3 flex items-center text-muted-foreground hover:text-foreground transition-colors"
-                 tabIndex={-1}
-               >
-                 {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-               </button>
-             </div>
-           </div>
-
-           <div className="space-y-2">
-             <label className="text-sm font-medium text-muted-foreground">Vị trí lắp đặt <span className="text-red-500">*</span></label>
-             <div className="relative">
-                 <select 
-                   className="w-full p-2 pr-10 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none appearance-none"
-                   value={editingItem?.location || ''}
-                   onChange={e => setEditingItem(prev => ({ ...prev!, location: e.target.value }))}
-                   required
-                 >
-                    {locations.map(loc => (
-                        <option key={loc.id} value={loc.name}>{loc.name}</option>
-                    ))}
-                 </select>
-                 <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-muted-foreground">
-                    <ExpandMore fontSize="small" />
-                 </div>
-             </div>
-           </div>
-
-           <div className="space-y-2">
-             <label className="text-sm font-medium text-muted-foreground">Loại Camera <span className="text-red-500">*</span></label>
+      {/* Camera Dialog */}
+      <Dialog isOpen={isCamDialogOpen} onClose={() => setIsCamDialogOpen(false)} title={editingItem?.id ? 'Cấu hình Camera' : 'Thêm Camera mới'} maxWidth="sm">
+        <form onSubmit={handleSaveCamera} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Tên Camera</label>
+              <input className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-primary" value={editingItem?.name || ''} onChange={e => setEditingItem(p => ({ ...p!, name: e.target.value }))} required />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Thương hiệu</label>
+              <input className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-primary" value={editingItem?.brand || ''} onChange={e => setEditingItem(p => ({ ...p!, brand: e.target.value }))} required />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-muted-foreground uppercase">Địa chỉ IP</label>
+            <input className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-primary" value={editingItem?.ip || ''} onChange={e => setEditingItem(p => ({ ...p!, ip: e.target.value }))} required />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Tài khoản</label>
+              <input className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-primary" value={editingItem?.username || ''} onChange={e => setEditingItem(p => ({ ...p!, username: e.target.value }))} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Mật khẩu</label>
               <div className="relative">
-                  <select 
-                      className="w-full p-2 pr-10 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none appearance-none"
-                      value={editingItem?.type || ''}
-                      onChange={e => setEditingItem(prev => ({ ...prev!, type: e.target.value }))}
-                      required
-                    >
-                       {camTypes.map(t => (
-                           <option key={t.id} value={t.name}>{t.name}</option>
-                       ))}
-                    </select>
-                    <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-muted-foreground">
-                        <ExpandMore fontSize="small" />
-                    </div>
+                <input type={showPassword ? "text" : "password"} className="w-full p-2 pr-10 bg-background border border-border rounded text-sm outline-none focus:border-primary" value={editingItem?.password || ''} onChange={e => setEditingItem(p => ({ ...p!, password: e.target.value }))} />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 px-3 text-muted-foreground hover:text-foreground">{showPassword ? <VisibilityOff fontSize="small"/> : <Visibility fontSize="small"/>}</button>
               </div>
-           </div>
-
-           <div className="flex justify-end gap-3 pt-4 border-t border-border mt-4">
-             <button 
-               type="button"
-               onClick={() => setIsCamDialogOpen(false)}
-               className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded transition-colors"
-             >
-               Hủy bỏ
-             </button>
-             <button 
-               type="submit"
-               className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded transition-colors"
-             >
-               Lưu cấu hình
-             </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Vị trí</label>
+              <div className="relative">
+                <button 
+                  type="button" 
+                  onClick={() => { setIsCamLocOpen(!isCamLocOpen); setIsCamTypeOpen(false); }}
+                  className="w-full flex items-center justify-between p-2 bg-background border border-border rounded text-xs font-semibold focus:border-primary transition-all"
+                >
+                  <span className="truncate">{editingItem?.location || 'Chọn vị trí...'}</span>
+                  <ExpandMore className={`transition-transform duration-200 ${isCamLocOpen ? 'rotate-180' : ''}`} fontSize="small" />
+                </button>
+                {isCamLocOpen && (
+                  <div className="absolute top-full left-0 w-full z-[110] mt-1 bg-[#121212] border border-border rounded-lg shadow-2xl p-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                    {locations.map(l => (
+                      <button 
+                        key={l.id}
+                        type="button"
+                        onClick={() => { setEditingItem(p => ({ ...p!, location: l.name })); setIsCamLocOpen(false); }}
+                        className={`w-full text-left px-3 py-1.5 rounded text-xs transition-colors hover:bg-primary/10 ${editingItem?.location === l.name ? 'text-primary bg-primary/5' : 'text-muted-foreground'}`}
+                      >
+                        {l.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-muted-foreground uppercase">Loại Camera</label>
+              <div className="relative">
+                <button 
+                  type="button" 
+                  onClick={() => { setIsCamTypeOpen(!isCamTypeOpen); setIsCamLocOpen(false); }}
+                  className="w-full flex items-center justify-between p-2 bg-background border border-border rounded text-xs font-semibold focus:border-primary transition-all"
+                >
+                  <span className="truncate">{editingItem?.type || 'Chọn loại...'}</span>
+                  <ExpandMore className={`transition-transform duration-200 ${isCamTypeOpen ? 'rotate-180' : ''}`} fontSize="small" />
+                </button>
+                {isCamTypeOpen && (
+                  <div className="absolute top-full left-0 w-full z-[110] mt-1 bg-[#121212] border border-border rounded-lg shadow-2xl p-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                    <button 
+                      type="button"
+                      onClick={() => { setEditingItem(p => ({ ...p!, type: '' })); setIsCamTypeOpen(false); }}
+                      className="w-full text-left px-3 py-1.5 rounded text-xs text-muted-foreground hover:bg-primary/10"
+                    >
+                      Chọn loại...
+                    </button>
+                    {camTypes.map(t => (
+                      <button 
+                        key={t.id}
+                        type="button"
+                        onClick={() => { setEditingItem(p => ({ ...p!, type: t.name })); setIsCamTypeOpen(false); }}
+                        className={`w-full text-left px-3 py-1.5 rounded text-xs transition-colors hover:bg-primary/10 ${editingItem?.type === t.name ? 'text-primary bg-primary/5' : 'text-muted-foreground'}`}
+                      >
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          {editingItem?.type && camTypes.find(t => t.name === editingItem.type) && (
+            <div className="flex flex-wrap gap-2 p-2 bg-muted/30 rounded border border-border/50">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase w-full">Chức năng tích hợp:</span>
+              {(camTypes.find(t => t.name === editingItem.type)?.functions || '').split(';').filter(Boolean).map(fid => (
+                <span key={fid} className="px-2 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded text-[10px] font-bold">
+                  {SMART_FUNCTIONS.find(sf => sf.id === fid)?.name || fid}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-4 border-t border-border">
+            <button type="button" onClick={() => setIsCamDialogOpen(false)} className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded">Hủy</button>
+            <button type="submit" className="px-6 py-2 bg-primary text-primary-foreground rounded text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90">Lưu cấu hình</button>
           </div>
         </form>
       </Dialog>
 
-      {/* --- CONFIGURATION DIALOG --- */}
-      <Dialog
-         isOpen={isConfigDialogOpen}
-         onClose={() => setIsConfigDialogOpen(false)}
-         title="Cấu hình Hệ thống"
-         maxWidth="3xl"
-      >
-          <div className="grid grid-cols-2 gap-8 p-1">
-              {/* Left Column: Locations */}
-              <div className="space-y-4">
-                  <h3 className="font-semibold text-lg flex items-center gap-2 border-b border-border pb-2 text-primary">
-                      Vị trí (Location)
-                  </h3>
-                  
-                  {/* Add Input Group */}
-                  {/* Add Input Group */}
-                  <div className="flex items-center gap-2">
-                      <input 
-                         className="flex-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm placeholder:text-muted-foreground h-10 w-full"
-                         placeholder="Tên vị trí mới..."
-                         value={newLocation}
-                         onChange={(e) => setNewLocation(e.target.value)}
-                      />
-                      <button 
-                        onClick={handleAddLocation}
-                        className="h-8 w-8 flex items-center justify-center bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors shadow-sm shrink-0"
-                        title="Thêm vị trí"
-                      >
-                          <Add fontSize="small" />
-                      </button>
-                  </div>
-
-                  {/* List Container */}
-                  <div className="bg-muted/30 rounded-lg p-2 max-h-[400px] overflow-y-auto space-y-2">
-                      {locations.length === 0 && <div className="p-4 text-center text-muted-foreground text-sm italic">Chưa có vị trí nào</div>}
-                      {locations.map((loc, idx) => (
-                          <div key={loc.id || idx} className="flex items-center justify-between p-3 bg-card border border-border/50 rounded-md shadow-sm hover:shadow-md transition-all group min-h-[50px]">
-                              {editLocIndex === idx ? (
-                                  <div className="flex items-center gap-2 flex-1 animate-in fade-in zoom-in-95 duration-200">
-                                      <input 
-                                          className="flex-1 p-1 bg-background border border-primary rounded focus:outline-none text-sm"
-                                          value={tempLocName}
-                                          onChange={e => setTempLocName(e.target.value)}
-                                          autoFocus
-                                      />
-                                      <button onClick={() => handleSaveEditLocation(idx)} className="text-green-500 hover:bg-green-500/10 p-1 rounded"><Check fontSize="small"/></button>
-                                      <button onClick={() => setEditLocIndex(null)} className="text-red-500 hover:bg-red-500/10 p-1 rounded"><Close fontSize="small"/></button>
-                                  </div>
-                              ) : (
-                                  <>
-                                    <span className="font-medium">{loc.name}</span>
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button 
-                                            onClick={() => handleStartEditLocation(idx, loc.name)}
-                                            className="text-muted-foreground hover:text-blue-500 p-1 rounded transition-colors"
-                                            title="Sửa"
-                                        >
-                                            <Edit fontSize="small" />
-                                        </button>
-                                        <button 
-                                            onClick={() => handleDeleteLocation(loc.id, loc.name)}
-                                            className="text-muted-foreground hover:text-red-500 p-1 rounded transition-colors"
-                                            title="Xóa"
-                                        >
-                                            <Delete fontSize="small" />
-                                        </button>
-                                    </div>
-                                  </>
-                              )}
-                          </div>
+      {/* Config Dialog */}
+      <Dialog isOpen={isConfigDialogOpen} onClose={() => { 
+        setIsConfigDialogOpen(false); 
+        setIsNewTypeDropdownOpen(false); 
+        setEditTypeDropdownIndex(null); 
+        setIsNewLocDropdownOpen(false);
+        setEditLocDropdownIndex(null);
+      }} title="Cấu hình Hệ thống" maxWidth="3xl">
+        <div className="grid grid-cols-2 gap-10 p-2">
+          {/* Locations */}
+          <div className="space-y-3">
+            <h3 className="font-bold text-xl text-primary tracking-wider">Vị trí (Locations)</h3>
+            <div className="space-y-2 bg-muted/20 p-4 rounded-xl border border-border/50 shadow-inner">
+              <input 
+                className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs outline-none focus:border-primary transition-all placeholder:italic" 
+                placeholder="Tên vị trí (vd: Cổng Chính)..." 
+                value={newLocation} 
+                onChange={e => setNewLocation(e.target.value)} 
+              />
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <button 
+                    type="button" 
+                    onClick={() => setIsNewLocDropdownOpen(!isNewLocDropdownOpen)}
+                    className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs font-semibold text-foreground text-left flex justify-between items-center focus:border-primary transition-all"
+                  >
+                    <span>{newLocationTag}</span>
+                    <ExpandMore className={`transition-transform duration-300 ${isNewLocDropdownOpen ? 'rotate-180' : ''}`} fontSize="small" />
+                  </button>
+                  {isNewLocDropdownOpen && (
+                    <div className="absolute top-full left-0 w-full z-[60] mt-2 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                      {['Cơ bản', 'Cổng vào', 'Cổng ra', 'Đo thể tích'].map(v => (
+                        <button 
+                          key={v}
+                          onClick={() => { setNewLocationTag(v); setIsNewLocDropdownOpen(false); }}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${newLocationTag === v ? 'text-primary bg-primary/5' : 'text-muted-foreground'}`}
+                        >
+                          {v}
+                        </button>
                       ))}
-                  </div>
+                    </div>
+                  )}
+                </div>
+                <button onClick={handleAddLocation} className="w-[42px] h-[42px] shrink-0 bg-primary text-primary-foreground rounded-lg flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"><Add fontSize="small"/></button>
               </div>
-
-              {/* Right Column: Camera Types */}
-              <div className="space-y-4">
-                  <h3 className="font-semibold text-lg flex items-center gap-2 border-b border-border pb-2 text-primary">
-                      Loại Camera (Types)
-                  </h3>
-                  
-                   {/* List Container - Toggles */}
-                  <div className="bg-muted/30 rounded-lg p-2 space-y-2">
-                      {DEFAULT_TYPES_NAMES.map(t => {
-                          const isActive = camTypes.some(type => type.name === t)
-                          return (
-                            <div key={t} className="flex items-center justify-between p-3 bg-card border border-border/50 rounded-md shadow-sm hover:shadow-md transition-all cursor-pointer" onClick={() => handleToggleType(t)}>
-                                <span className={`font-medium ${isActive ? 'text-foreground' : 'text-muted-foreground'}`}>{t}</span>
-                                
-                                <div className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ${isActive ? 'bg-primary' : 'bg-muted-foreground/30'}`}>
-                                    <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${isActive ? 'translate-x-5' : 'translate-x-0'}`}></div>
-                                </div>
+            </div>
+            <div className="max-h-[450px] overflow-y-auto space-y-3 pr-2 scrollbar-thin">
+              {locations.map((loc, idx) => (
+                <div key={loc.id} className="p-3 bg-muted/10 border-l-4 border-l-primary rounded-r-xl flex items-center justify-between group hover:bg-muted/20 transition-all shadow-sm">
+                  {editLocIndex === idx ? (
+                    <div className="flex-1 flex flex-col gap-2">
+                      <input className="w-full h-8 px-2 bg-background border border-primary rounded text-xs outline-none" value={tempLocName} onChange={e => setTempLocName(e.target.value)} autoFocus />
+                      <div className="flex gap-2 items-center">
+                        <div className="relative flex-1">
+                          <button 
+                            type="button" 
+                            onClick={() => setEditLocDropdownIndex(editLocDropdownIndex === idx ? null : idx)}
+                            className="w-full h-8 px-2 bg-background border border-border rounded text-[10px] font-semibold text-left flex justify-between items-center focus:border-primary transition-colors"
+                          >
+                            <span>{tempLocTag}</span>
+                            <ExpandMore className={`transition-transform duration-300 ${editLocDropdownIndex === idx ? 'rotate-180' : ''}`} fontSize="small" />
+                          </button>
+                          {editLocDropdownIndex === idx && (
+                            <div className="absolute top-full left-0 w-full z-[60] mt-1 bg-[#121212] border border-border rounded-lg shadow-2xl p-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                              {['Cơ bản', 'Cổng vào', 'Cổng ra', 'Đo thể tích'].map(v => (
+                                <button 
+                                  key={v}
+                                  onClick={() => { setTempLocTag(v); setEditLocDropdownIndex(null); }}
+                                  className={`w-full text-left px-2 py-1.5 rounded text-[10px] font-medium transition-colors hover:bg-primary/10 ${tempLocTag === v ? 'text-primary bg-primary/5' : 'text-muted-foreground'}`}
+                                >
+                                  {v}
+                                </button>
+                              ))}
                             </div>
-                          )
-                      })}
-                  </div>
-              </div>
-          </div>
-      </Dialog>
-      
-      {/* --- DELETE CAMERA CONFIRMATION --- */}
-      <Dialog 
-        isOpen={!!deleteCamId} 
-        onClose={() => setDeleteCamId(null)} 
-        title="Xác nhận xóa Camera"
-        maxWidth="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-muted-foreground">
-            Bạn có chắc chắn muốn xóa camera này khỏi danh sách?
-          </p>
-          
-          <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3 flex items-start gap-3">
-             <Warning className="text-red-500 shrink-0 mt-0.5" fontSize="small" />
-             <div className="text-xs text-red-500">
-                <span className="font-bold block mb-0.5">Cảnh báo</span>
-                Hành động này sẽ xóa vĩnh viễn dữ liệu và không thể hoàn tác.
-             </div>
+                          )}
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => { handleSaveEditLocation(idx); setEditLocDropdownIndex(null); }} className="w-8 h-8 flex items-center justify-center bg-green-500/10 text-green-500 rounded-md hover:bg-green-500/20 transition-all"><Check sx={{ fontSize: 16 }}/></button>
+                          <button onClick={() => { setEditLocIndex(null); setEditLocDropdownIndex(null); }} className="w-8 h-8 flex items-center justify-center bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 transition-all"><Close sx={{ fontSize: 16 }}/></button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex-1">
+                        <div className="font-semibold text-sm text-foreground">{loc.name}</div>
+                        <div className="text-[10px] text-primary/80 font-medium mt-0.5">{loc.tag}</div>
+                      </div>
+                      <div className="flex gap-1 ml-4 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                        <button onClick={() => {setEditLocIndex(idx); setTempLocName(loc.name); setTempLocTag(loc.tag||'Cơ bản')}} className="w-8 h-8 flex items-center justify-center bg-background border border-border rounded-md hover:text-blue-500 transition-colors"><Edit sx={{ fontSize: 16 }}/></button>
+                        <button onClick={() => setDeleteLocId(loc.id)} className="w-8 h-8 flex items-center justify-center bg-background border border-border rounded-md hover:text-red-500 transition-colors"><Delete sx={{ fontSize: 16 }}/></button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-border mt-2">
-            <button 
-              onClick={() => setDeleteCamId(null)}
-              className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded transition-colors"
-            >
-              Hủy bỏ
-            </button>
-            <button 
-              onClick={executeDeleteCamera}
-              className="px-4 py-2 text-sm font-bold bg-red-500 text-white hover:bg-red-600 rounded shadow-lg shadow-red-500/20 transition-all"
-            >
-              Xóa Camera
-            </button>
+          {/* Types */}
+          <div className="space-y-3">
+            <h3 className="font-bold text-xl text-primary tracking-wider">Loại Camera (Types)</h3>
+            <div className="space-y-2 bg-muted/20 p-4 rounded-xl border border-border/50 shadow-inner">
+              <input 
+                className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs outline-none focus:border-primary transition-all placeholder:italic" 
+                placeholder="Tên loại (vd: Phân tích xe)..." 
+                value={newTypeName} 
+                onChange={e => setNewTypeName(e.target.value)} 
+              />
+              <div className="flex gap-2">
+                {/* Custom Tickbox Dropdown */}
+                <div className="relative flex-1">
+                  <button 
+                    type="button" 
+                    onClick={() => setIsNewTypeDropdownOpen(!isNewTypeDropdownOpen)}
+                    className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs font-semibold text-foreground text-left flex justify-between items-center focus:border-primary transition-all"
+                  >
+                    <span className="truncate">
+                      {newTypeFunctions.length === 0 ? 'Chọn chức năng' : `${newTypeFunctions.length} chức năng đã chọn`}
+                    </span>
+                    <ExpandMore className={`transition-transform duration-300 ${isNewTypeDropdownOpen ? 'rotate-180' : ''}`} fontSize="small" />
+                  </button>
+                  {isNewTypeDropdownOpen && (
+                    <div className="absolute top-full left-0 w-full z-[60] mt-2 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                      {SMART_FUNCTIONS.map(f => (
+                        <label key={f.id} className="flex items-center gap-3 p-2.5 hover:bg-primary/10 rounded-lg cursor-pointer transition-colors group">
+                          <input 
+                            type="checkbox" 
+                            checked={newTypeFunctions.includes(f.id)}
+                            onChange={() => handleToggleTypeFunction(f.id, true)}
+                            className="w-4 h-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-0 bg-background"
+                          />
+                          <span className={`text-xs font-semibold transition-colors ${newTypeFunctions.includes(f.id) ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}>
+                            {f.name}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button onClick={handleAddType} className="w-[42px] h-[42px] shrink-0 bg-primary text-primary-foreground rounded-lg flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"><Add fontSize="small"/></button>
+              </div>
+            </div>
+            <div className="max-h-[450px] overflow-y-auto space-y-3 pr-2 scrollbar-thin">
+              {camTypes.map((type, idx) => (
+                <div key={type.id} id={`type-item-${idx}`} className="p-3 bg-muted/10 border-l-4 border-l-primary rounded-r-xl flex items-center justify-between group hover:bg-muted/20 transition-all shadow-sm">
+                  {editTypeIndex === idx ? (
+                    <div className="flex-1 space-y-2">
+                       <input className="w-full h-8 px-2 bg-background border border-primary rounded text-xs" value={tempTypeName} onChange={e => setTempTypeName(e.target.value)} />
+                       <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <button 
+                            type="button" 
+                            onClick={(e) => {
+                                const isOpen = editTypeDropdownIndex === idx;
+                                setEditTypeDropdownIndex(isOpen ? null : idx);
+                                if (!isOpen) {
+                                    setTimeout(() => {
+                                        document.getElementById(`type-item-${idx}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                                    }, 100);
+                                }
+                            }}
+                            className="w-full h-8 px-2 bg-background border border-border rounded text-[10px] font-semibold text-left flex justify-between items-center"
+                          >
+                            <span className="truncate">{tempTypeFunctions.length === 0 ? 'Chọn' : `${tempTypeFunctions.length} chức năng`}</span>
+                            <ExpandMore fontSize="small" />
+                          </button>
+                          {editTypeDropdownIndex === idx && (
+                            <div className="absolute top-full left-0 w-full z-[60] mt-1 bg-[#121212] border border-border rounded-lg shadow-2xl p-1 max-h-40 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                              {SMART_FUNCTIONS.map(f => (
+                                <label key={f.id} className="flex items-center gap-2 p-1.5 hover:bg-muted rounded cursor-pointer transition-colors">
+                                  <input type="checkbox" checked={tempTypeFunctions.includes(f.id)} onChange={() => handleToggleTypeFunction(f.id, false)} className="w-3 h-3 rounded text-primary" />
+                                  <span className={`text-[10px] font-semibold ${tempTypeFunctions.includes(f.id) ? 'text-primary' : 'text-muted-foreground'}`}>{f.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => { handleSaveEditType(idx); setEditTypeDropdownIndex(null); }} className="w-8 h-8 flex items-center justify-center bg-green-500/10 text-green-500 rounded-md hover:bg-green-500/20 transition-all"><Check sx={{ fontSize: 16 }}/></button>
+                          <button onClick={() => { setEditTypeIndex(null); setEditTypeDropdownIndex(null); }} className="w-8 h-8 flex items-center justify-center bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 transition-all"><Close sx={{ fontSize: 16 }}/></button>
+                        </div>
+                       </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between items-center w-full">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-sm text-foreground">{type.name}</div>
+                        <div className="text-[10px] text-primary/80 font-medium mt-0.5 truncate">
+                          {(type.functions || '').split(';').filter(Boolean).map(fid => SMART_FUNCTIONS.find(sf => sf.id === fid)?.name.split(' (')[0]).join(', ') || 'Mặc định'}
+                        </div>
+                      </div>
+                      <div className="flex gap-1 ml-4 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                        <button onClick={() => {setEditTypeIndex(idx); setTempTypeName(type.name); setTempTypeFunctions((type.functions || '').split(';').filter(Boolean))}} className="w-8 h-8 flex items-center justify-center bg-background border border-border rounded-md hover:text-blue-500 transition-colors"><Edit sx={{ fontSize: 16 }}/></button>
+                        <button onClick={() => handleDeleteType(type.id)} className="w-8 h-8 flex items-center justify-center bg-background border border-border rounded-md hover:text-red-500 transition-colors"><Delete sx={{ fontSize: 16 }}/></button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </Dialog>
 
-      {/* --- DELETE LOCATION CONFIRMATION --- */}
-      <Dialog 
-        isOpen={deleteLocId !== null} 
-        onClose={() => { setDeleteLocId(null); setDeleteLocName(''); }} 
-        title="Xác nhận xóa Vị trí"
-        maxWidth="sm"
-      >
+      {/* Delete Confirmation */}
+      <Dialog isOpen={deleteCamId !== null} onClose={() => setDeleteCamId(null)} title="Xác nhận xóa Camera" maxWidth="sm">
         <div className="space-y-4">
-          <p className="text-muted-foreground">
-            Bạn có chắc chắn muốn xóa vị trí <strong>"{deleteLocName}"</strong> khỏi danh sách?
-          </p>
-          
-          <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3 flex items-start gap-3">
-             <Warning className="text-red-500 shrink-0 mt-0.5" fontSize="small" />
-             <div className="text-xs text-red-500">
-                <span className="font-bold block mb-0.5">Cảnh báo</span>
-                Hành động này sẽ xóa vĩnh viễn cấu hình này.
-             </div>
-          </div>
+          <p className="text-sm text-muted-foreground">Bạn có chắc muốn xóa camera này?</p>
+          <div className="flex justify-end gap-3"><button onClick={() => setDeleteCamId(null)} className="px-4 py-2 text-sm text-muted-foreground">Hủy</button><button onClick={executeDeleteCamera} className="px-4 py-2 bg-red-500 text-white rounded text-sm font-bold">Xóa vĩnh viễn</button></div>
+        </div>
+      </Dialog>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-border mt-2">
-            <button 
-              onClick={() => { setDeleteLocId(null); setDeleteLocName(''); }}
-              className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded transition-colors"
-            >
-              Hủy bỏ
-            </button>
-            <button 
-              onClick={executeDeleteLocation}
-              className="px-4 py-2 text-sm font-bold bg-red-500 text-white hover:bg-red-600 rounded shadow-lg shadow-red-500/20 transition-all"
-            >
-              Xóa Vị trí
-            </button>
-          </div>
+      <Dialog isOpen={deleteLocId !== null} onClose={() => setDeleteLocId(null)} title="Xác nhận xóa Vị trí" maxWidth="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">Xóa vị trí này có thể ảnh hưởng đến các camera đang lắp đặt tại đây.</p>
+          <div className="flex justify-end gap-3"><button onClick={() => setDeleteLocId(null)} className="px-4 py-2 text-sm text-muted-foreground">Hủy</button><button onClick={executeDeleteLocation} className="px-4 py-2 bg-red-500 text-white rounded text-sm font-bold">Xóa vị trí</button></div>
         </div>
       </Dialog>
     </div>

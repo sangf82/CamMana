@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { 
   Videocam, 
   DirectionsCar, 
@@ -21,7 +21,7 @@ interface MenuItem {
   title: string
   href?: string
   icon: React.ElementType
-  subItems?: { title: string; href: string }[]
+  subItems?: { title: string; href: string; tag?: string }[]
   key?: string // Unique key for state management
 }
 
@@ -51,13 +51,14 @@ const STATIC_MENU_ITEMS: MenuItem[] = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const router = useRouter()
   const [openMenus, setOpenMenus] = useState<string[]>(['Giám sát trực tuyến'])
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   
   // Dynamic Locations State
-  const [monitorSubItems, setMonitorSubItems] = useState<{ title: string; href: string }[]>([])
+  const [monitorSubItems, setMonitorSubItems] = useState<{ title: string; href: string; tag?: string }[]>([])
 
   // Load Locations for Sidebar
   useEffect(() => {
@@ -66,10 +67,11 @@ export default function Sidebar() {
         try {
             const res = await fetch('/api/cameras/locations')
             if (res.ok) {
-                const locs: Array<{id: string | number, name: string}> = await res.json()
+                const locs: Array<{id: string | number, name: string, tag?: string}> = await res.json()
                 const items = locs.map(loc => ({
                     title: loc.name, 
-                    href: `/monitor?gate=${encodeURIComponent(loc.name)}` 
+                    href: `/monitor?gate=${encodeURIComponent(loc.name)}`,
+                    tag: loc.tag
                 }))
                 setMonitorSubItems(items)
             }
@@ -80,12 +82,17 @@ export default function Sidebar() {
     
     loadLocations()
 
-    // 2. Listen for custom event 'cammana_locations_updated' (optional advanced sync)
-    // or just rely on page refresh. For better UX, we can poll or use a context. 
-    // For simplicity, let's poll every 2s or assumes user refreshes after config change.
-    // Let's add a simple interval for "live" updates without refresh.
-    const interval = setInterval(loadLocations, 2000)
-    return () => clearInterval(interval)
+    // 2. Listen for custom event 'cammana_locations_updated'
+    const handleSync = () => loadLocations()
+    window.addEventListener('cammana_locations_updated', handleSync)
+    
+    // 3. Fallback interval for other changes
+    const interval = setInterval(loadLocations, 5000)
+    
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('cammana_locations_updated', handleSync)
+    }
   }, [])
 
   const fullMenu: MenuItem[] = [
@@ -203,17 +210,36 @@ export default function Sidebar() {
                         </div>
                     )}
 
-                    {item.subItems.map(sub => (
-                      <Link 
-                        key={sub.href} 
-                        href={sub.href}
-                        className={`block px-3 py-2 rounded-md text-sm transition-colors whitespace-nowrap
-                          ${pathname + window.location.search === sub.href ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50'}
-                        `}
-                      >
-                        {sub.title}
-                      </Link>
-                    ))}
+                    {item.subItems.map(sub => {
+                      const currentFullHref = pathname + (searchParams.toString() ? '?' + searchParams.toString() : '');
+                      
+                      // More robust comparison using decodeURIComponent and URL objects if needed, 
+                      // but basic string match on currentFullHref vs sub.href is usually enough 
+                      // if construction is consistent.
+                      // Let's decode both for maximum reliability with special characters like (Vào)
+                      const isActive = decodeURIComponent(currentFullHref) === decodeURIComponent(sub.href);
+                        
+                      return (
+                        <Link 
+                          key={sub.href} 
+                          href={sub.href}
+                          className={`block px-3 py-2 rounded-md text-sm transition-colors
+                            ${isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50'}
+                          `}
+                        >
+                          <div className="flex items-center gap-2 w-full overflow-hidden">
+                            <span className="truncate flex-1" title={sub.title}>
+                              {sub.title}
+                            </span>
+                            {sub.tag && (
+                              <span className="shrink-0 px-2 h-5 flex items-center justify-center text-[9px] font-bold bg-[#f59e0b1a] text-[#f59e0b] border border-[#f59e0b33] rounded uppercase tracking-wider transition-all pt-[2px]">
+                                {sub.tag}
+                              </span>
+                            )}
+                          </div>
+                        </Link>
+                      );
+                    })}
                   </div>
                 )}
               </div>

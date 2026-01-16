@@ -15,22 +15,31 @@ import {
 import { toast } from "sonner";
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  "đang vào": { label: "Đang vào", color: "bg-blue-500/20 text-blue-400" },
+  // Primary flow statuses (Trạng thái)
+  "vào cổng": { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
   "đã vào": { label: "Đã vào", color: "bg-indigo-500/20 text-indigo-400" },
   "đang cân": { label: "Đang cân", color: "bg-yellow-500/20 text-yellow-400" },
-  "đang ra": { label: "Đang ra", color: "bg-orange-500/20 text-orange-400" },
+  "ra cổng": { label: "Ra cổng", color: "bg-orange-500/20 text-orange-400" },
   "đã ra": { label: "Đã ra", color: "bg-green-500/20 text-green-400" },
+  // Legacy/fallback statuses
+  "pending_verification": { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
+  "verified": { label: "Đã vào", color: "bg-indigo-500/20 text-indigo-400" },
+  "rejected": { label: "Từ chối", color: "bg-red-500/20 text-red-400" },
+  "stranger": { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
+  "matched": { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
 };
 
 const VERIFY_MAP: Record<string, { label: string; color: string }> = {
-  "đã xác nhận": {
-    label: "Đã xác nhận",
-    color: "bg-emerald-500/20 text-emerald-400",
-  },
-  "ngoài danh sách": {
-    label: "Ngoài DS",
-    color: "bg-rose-500/20 text-rose-400",
-  },
+  // Primary verify statuses (Xác minh)
+  "đã xác minh": { label: "Đã XM", color: "bg-emerald-500/20 text-emerald-400" },
+  "chưa xác minh": { label: "Chưa XM", color: "bg-amber-500/20 text-amber-400" },
+  "cần kt": { label: "Cần KT", color: "bg-orange-500/20 text-orange-400" },
+  "xe lạ": { label: "Xe lạ", color: "bg-rose-500/20 text-rose-400" },
+  "xe chưa đk": { label: "Xe chưa ĐK", color: "bg-red-500/20 text-red-400" },
+  // Legacy/fallback verify statuses
+  "❌ Chưa xác minh": { label: "Chưa XM", color: "bg-amber-500/20 text-amber-400" },
+  "✅ Đã xác minh": { label: "Đã XM", color: "bg-emerald-500/20 text-emerald-400" },
+  "❌ Từ chối": { label: "Xe chưa ĐK", color: "bg-red-500/20 text-red-400" },
 };
 
 export default function HistoryPage() {
@@ -106,20 +115,24 @@ export default function HistoryPage() {
     year: "numeric",
   });
 
-  // Extract unique gates and statuses from data
   const gates = [
     "All",
-    ...Array.from(new Set(data.map((d) => d.location).filter(Boolean))),
+    ...Array.from(new Set(data.map((d) => d.location?.trim() || "None"))),
   ];
-  const statuses = ["All", ...Object.keys(STATUS_MAP)];
+  const statuses = [
+    "All",
+    ...Array.from(new Set(data.map((d) => d.status?.trim() || "None"))),
+  ];
 
   const filteredData = data.filter((item) => {
     const matchesSearch = item.plate
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
-    const matchesGate = filterGate === "All" || item.location === filterGate;
+    const matchesGate =
+      filterGate === "All" || (item.location?.trim() || "None") === filterGate;
     const matchesStatus =
-      filterStatus === "All" || item.status === filterStatus;
+      filterStatus === "All" ||
+      (item.status?.trim() || "None") === filterStatus;
     return matchesSearch && matchesGate && matchesStatus;
   });
 
@@ -301,30 +314,26 @@ export default function HistoryPage() {
               Vị trí (Gate)
             </label>
             <div className="relative">
-              <select
-                className="appearance-none bg-background border border-border rounded-md pl-3 pr-10 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none min-w-[180px] cursor-pointer"
-                value={pendingFilterGate}
-                onChange={(e) => {
-                  setPendingFilterGate(e.target.value);
-                  setIsGateOpen(false);
-                }}
-                onFocus={() => setIsGateOpen(true)}
-                onBlur={() => setIsGateOpen(false)}
+              <button 
+                onClick={() => { setIsGateOpen(!isGateOpen); setIsStatusOpen(false); }}
+                className="w-full flex items-center justify-between min-w-[180px] px-3 py-1.5 bg-background border border-border rounded-md text-sm font-semibold focus:border-primary transition-all"
               >
-                {gates.map((g) => (
-                  <option key={g} value={g}>
-                    {g === "All" ? "Tất cả vị trí" : g}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none text-muted-foreground">
-                <ChevronLeft
-                  fontSize="small"
-                  className={`opacity-70 transition-transform duration-200 ${
-                    isGateOpen ? "-rotate-90" : ""
-                  }`}
-                />
-              </div>
+                <span>{pendingFilterGate === 'All' ? 'Tất cả vị trí' : pendingFilterGate}</span>
+                <ExpandMore className={`transition-transform duration-200 ${isGateOpen ? 'rotate-180' : ''}`} fontSize="small" />
+              </button>
+              {isGateOpen && (
+                <div className="absolute top-full left-0 w-full z-[100] mt-1 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                  {gates.map((g) => (
+                    <button 
+                      key={g}
+                      onClick={() => { setPendingFilterGate(g); setIsGateOpen(false); }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${pendingFilterGate === g ? 'text-primary bg-primary/5' : 'text-muted-foreground'}`}
+                    >
+                      {g === "All" ? "Tất cả vị trí" : g}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -334,30 +343,26 @@ export default function HistoryPage() {
               Trạng thái
             </label>
             <div className="relative">
-              <select
-                className="appearance-none bg-background border border-border rounded-md pl-3 pr-10 py-1.5 text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none min-w-[180px] cursor-pointer"
-                value={pendingFilterStatus}
-                onChange={(e) => {
-                  setPendingFilterStatus(e.target.value);
-                  setIsStatusOpen(false);
-                }}
-                onFocus={() => setIsStatusOpen(true)}
-                onBlur={() => setIsStatusOpen(false)}
+              <button 
+                onClick={() => { setIsStatusOpen(!isStatusOpen); setIsGateOpen(false); }}
+                className="w-full flex items-center justify-between min-w-[180px] px-3 py-1.5 bg-background border border-border rounded-md text-sm font-semibold focus:border-primary transition-all"
               >
-                {statuses.map((s) => (
-                  <option key={s} value={s}>
-                    {s === "All" ? "Tất cả trạng thái" : STATUS_MAP[s]?.label}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none text-muted-foreground">
-                <ChevronLeft
-                  fontSize="small"
-                  className={`opacity-70 transition-transform duration-200 ${
-                    isStatusOpen ? "-rotate-90" : ""
-                  }`}
-                />
-              </div>
+                <span>{pendingFilterStatus === 'All' ? 'Tất cả trạng thái' : (STATUS_MAP[pendingFilterStatus]?.label || pendingFilterStatus)}</span>
+                <ExpandMore className={`transition-transform duration-200 ${isStatusOpen ? 'rotate-180' : ''}`} fontSize="small" />
+              </button>
+              {isStatusOpen && (
+                <div className="absolute top-full left-0 w-full z-[100] mt-1 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                  {statuses.map((s) => (
+                    <button 
+                      key={s}
+                      onClick={() => { setPendingFilterStatus(s); setIsStatusOpen(false); }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${pendingFilterStatus === s ? 'text-primary bg-primary/5' : 'text-muted-foreground'}`}
+                    >
+                      {s === "All" ? "Tất cả trạng thái" : (STATUS_MAP[s]?.label || s)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

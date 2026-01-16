@@ -1,31 +1,10 @@
 """Shared models and camera state for API routers"""
-import uuid
-from typing import Optional, Union, Dict, Any
 from fastapi import HTTPException
-from pydantic import BaseModel
-
-# Request Models
-class CameraConnectRequest(BaseModel):
-    ip: str
-    port: int = 8899
-    user: str = "admin"
-    password: str = ""
-    name: str = "Camera"
-    tag: Optional[str] = None
-    detection_mode: str = "disabled"
-
-class PTZMoveRequest(BaseModel):
-    speed: float = 0.5
-
-class UpdateDetectionModeRequest(BaseModel):
-    detection_mode: str
-
-class UpdateCameraTagRequest(BaseModel):
-    tag: Optional[str]
-
-class ConfigItem(BaseModel):
-    id: Union[int, str]
-    name: str
+from backend.schemas import (
+    CameraConnectRequest, PTZMoveRequest,
+    UpdateDetectionModeRequest, UpdateCameraTagRequest,
+    Camera
+)
 
 # In-memory camera state (shared across routers)
 cameras = {}
