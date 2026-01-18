@@ -387,25 +387,28 @@ function MonitorPageContent() {
             toast.warning("Xe lạ - cần xác minh thủ công");
           }
 
-          // Auto-save to history with default status
-          const timeIn = new Date().toLocaleTimeString("vi-VN");
-          setCurrentTimeIn(timeIn);
+          // Use history data from backend response
+          const historyTimeIn = data.time_in;
+          const historyPlate = data.history_plate;
           
-          await fetch("/api/history", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              plate: result.plate_number || "Không nhận diện",
-              location: currentGate,
-              time_in: timeIn,
-              time_out: "---",
-              vol_std: result.registered_info?.standard_volume || "",
-              vol_measured: "",
-              status: "vào cổng",
-              verify: result.matched ? "chưa xác minh" : "xe lạ",
-              note: `Màu: ${result.color || "N/A"} | Bánh: ${result.wheel_count || 0}`,
-            }),
-          });
+          if (historyTimeIn) {
+            setCurrentTimeIn(historyTimeIn);
+            
+            // If backend saved with a different plate (e.g. PENDING or partial), 
+            // update our current detection to match so future updates work
+            if (historyPlate && historyPlate !== result.plate_number) {
+               // We only update the plate used for API calls, not necessarily the UI display if we want to keep showing what was detected
+               // But for consistency, let's trust the backend's saved record key
+               result.plate_number = historyPlate;
+               setCurrentDetection(prev => prev ? {...prev, plate_number: historyPlate} : result);
+            }
+          } else {
+             // Fallback if backend didn't return time_in (old backend version?)
+             const timeIn = new Date().toLocaleTimeString("vi-VN");
+             setCurrentTimeIn(timeIn);
+          }
+
+          addLog("💾 Đã lưu vào lịch sử", "info");
           addLog("💾 Đã lưu vào lịch sử", "info");
         } else {
           addLog(`✗ ${data.error || data.reason}`, "error");
@@ -993,7 +996,7 @@ function MonitorPageContent() {
 
       {/* Edit Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] pointer-events-auto">
           <div className="bg-card border border-border rounded-lg p-6 w-96 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-lg">Sửa thông tin xe</h3>
@@ -1087,7 +1090,7 @@ function MonitorPageContent() {
 
       {/* --- Evidence Modal --- */}
       {showEvidenceModal && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/80 z-[9999] pointer-events-auto flex items-center justify-center p-4">
           <div className="bg-card border border-border rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-border">

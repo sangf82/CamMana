@@ -11,7 +11,7 @@ DATA_DIR = Path(__file__).parent.parent.parent / "database" / "csv_data"
 LOGS_DIR = Path(__file__).parent.parent.parent / "database" / "logs"
 
 # Thread lock for file writes
-_write_lock = threading.Lock()
+_write_lock = threading.RLock()
 
 # CSV Headers - All data types
 CAMERA_HEADERS = ['id', 'name', 'ip', 'port', 'user', 'password', 'location', 'type', 'status', 'tag', 'username', 'brand', 'cam_id', 'location_id']

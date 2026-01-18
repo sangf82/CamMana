@@ -72,6 +72,9 @@ async def capture_and_process(request: CaptureAndProcessRequest):
     3. Processes check-in with AI APIs
     4. Returns detection results
     """
+    import time
+    start_total = time.time()
+    print(f"[API] capture-and-process request for {request.location_id}")
     import tempfile
     from datetime import datetime
     from backend.car_process.core.detection_service import get_detection_service
@@ -119,15 +122,15 @@ async def capture_and_process(request: CaptureAndProcessRequest):
         if side_frame is None:
             side_frame = front_frame
         
-        # Save frames to temp files
+        # Save frames to temp files in thread pool to avoid blocking event loop
         import cv2
         
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as front_temp:
-            cv2.imwrite(front_temp.name, front_frame)
+            await asyncio.to_thread(cv2.imwrite, front_temp.name, front_frame)
             front_path = Path(front_temp.name)
         
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as side_temp:
-            cv2.imwrite(side_temp.name, side_frame)
+            await asyncio.to_thread(cv2.imwrite, side_temp.name, side_frame)
             side_path = Path(side_temp.name)
         
         # Get date string
@@ -185,6 +188,9 @@ async def capture_and_process(request: CaptureAndProcessRequest):
                         if len(images) > 1 and not side_image_url:
                             side_image_url = f"/api/images/{folder.parent.name}/{folder.name}/{images[1].name}"
         
+        total_duration = time.time() - start_total
+        print(f"[API] capture-and-process completed in {total_duration:.2f}s")
+        
         return {
             "success": True,
             "uuid": result.uuid,
@@ -201,6 +207,9 @@ async def capture_and_process(request: CaptureAndProcessRequest):
             "confidence": result.plate_confidence,
             "front_image_url": front_image_url,
             "side_image_url": side_image_url,
+            "duration": total_duration,
+            "time_in": result.history_record.get("time_in") if result.history_record else None,
+            "history_plate": result.history_record.get("plate") if result.history_record else None
         }
         
     except Exception as e:

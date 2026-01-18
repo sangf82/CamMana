@@ -12,6 +12,7 @@ File naming convention:
 - Folder: uuid_location-id_date
 - Images: uuid_camtype-id_date.jpg
 """
+import asyncio
 import httpx
 import json
 import uuid
@@ -56,6 +57,9 @@ class CheckInResult:
     plate_raw: Dict = field(default_factory=dict)
     color_raw: Dict = field(default_factory=dict)
     wheel_raw: Dict = field(default_factory=dict)
+    
+    # Saved history record
+    history_record: Optional[Dict] = None
 
 
 class CheckInService:
@@ -283,15 +287,20 @@ class CheckInService:
         shutil.copy2(side_image_path, new_side_path)
         
         # Run all detections
-        print(f"[CheckIn] Processing {car_uuid}...")
-        print(f"[CheckIn] Detecting plate from: {front_image_path}")
-        plate_result = await self.detect_plate(front_image_path)
+        # Run detections in parallel to reduce processing time
+        print(f"[CheckIn] Processing {car_uuid} - Starting parallel detections...")
         
-        print(f"[CheckIn] Detecting color from: {side_image_path}")
-        color_result = await self.detect_color(side_image_path)
+        plate_task = self.detect_plate(front_image_path)
+        color_task = self.detect_color(side_image_path)
+        wheel_task = self.detect_wheels(side_image_path)
         
-        print(f"[CheckIn] Counting wheels from: {side_image_path}")
-        wheel_result = await self.detect_wheels(side_image_path)
+        start_time = datetime.now()
+        # Execute all tasks concurrently
+        results = await asyncio.gather(plate_task, color_task, wheel_task)
+        plate_result, color_result, wheel_result = results
+        
+        duration = (datetime.now() - start_time).total_seconds()
+        print(f"[CheckIn] Detections completed in {duration:.2f}s")
         
         # Parse results
         plate_number = None
@@ -366,7 +375,8 @@ class CheckInService:
             json.dump(status_data, f, indent=2, ensure_ascii=False)
         
         # Save to history with pending status
-        self._save_to_history(result)
+        history_record = self._save_to_history(result)
+        result.history_record = history_record
         
         print(f"[CheckIn] Completed: plate={plate_number}, color={color}, wheels={wheel_count}")
         return result
@@ -389,6 +399,7 @@ class CheckInService:
         }
         
         storage.save_history_record(history_record, result.date.replace("-", "_"))
+        return history_record
     
     async def verify_plate(
         self,
