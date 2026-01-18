@@ -7,15 +7,26 @@ Provides endpoints for:
 - Human verification of plates
 - Getting check-in status
 """
+import time
+import json
+import httpx
+import shutil
+import asyncio
+import tempfile
+import traceback
+import cv2
+from pathlib import Path
+from datetime import datetime
+from typing import Optional, List, Dict, Any
+
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
-from typing import Optional, List
 from pydantic import BaseModel
-from pathlib import Path
-import asyncio
-import json
 
 from backend.car_process.core.checkin_service import get_checkin_service, CheckInResult
+from backend.api._shared import cameras as active_cameras
+from backend.data_process import get_registered_cars
+
 
 checkin_router = APIRouter(prefix="/api/checkin", tags=["check-in"])
 
@@ -61,70 +72,68 @@ class CaptureAndProcessRequest(BaseModel):
     location_id: str
     location_name: Optional[str] = None
 
+class CaptureResponse(BaseModel):
+    success: bool
+    uuid: Optional[str] = None
+    folder_path: Optional[str] = None
+    plate: Optional[str] = None
+    plate_confidence: float = 0.0
+    color: Optional[str] = None
+    color_confidence: float = 0.0
+    wheel_count: int = 0
+    wheel_confidence: float = 0.0
+    status: Optional[str] = None
+    matched: bool = False
+    registered_info: Optional[Dict[str, Any]] = None
+    front_image_url: Optional[str] = None
+    side_image_url: Optional[str] = None
+    duration: float = 0.0
+    time_in: Optional[str] = None
+    history_plate: Optional[str] = None
+    error: Optional[str] = None
+    reason: Optional[str] = None
+    confidence: Optional[float] = None
 
-@checkin_router.post("/capture-and-process")
+
+
+@checkin_router.post("/capture-and-process", response_model=CaptureResponse)
 async def capture_and_process(request: CaptureAndProcessRequest):
     """
     Capture images from live cameras and process check-in
-    
-    1. Captures from front camera (plate detection)
-    2. Captures from side camera (color and wheel detection)
-    3. Processes check-in with AI APIs
-    4. Returns detection results
     """
-    import time
     start_total = time.time()
     print(f"[API] capture-and-process request for {request.location_id}")
-    import tempfile
-    from datetime import datetime
-    from backend.car_process.core.detection_service import get_detection_service
-    from backend.api._shared import cameras as active_cameras
     
     try:
-        detection_service = get_detection_service()
         checkin_service = get_checkin_service()
         
-        # Try to get streamer from detection service first, then fall back to cameras dict
-        front_streamer = detection_service._streamers.get(request.front_camera_id)
-        if not front_streamer:
-            # Try active cameras dict
-            cam_state = active_cameras.get(request.front_camera_id)
+        # Helper to get frame
+        def get_frame(cam_id):
+            if not cam_id: return None
+            # Get from active cameras
+            cam_state = active_cameras.get(cam_id)
             if cam_state:
-                front_streamer = cam_state.get("streamer")
-        
-        if not front_streamer:
-            return {
-                "success": False,
-                "error": f"Camera trước chưa kết nối: {request.front_camera_id}",
-                "reason": "front_camera_not_connected"
-            }
-        
-        front_frame = front_streamer.get_capture_frame()
+                streamer = cam_state.get("streamer")
+                if streamer:
+                    return streamer.get_capture_frame() if hasattr(streamer, 'get_capture_frame') else streamer.last_frame
+            return None
+
+        # Capture frames
+        front_frame = get_frame(request.front_camera_id)
         if front_frame is None:
-            return {
-                "success": False,
-                "error": "Không thể chụp từ camera trước",
-                "reason": "front_capture_failed"
-            }
+            return CaptureResponse(
+                success=False, 
+                error=f"Camera trước chưa kết nối hoặc không có hình ảnh: {request.front_camera_id}",
+                reason="front_capture_failed"
+            )
+
+        side_frame = get_frame(request.side_camera_id) if request.side_camera_id else None
         
-        # Capture from side camera (optional)
-        side_frame = None
-        if request.side_camera_id:
-            side_streamer = detection_service._streamers.get(request.side_camera_id)
-            if not side_streamer:
-                cam_state = active_cameras.get(request.side_camera_id)
-                if cam_state:
-                    side_streamer = cam_state.get("streamer")
-            if side_streamer:
-                side_frame = side_streamer.get_capture_frame()
-        
-        # If no side camera frame, use front frame for color/wheel too
+        # Fallback if side camera fails or not provided
         if side_frame is None:
             side_frame = front_frame
         
-        # Save frames to temp files in thread pool to avoid blocking event loop
-        import cv2
-        
+        # Save frames to temp files
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as front_temp:
             await asyncio.to_thread(cv2.imwrite, front_temp.name, front_frame)
             front_path = Path(front_temp.name)
@@ -133,10 +142,8 @@ async def capture_and_process(request: CaptureAndProcessRequest):
             await asyncio.to_thread(cv2.imwrite, side_temp.name, side_frame)
             side_path = Path(side_temp.name)
         
-        # Get date string
-        date_str = datetime.now().strftime("%d-%m-%Y")
-        
         # Process check-in
+        date_str = datetime.now().strftime("%d-%m-%Y")
         result = await checkin_service.process_checkin(
             front_image_path=front_path,
             side_image_path=side_path,
@@ -148,78 +155,82 @@ async def capture_and_process(request: CaptureAndProcessRequest):
         front_path.unlink(missing_ok=True)
         side_path.unlink(missing_ok=True)
         
-        # Check if plate matches registered cars
-        from backend.data_process import get_registered_cars
-        registered = get_registered_cars()
+        # Match with registered cars
+        from backend.data_process import find_registered_car
+        
         matched = False
         registered_info = None
         
         if result.plate_number:
-            for car in registered:
-                if car.plate_number.replace("-", "").replace(".", "").upper() == result.plate_number.replace("-", "").replace(".", "").upper():
-                    matched = True
-                    registered_info = {
-                        "owner": car.owner,
-                        "model": car.model,
-                        "color": car.color,
-                        "standard_volume": car.standard_volume,
-                    }
-                    break
+            car = find_registered_car(result.plate_number)
+            if car:
+                matched = True
+                registered_info = {
+                    "owner": car.owner,
+                    "model": car.model,
+                    "color": car.color,
+                    "standard_volume": car.standard_volume,
+                }
+
         
-        # Generate image URLs from folder path
+        # Generate Image URLs
         front_image_url = None
         side_image_url = None
         
         if result.folder_path:
             folder = Path(result.folder_path)
             if folder.exists():
-                for img_file in folder.glob("*.jpg"):
-                    img_name = img_file.name.lower()
-                    if "front" in img_name or "plate" in img_name:
-                        front_image_url = f"/api/images/{folder.parent.name}/{folder.name}/{img_file.name}"
-                    elif "side" in img_name or "color" in img_name or "wheel" in img_name:
-                        side_image_url = f"/api/images/{folder.parent.name}/{folder.name}/{img_file.name}"
+                images = list(folder.glob("*.jpg"))
+                parent_name = folder.parent.name
+                folder_name = folder.name
                 
-                # If no specific names, use the first and second images
-                if not front_image_url or not side_image_url:
-                    images = list(folder.glob("*.jpg"))
-                    if images:
-                        front_image_url = f"/api/images/{folder.parent.name}/{folder.name}/{images[0].name}"
-                        if len(images) > 1 and not side_image_url:
-                            side_image_url = f"/api/images/{folder.parent.name}/{folder.name}/{images[1].name}"
-        
+                for img in images:
+                    img_name = img.name.lower()
+                    url = f"/api/images/{parent_name}/{folder_name}/{img.name}"
+                    if "front" in img_name or "plate" in img_name:
+                        front_image_url = url
+                    elif "side" in img_name or "color" in img_name or "wheel" in img_name:
+                        side_image_url = url
+                
+                # Fallback
+                if not front_image_url and images:
+                    front_image_url = f"/api/images/{parent_name}/{folder_name}/{images[0].name}"
+                if not side_image_url and len(images) > 1:
+                    side_image_url = f"/api/images/{parent_name}/{folder_name}/{images[1].name}"
+
         total_duration = time.time() - start_total
         print(f"[API] capture-and-process completed in {total_duration:.2f}s")
         
-        return {
-            "success": True,
-            "uuid": result.uuid,
-            "folder_path": result.folder_path,
-            "plate": result.plate_number,
-            "plate_confidence": result.plate_confidence,
-            "color": result.color,
-            "color_confidence": result.color_confidence,
-            "wheel_count": result.wheel_count,
-            "wheel_confidence": result.wheel_confidence,
-            "status": result.status,
-            "matched": matched,
-            "registered_info": registered_info,
-            "confidence": result.plate_confidence,
-            "front_image_url": front_image_url,
-            "side_image_url": side_image_url,
-            "duration": total_duration,
-            "time_in": result.history_record.get("time_in") if result.history_record else None,
-            "history_plate": result.history_record.get("plate") if result.history_record else None
-        }
+        return CaptureResponse(
+            success=True,
+            uuid=result.uuid,
+            folder_path=result.folder_path,
+            plate=result.plate_number,
+            plate_confidence=result.plate_confidence,
+            color=result.color,
+            color_confidence=result.color_confidence,
+            wheel_count=result.wheel_count,
+            wheel_confidence=result.wheel_confidence,
+            status=result.status,
+            matched=matched,
+            registered_info=registered_info,
+            confidence=result.plate_confidence,
+            front_image_url=front_image_url,
+            side_image_url=side_image_url,
+            duration=total_duration,
+            time_in=result.history_record.get("time_in") if result.history_record else None,
+            history_plate=result.history_record.get("plate") if result.history_record else None
+        )
         
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return {
-            "success": False,
-            "error": str(e),
-            "reason": "processing_error"
-        }
+        return CaptureResponse(
+            success=False,
+            error=str(e),
+            reason="processing_error"
+        )
+
 
 
 @checkin_router.post("/process")

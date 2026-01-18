@@ -143,7 +143,13 @@ async def connect_camera(request: CameraConnectRequest):
         else:
             camera_id = str(uuid.uuid4())
         
-        cameras[camera_id] = {"manager": manager, "streamer": streamer, "config": config, "detection_mode": request.detection_mode}
+        cameras[camera_id] = {
+            "manager": manager,
+            "streamer": streamer,
+            "config": config,
+            "detection_mode": request.detection_mode,
+            "tag": request.tag
+        }
         
         detection_service = get_detection_service()
         detection_service.register_camera(camera_id, streamer, request.tag)

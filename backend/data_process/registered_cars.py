@@ -57,7 +57,33 @@ def get_registered_cars(date: Optional[str] = None) -> List[RegisteredCar]:
     return [RegisteredCar(**item) for item in data]
 
 
+
+def find_registered_car(plate_number: str, date: Optional[str] = None) -> Optional[RegisteredCar]:
+    """Find a registered car by plate number (fuzzy match ignoring non-alphanumeric)"""
+    if not plate_number:
+        return None
+        
+    # Normalize query: uppercase, remove non-alphanumeric
+    query = "".join(c for c in plate_number if c.isalnum()).upper()
+    if not query:
+        return None
+
+    # Get all cars (optimization: could be cached)
+    cars = get_registered_cars(date)
+    
+    for car in cars:
+        if not car.plate_number:
+            continue
+        # Normalize stored plate
+        stored = "".join(c for c in car.plate_number if c.isalnum()).upper()
+        if stored == query:
+            return car
+            
+    return None
+
+
 def save_registered_cars(cars: List[RegisteredCar], date: Optional[str] = None):
+
     """Save registered cars, ensuring every item has a unique ID"""
     seen_ids = set()
     cleaned_data = []

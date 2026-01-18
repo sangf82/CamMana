@@ -1,0 +1,24 @@
+# Refactor Project: CamMana
+
+- [x] Phase 1: Security & Configuration (Sanitation) <!-- id: 0 -->
+    - [x] Audit codebase for hardcoded secrets, URLs, and magic strings <!-- id: 1 -->
+    - [x] Audit frontend for unused files and empty directories <!-- id: 9 -->
+    - [x] Create detailed implementation plan for config refactoring & cleanup <!-- id: 2 -->
+    - [x] Extract hardcoded values to .env and config files <!-- id: 3 -->
+    - [x] Remove empty frontend directories (`hooks`, types, `contexts`, `services`, `components/common`) <!-- id: 10 -->
+    - [x] Remove unused/dead code in `app/api` or `app/(auth)` <!-- id: 11 -->
+    - [x] Create/Update .env.example <!-- id: 4 -->
+    - [x] Verify changes <!-- id: 5 -->
+- [x] Phase 2: Architecture & Structure (Organization) <!-- id: 6 -->
+    - [x] Analyze codebase for complexity (File sizes > 200 lines) <!-- id: 14 -->
+    - [x] Split monitor/page.tsx into atomic components <!-- id: 15 -->
+    - [x] Split vehicles/page.tsx into atomic components <!-- id: 17 -->
+    - [x] Plan Python refactoring for `car_process` <!-- id: 16 -->
+    - [x] Restructure frontend folders (Atomic Design / Feature-based) <!-- id: 12 -->
+    - [x] Refactor Python scripts into Classes (CheckInService, DetectionClient, StorageManager) <!-- id: 13 -->
+- [x] Phase 3: Code Logic & Hygiene (Optimization) <!-- id: 7 -->
+    - [x] Unify Camera Streamer Management (Fix state duplication) <!-- id: 20 -->
+    - [x] Remove unused API endpoints (`pipeline.py`, `detection.py`) <!-- id: 21 -->
+    - [x] Optimize `DetectionService` (Separate concerns) <!-- id: 22 -->
+    - [x] Standardize dependencies (Remove unused imports) <!-- id: 23 -->
+- [ ] Phase 4: Regression Testing (Verification) <!-- id: 8 -->

@@ -4,13 +4,14 @@ import datetime
 from typing import Optional
 from dataclasses import dataclass
 from onvif import ONVIFCamera
+from backend import config
 
 @dataclass
 class CameraConfig:
     ip: str = "192.168.5.159"
     port: int = 8899
-    user: str = "admin"
-    password: str = ""
+    user: str = config.CAMERA_DEFAULT_USER
+    password: str = config.CAMERA_DEFAULT_PASSWORD
     name: str = "Camera"
     tag: Optional[str] = None
 

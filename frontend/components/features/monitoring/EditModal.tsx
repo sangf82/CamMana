@@ -1,0 +1,125 @@
+import React from "react";
+import { Close } from "@mui/icons-material";
+
+interface EditModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: () => void;
+  editPlate: string;
+  setEditPlate: (value: string) => void;
+  editStatus: string;
+  setEditStatus: (value: string) => void;
+  editVerify: string;
+  setEditVerify: (value: string) => void;
+  editNote: string;
+  setEditNote: (value: string) => void;
+}
+
+export default function EditModal({
+  isOpen,
+  onClose,
+  onSave,
+  editPlate,
+  setEditPlate,
+  editStatus,
+  setEditStatus,
+  editVerify,
+  setEditVerify,
+  editNote,
+  setEditNote,
+}: EditModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] pointer-events-auto">
+      <div className="bg-card border border-border rounded-lg p-6 w-96 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-lg">Sửa thông tin xe</h3>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <Close />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs text-muted-foreground uppercase tracking-wider">
+              Biển số
+            </label>
+            <input
+              type="text"
+              value={editPlate}
+              onChange={(e) => setEditPlate(e.target.value.toUpperCase())}
+              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="Nhập biển số..."
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground uppercase tracking-wider">
+              Trạng thái
+            </label>
+            <select
+              value={editStatus}
+              onChange={(e) => setEditStatus(e.target.value)}
+              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="vào cổng">Vào cổng</option>
+              <option value="đã vào">Đã vào</option>
+              <option value="đang cân">Đang cân</option>
+              <option value="ra cổng">Ra cổng</option>
+              <option value="đã ra">Đã ra</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground uppercase tracking-wider">
+              Xác minh
+            </label>
+            <select
+              value={editVerify}
+              onChange={(e) => setEditVerify(e.target.value)}
+              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="đã xác minh">Đã xác minh</option>
+              <option value="chưa xác minh">Chưa xác minh</option>
+              <option value="cần kt">Cần KT</option>
+              <option value="xe lạ">Xe lạ</option>
+              <option value="xe chưa đk">Xe chưa ĐK</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs text-muted-foreground uppercase tracking-wider">
+              Ghi chú
+            </label>
+            <input
+              type="text"
+              value={editNote}
+              onChange={(e) => setEditNote(e.target.value)}
+              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+              placeholder="Nhập ghi chú..."
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-4">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2 bg-muted text-muted-foreground rounded-md font-medium"
+          >
+            Hủy
+          </button>
+          <button
+            onClick={onSave}
+            className="flex-1 py-2 bg-primary text-primary-foreground rounded-md font-bold"
+          >
+            Lưu
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -9,7 +9,6 @@ from backend.api.config import config_router
 from backend.api.detection import detection_router
 from backend.api.history import history_router
 from backend.api.schedule import schedule_router
-from backend.api.pipeline import pipeline_router
 from backend.api.checkin import checkin_router
 
 __all__ = [
@@ -18,6 +17,5 @@ __all__ = [
     'detection_router',
     'history_router',
     'schedule_router',
-    'pipeline_router',
     'checkin_router'
 ]

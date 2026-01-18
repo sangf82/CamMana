@@ -14,7 +14,7 @@ load_dotenv()
 # Import from new modular API structure
 from backend.api import (
     camera_router, config_router, schedule_router, 
-    detection_router, history_router, pipeline_router, checkin_router
+    detection_router, history_router, checkin_router
 )
 
 BACKEND_DIR = Path(__file__).parent
@@ -40,10 +40,12 @@ def get_static_dir():
     return static_path if static_path.exists() else None
 
 
+from backend import config
+
 def create_app() -> FastAPI:
     # Removed: db.init_db() - Now using CSV-only storage
     
-    app = FastAPI(title="cam_mana", description="ONVIF Camera Control & Streaming API", version="2.0.0")
+    app = FastAPI(title=config.API_TITLE, description=config.API_DESCRIPTION, version=config.API_VERSION)
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
     
     app.include_router(camera_router)
@@ -51,7 +53,6 @@ def create_app() -> FastAPI:
     app.include_router(schedule_router)
     app.include_router(detection_router)
     app.include_router(history_router)
-    app.include_router(pipeline_router)
     app.include_router(checkin_router)
     
     # Serve captured car images from car_history folder
@@ -86,7 +87,7 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8000):
+def run_server(host: str = config.HOST, port: int = config.PORT):
     import signal
     from backend import data_process
     
@@ -109,7 +110,7 @@ def run_server(host: str = "127.0.0.1", port: int = 8000):
         print(f"[cam_mana] Warning: Failed to initialize daily files: {e}")
     
     try:
-        print("[cam_mana] Starting backend...")
+        print(f"[cam_mana] Starting backend on {host}:{port}...")
         uvicorn.run(app, host=host, port=port, log_level="info")
     except SystemExit:
         pass

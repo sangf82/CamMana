@@ -27,15 +27,16 @@ def get_base_path():
 def start_backend_server():
     """Start FastAPI server in background thread"""
     from backend.server import app
+    from backend import config
     import uvicorn
     
-    config = uvicorn.Config(
+    config_uvicorn = uvicorn.Config(
         app=app,
-        host="127.0.0.1",
-        port=8000,
+        host=config.HOST,
+        port=config.PORT,
         log_level="warning"
     )
-    server = uvicorn.Server(config)
+    server = uvicorn.Server(config_uvicorn)
     server.run()
 
 
@@ -73,7 +74,8 @@ def main():
     
     if static_dir.exists():
         # Production mode - serve from FastAPI
-        frontend_url = "http://127.0.0.1:8000"
+        from backend import config
+        frontend_url = f"http://{config.HOST}:{config.PORT}"
         print(f"Running in production mode")
     else:
         # Development mode - use Next.js dev server

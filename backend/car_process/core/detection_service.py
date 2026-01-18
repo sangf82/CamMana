@@ -45,46 +45,64 @@ class DetectionService:
         # Use new CarDetectionFunction
         self.detector = CarDetectionFunction(confidence=0.3, detect_trucks=True)
         self.states: Dict[str, DetectionState] = {}
-        self._streamers: Dict[str, Any] = {}
-        self._camera_tags: Dict[str, str] = {}
         CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
     
+    def _get_camera_info(self, camera_id: str) -> Optional[Dict[str, Any]]:
+        from backend.api._shared import cameras
+        return cameras.get(camera_id)
+
     def register_camera(self, camera_id: str, streamer: Any, tag: Optional[str] = None):
-        self._streamers[camera_id] = streamer
-        if tag: self._camera_tags[camera_id] = tag
-        if camera_id not in self.states: self.states[camera_id] = DetectionState()
+        # Deprecated: state is managed in backend.api._shared
+        if camera_id not in self.states: 
+            self.states[camera_id] = DetectionState()
     
     def unregister_camera(self, camera_id: str):
         self.stop_auto_detection(camera_id)
-        self._streamers.pop(camera_id, None)
-        self._camera_tags.pop(camera_id, None)
         self.states.pop(camera_id, None)
     
     def set_camera_tag(self, camera_id: str, tag: str):
-        if tag not in ('front_cam', 'side_cam', None):
-            raise ValueError(f"Invalid tag: {tag}")
-        self._camera_tags[camera_id] = tag
+        # Tags are now stored in shared state
+        cam = self._get_camera_info(camera_id)
+        if cam:
+            cam['tag'] = tag
     
     def get_paired_camera(self, camera_id: str) -> Optional[str]:
-        current_tag = self._camera_tags.get(camera_id)
-        if not current_tag: return None
+        # Logic to find the paired camera (front <-> side)
+        from backend.api._shared import cameras
+        
+        current_cam = cameras.get(camera_id)
+        if not current_cam: return None
+        
+        current_tag = current_cam.get('tag')
         target_tag = 'side_cam' if current_tag == 'front_cam' else 'front_cam'
-        for cid, tag in self._camera_tags.items():
-            if tag == target_tag and cid != camera_id: return cid
+        
+        for cid, cam in cameras.items():
+            if cid != camera_id and cam.get('tag') == target_tag:
+                # Basic pairing: If multiple pairs exist, might need location logic
+                # For now, assume simple setup or same location
+                current_loc = current_cam.get('config', {}).location
+                other_loc = cam.get('config', {}).location
+                if current_loc == other_loc:
+                    return cid
         return None
     
     def detect(self, camera_id: str) -> Dict[str, Any]:
-        # Only allow detection on front_cam tagged cameras
-        camera_tag = self._camera_tags.get(camera_id)
-        if camera_tag != 'front_cam':
-            return {"success": False, "error": "Detection only works on front_cam tagged cameras"}
+        cam_info = self._get_camera_info(camera_id)
+        if not cam_info:
+            return {"success": False, "error": "Camera not found"}
         
-        streamer = self._streamers.get(camera_id)
+        # Only allow detection on front_cam tagged cameras
+        if cam_info.get('tag') != 'front_cam':
+             return {"success": False, "error": "Detection only works on front_cam tagged cameras"}
+        
+        streamer = cam_info.get('streamer')
         if not streamer or not streamer.is_streaming:
             return {"success": False, "error": "Camera not streaming"}
+            
         frame = streamer.last_frame
         if frame is None:
             return {"success": False, "error": "No frame available"}
+            
         try:
             result = self.detector.detect(frame)
             h, w = frame.shape[:2]
@@ -95,16 +113,19 @@ class DetectionService:
             return {"success": False, "error": str(e)}
     
     def capture_with_detection(self, front_cam_id: str, force: bool = False) -> Dict[str, Any]:
+        cam_info = self._get_camera_info(front_cam_id)
+        if not cam_info:
+             return {"success": False, "error": "Camera not found"}
+             
         # Only allow detection on front_cam tagged cameras
-        camera_tag = self._camera_tags.get(front_cam_id)
-        if camera_tag != 'front_cam':
+        if cam_info.get('tag') != 'front_cam':
             return {"success": False, "error": "Detection only works on front_cam tagged cameras"}
         
-        streamer = self._streamers.get(front_cam_id)
+        streamer = cam_info.get('streamer')
         if not streamer or not streamer.is_streaming:
             return {"success": False, "error": "Camera not streaming"}
         
-        # Use high-resolution frame for capture (better for plate reading)
+        # Use high-resolution frame for capture
         frame = streamer.get_capture_frame() if hasattr(streamer, 'get_capture_frame') else streamer.last_frame
         if frame is None:
             frame = streamer.last_frame
@@ -148,15 +169,16 @@ class DetectionService:
             front_path = capture_folder / "front.jpg"
             cv2.imwrite(str(front_path), enhanced_front)
             
-            # Prepare side camera frame (high-res for better analysis)
+            # Prepare side camera frame
             side_cam_id = self.get_paired_camera(front_cam_id)
             side_frame = None
             side_path = None
             
             if side_cam_id:
-                side_streamer = self._streamers.get(side_cam_id)
+                side_info = self._get_camera_info(side_cam_id)
+                side_streamer = side_info.get('streamer') if side_info else None
+                
                 if side_streamer and side_streamer.is_streaming:
-                    # Use high-res capture if available
                     side_frame = side_streamer.get_capture_frame() if hasattr(side_streamer, 'get_capture_frame') else side_streamer.last_frame
                     if side_frame is None:
                         side_frame = side_streamer.last_frame
@@ -166,7 +188,7 @@ class DetectionService:
                         side_path = capture_folder / "side.jpg"
                         cv2.imwrite(str(side_path), enhanced_side)
             
-            # Run detections in PARALLEL - plate from front, color/wheels from side
+            # Run detections in PARALLEL
             plate_result = {"success": False, "plates": []}
             color_result = {"success": False, "primary_color": None}
             wheel_result = {"success": False, "wheel_count": None}
@@ -182,12 +204,10 @@ class DetectionService:
                     }
                 return {"color": {"success": False, "primary_color": None}, "wheel": {"success": False, "wheel_count": None}}
             
-            # Execute both detections in parallel
             with ThreadPoolExecutor(max_workers=2) as executor:
                 plate_future = executor.submit(detect_plate_task)
                 side_future = executor.submit(detect_side_task)
                 
-                # Get results (non-blocking, runs in parallel)
                 try:
                     plate_result = plate_future.result(timeout=10)
                 except Exception as e:
@@ -268,8 +288,12 @@ class DetectionService:
         return state.is_auto_running if state else False
     
     def start_video_recording(self, camera_id: str, output_path: Path):
-        streamer = self._streamers.get(camera_id)
+        cam_info = self._get_camera_info(camera_id)
+        if not cam_info: return False
+        
+        streamer = cam_info.get('streamer')
         if not streamer or not streamer.is_streaming: return False
+        
         state = self.states.get(camera_id, DetectionState())
         frame = streamer.last_frame
         if frame is None: return False
@@ -318,3 +342,4 @@ def get_detection_service() -> DetectionService:
     return _detection_service
 
 __all__ = ['DetectionService', 'get_detection_service', 'DetectionState']
+

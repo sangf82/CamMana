@@ -13,10 +13,11 @@ from backend.data_process.cameras import (
 # Registered Cars
 from backend.data_process.registered_cars import (
     get_registered_cars, save_registered_cars, import_registered_cars,
-    get_available_registered_cars_dates,
+    get_available_registered_cars_dates, find_registered_car,
     cleanup_expired_files as cleanup_registered_cars_files,
     initialize_today_file as initialize_registered_cars_today
 )
+
 
 # History
 from backend.data_process.history import (
@@ -49,7 +50,7 @@ __all__ = [
     
    # Registered Cars
     'get_registered_cars', 'save_registered_cars', 'import_registered_cars',
-    'get_available_registered_cars_dates',
+    'get_available_registered_cars_dates', 'find_registered_car',
     'cleanup_registered_cars_files', 'initialize_registered_cars_today',
     
     # History

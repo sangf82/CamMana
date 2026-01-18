@@ -6,9 +6,11 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
+from backend import config
+
 # Storage paths - Updated structure
-DATA_DIR = Path(__file__).parent.parent.parent / "database" / "csv_data"
-LOGS_DIR = Path(__file__).parent.parent.parent / "database" / "logs"
+DATA_DIR = config.DATA_DIR
+LOGS_DIR = config.LOGS_DIR
 
 # Thread lock for file writes
 _write_lock = threading.RLock()
