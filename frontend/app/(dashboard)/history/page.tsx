@@ -22,23 +22,38 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   "ra cổng": { label: "Ra cổng", color: "bg-orange-500/20 text-orange-400" },
   "đã ra": { label: "Đã ra", color: "bg-green-500/20 text-green-400" },
   // Legacy/fallback statuses
-  "pending_verification": { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
-  "verified": { label: "Đã vào", color: "bg-indigo-500/20 text-indigo-400" },
-  "rejected": { label: "Từ chối", color: "bg-red-500/20 text-red-400" },
-  "stranger": { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
-  "matched": { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
+  pending_verification: {
+    label: "Vào cổng",
+    color: "bg-blue-500/20 text-blue-400",
+  },
+  verified: { label: "Đã vào", color: "bg-indigo-500/20 text-indigo-400" },
+  rejected: { label: "Từ chối", color: "bg-red-500/20 text-red-400" },
+  stranger: { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
+  matched: { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
 };
 
 const VERIFY_MAP: Record<string, { label: string; color: string }> = {
   // Primary verify statuses (Xác minh)
-  "đã xác minh": { label: "Đã XM", color: "bg-emerald-500/20 text-emerald-400" },
-  "chưa xác minh": { label: "Chưa XM", color: "bg-amber-500/20 text-amber-400" },
+  "đã xác minh": {
+    label: "Đã XM",
+    color: "bg-emerald-500/20 text-emerald-400",
+  },
+  "chưa xác minh": {
+    label: "Chưa XM",
+    color: "bg-amber-500/20 text-amber-400",
+  },
   "cần kt": { label: "Cần KT", color: "bg-orange-500/20 text-orange-400" },
   "xe lạ": { label: "Xe lạ", color: "bg-rose-500/20 text-rose-400" },
   "xe chưa đk": { label: "Xe chưa ĐK", color: "bg-red-500/20 text-red-400" },
   // Legacy/fallback verify statuses
-  "❌ Chưa xác minh": { label: "Chưa XM", color: "bg-amber-500/20 text-amber-400" },
-  "✅ Đã xác minh": { label: "Đã XM", color: "bg-emerald-500/20 text-emerald-400" },
+  "❌ Chưa xác minh": {
+    label: "Chưa XM",
+    color: "bg-amber-500/20 text-amber-400",
+  },
+  "✅ Đã xác minh": {
+    label: "Đã XM",
+    color: "bg-emerald-500/20 text-emerald-400",
+  },
   "❌ Từ chối": { label: "Xe chưa ĐK", color: "bg-red-500/20 text-red-400" },
 };
 
@@ -62,13 +77,19 @@ export default function HistoryPage() {
     const fetchHistory = async () => {
       try {
         setLoading(true);
-        const response = await fetch("http://localhost:8000/api/history");
+        const response = await fetch("/api/history");
         const result = await response.json();
 
-        if (result.success && result.data) {
+        // Backend returns List[HistoryRecord] directly
+        if (Array.isArray(result)) {
+          setData(result);
+        } else if (result.success && result.data) {
+          // Support legacy wrapper if it exists
           setData(result.data);
         } else {
-          toast.error("Không thể tải dữ liệu lịch sử");
+          console.error("Unexpected history data format:", result);
+          toast.error("Format dữ liệu không hợp lệ");
+          setData([]);
         }
       } catch (error) {
         console.error("Error fetching history:", error);
@@ -234,7 +255,7 @@ export default function HistoryPage() {
     link.setAttribute("href", url);
     link.setAttribute(
       "download",
-      `Lich_su_ra_vao_${today.replace(/\//g, "-")}.csv`
+      `Lich_su_ra_vao_${today.replace(/\//g, "-")}.csv`,
     );
     link.style.visibility = "hidden";
     document.body.appendChild(link);
@@ -314,20 +335,33 @@ export default function HistoryPage() {
               Vị trí (Gate)
             </label>
             <div className="relative">
-              <button 
-                onClick={() => { setIsGateOpen(!isGateOpen); setIsStatusOpen(false); }}
+              <button
+                onClick={() => {
+                  setIsGateOpen(!isGateOpen);
+                  setIsStatusOpen(false);
+                }}
                 className="w-full flex items-center justify-between min-w-[180px] px-3 py-1.5 bg-background border border-border rounded-md text-sm font-semibold focus:border-primary transition-all"
               >
-                <span>{pendingFilterGate === 'All' ? 'Tất cả vị trí' : pendingFilterGate}</span>
-                <ExpandMore className={`transition-transform duration-200 ${isGateOpen ? 'rotate-180' : ''}`} fontSize="small" />
+                <span>
+                  {pendingFilterGate === "All"
+                    ? "Tất cả vị trí"
+                    : pendingFilterGate}
+                </span>
+                <ExpandMore
+                  className={`transition-transform duration-200 ${isGateOpen ? "rotate-180" : ""}`}
+                  fontSize="small"
+                />
               </button>
               {isGateOpen && (
                 <div className="absolute top-full left-0 w-full z-[100] mt-1 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                   {gates.map((g) => (
-                    <button 
+                    <button
                       key={g}
-                      onClick={() => { setPendingFilterGate(g); setIsGateOpen(false); }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${pendingFilterGate === g ? 'text-primary bg-primary/5' : 'text-muted-foreground'}`}
+                      onClick={() => {
+                        setPendingFilterGate(g);
+                        setIsGateOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${pendingFilterGate === g ? "text-primary bg-primary/5" : "text-muted-foreground"}`}
                     >
                       {g === "All" ? "Tất cả vị trí" : g}
                     </button>
@@ -343,22 +377,38 @@ export default function HistoryPage() {
               Trạng thái
             </label>
             <div className="relative">
-              <button 
-                onClick={() => { setIsStatusOpen(!isStatusOpen); setIsGateOpen(false); }}
+              <button
+                onClick={() => {
+                  setIsStatusOpen(!isStatusOpen);
+                  setIsGateOpen(false);
+                }}
                 className="w-full flex items-center justify-between min-w-[180px] px-3 py-1.5 bg-background border border-border rounded-md text-sm font-semibold focus:border-primary transition-all"
               >
-                <span>{pendingFilterStatus === 'All' ? 'Tất cả trạng thái' : (STATUS_MAP[pendingFilterStatus]?.label || pendingFilterStatus)}</span>
-                <ExpandMore className={`transition-transform duration-200 ${isStatusOpen ? 'rotate-180' : ''}`} fontSize="small" />
+                <span>
+                  {pendingFilterStatus === "All"
+                    ? "Tất cả trạng thái"
+                    : STATUS_MAP[pendingFilterStatus]?.label ||
+                      pendingFilterStatus}
+                </span>
+                <ExpandMore
+                  className={`transition-transform duration-200 ${isStatusOpen ? "rotate-180" : ""}`}
+                  fontSize="small"
+                />
               </button>
               {isStatusOpen && (
                 <div className="absolute top-full left-0 w-full z-[100] mt-1 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                   {statuses.map((s) => (
-                    <button 
+                    <button
                       key={s}
-                      onClick={() => { setPendingFilterStatus(s); setIsStatusOpen(false); }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${pendingFilterStatus === s ? 'text-primary bg-primary/5' : 'text-muted-foreground'}`}
+                      onClick={() => {
+                        setPendingFilterStatus(s);
+                        setIsStatusOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${pendingFilterStatus === s ? "text-primary bg-primary/5" : "text-muted-foreground"}`}
                     >
-                      {s === "All" ? "Tất cả trạng thái" : (STATUS_MAP[s]?.label || s)}
+                      {s === "All"
+                        ? "Tất cả trạng thái"
+                        : STATUS_MAP[s]?.label || s}
                     </button>
                   ))}
                 </div>
@@ -420,7 +470,10 @@ export default function HistoryPage() {
             <tbody className="divide-y divide-border">
               {loading ? (
                 <tr>
-                  <td colSpan={columns.length} className="px-4 py-12 text-center text-muted-foreground font-medium">
+                  <td
+                    colSpan={columns.length}
+                    className="px-4 py-12 text-center text-muted-foreground font-medium"
+                  >
                     <div className="flex flex-col items-center gap-2">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                       <span>Đang tải dữ liệu...</span>

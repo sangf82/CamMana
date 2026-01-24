@@ -13,9 +13,14 @@ load_dotenv()
 
 # Import from new modular API structure
 from backend.api import (
-    camera_router, config_router, schedule_router, 
-    detection_router, history_router, checkin_router
+    config_router, schedule_router,
+    checkin_router, checkout_router
 )
+from backend.data_process.history.api import router as history_router
+from backend.data_process.register_car.api import router as registered_car_router
+from backend.data_process.location.api import router as location_router
+from backend.data_process.camera_type.api import router as camera_type_router
+from backend.camera.api import router as camera_router
 
 BACKEND_DIR = Path(__file__).parent
 
@@ -51,9 +56,12 @@ def create_app() -> FastAPI:
     app.include_router(camera_router)
     app.include_router(config_router)
     app.include_router(schedule_router)
-    app.include_router(detection_router)
     app.include_router(history_router)
     app.include_router(checkin_router)
+    app.include_router(checkout_router)
+    app.include_router(registered_car_router)
+    app.include_router(location_router)
+    app.include_router(camera_type_router)
     
     # Serve captured car images from car_history folder
     @app.get("/api/images/{date_folder}/{car_folder}/{filename}")
@@ -102,15 +110,13 @@ def run_server(host: str = config.HOST, port: int = config.PORT):
     
     # Initialize today's CSV files (auto-migration and cleanup)
     try:
-        if data_process.initialize_registered_cars_today():
-            print("[cam_mana] Created today's registered cars file")
-        if data_process.initialize_history_today():
-            print("[cam_mana] Created today's history file")
-            
-        # Cleanup expired car history folders
-        deleted = data_process.cleanup_expired_car_history_folders()
-        if deleted > 0:
-            print(f"[cam_mana] Cleaned up {deleted} expired car history folders")
+        # Registered Cars initialization is now handled by RegisteredCarLogic on import
+        # if data_process.initialize_registered_cars_today():
+        #     print("[cam_mana] Created today's registered cars file")
+        # History initialization & cleanup handled by HistoryLogic instantiation
+        from backend.data_process.history.logic import HistoryLogic
+        HistoryLogic()
+        print("[cam_mana] History logic initialized (daily rotation & cleanup)")
     except Exception as e:
         print(f"[cam_mana] Warning: Failed to initialize daily files: {e}")
     

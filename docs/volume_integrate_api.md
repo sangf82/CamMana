@@ -1,6 +1,40 @@
 # Cargo Volume Estimation API Documentation
 
+## Overview & Logic Flow
+
+This API estimates cargo volume using two camera views:
+
+- **Side view**: Used to extract the height profile of the cargo along its length.
+- **Top-down view**: Used to extract the width profile of the cargo along the same length.
+
+**Processing pipeline:**
+1. **Upload images and calibration files:**
+  - `image`: Side view image of the cargo.
+  - `img_bg`: Top-down background image (no cargo/truck).
+  - `img_fg`: Top-down foreground image (with cargo/truck).
+  - `calib_side`: Calibration file for the side view camera (JSON).
+  - `calib_topdown`: Calibration file for the top-down camera (JSON).
+2. **Height profile extraction:**
+  - The side view image and its calibration are used to detect the cargo region and extract a height profile $h(x)$ (height at each position along the cargo length).
+3. **Width profile extraction:**
+  - The top-down images (background and foreground) and their calibration are used to extract a width profile $w(x)$ (width at each position along the cargo length).
+4. **Volume integration:**
+  - The API computes the volume by integrating $h(x) \times w(x)$ along the cargo length using numerical methods.
+
+**Calibration files:**
+- Each camera (side and top-down) must have its own calibration file (`calib_side.json`, `calib_topdown.json`).
+- Calibration files must be in the following format:
+  - `K`: 3x3 intrinsic matrix
+  - `dist`: Distortion coefficients
+  - `rvec`: Rotation vector (extrinsic)
+  - `tvec`: Translation vector (extrinsic)
+  - `floor_z`: Z coordinate of the ground plane (usually 0.0)
+- Example provided below.
+
+**Note:** Calibration must be accurate and correspond to the correct camera and physical setup. Do not swap or reuse calibration files between different cameras/views.
+
 This API provides endpoints for estimating cargo volume from images using computer vision pipelines. It is designed for deployment on Modal or any FastAPI-compatible server.
+
 
 ## Endpoints
 

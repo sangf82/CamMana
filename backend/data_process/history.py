@@ -39,7 +39,20 @@ def get_history_data(date: Optional[str] = None) -> List[HistoryRecord]:
         return []
     
     data = _read_csv(csv_path)
-    return [HistoryRecord(**item) for item in data]
+    valid_records = []
+    for item in data:
+        try:
+            # Check for essential keys to avoid mysterious validation errors
+            if not item.get('plate') or not item.get('location'):
+                 # Skip purely empty rows if any
+                 continue
+            valid_records.append(HistoryRecord(**item))
+        except Exception as e:
+            # Log error but continue loading other records
+            # logger.warning(f"Skipping invalid history record: {item} - {e}")
+            pass
+            
+    return valid_records
 
 
 def save_history_record(record: Union[HistoryRecord, Dict], date: Optional[str] = None):

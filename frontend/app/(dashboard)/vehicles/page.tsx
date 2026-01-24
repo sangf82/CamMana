@@ -35,21 +35,21 @@ export default function VehiclesPage() {
   // --- 1. Load Data from API ---
   const fetchInitialData = async () => {
       try {
-          const res = await fetch('/api/cameras/registered_cars')
+          const res = await fetch('/api/registered_cars')
           if (res.ok) {
               const rawData = await res.json()
               // Map Backend -> Frontend
                 const mappedData = rawData.map((item: any) => ({
-                    id: item.id || Math.random(), // Use backend ID or fallback
-                    plate: item.plate_number || '',
-                    truckModel: item.model || '',
-                    color: item.color || '',
-                    axles: item.notes || '', // Using notes for axles
-                    boxDimensions: item.box_dimensions || '',
-                    standardVolume: item.standard_volume || '',
-                    contractor: item.owner || '',
-                    registrationDate: item.created_at || '',
-                    lastModified: ''
+                    id: item.car_id,
+                    plate: item.car_plate || '',
+                    truckModel: item.car_model || '',
+                    color: item.car_color || '',
+                    axles: item.car_wheel || '',
+                    boxDimensions: item.car_dimension || '',
+                    standardVolume: item.car_volume || '',
+                    contractor: item.car_owner || '',
+                    registrationDate: item.car_register_date || '',
+                    lastModified: item.car_update_date || ''
                 }))
               setData(mappedData)
           }
@@ -79,7 +79,7 @@ export default function VehiclesPage() {
       }))
 
       const promise = (async () => {
-        const res = await fetch('/api/cameras/registered_cars', {
+        const res = await fetch('/api/registered_cars', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -125,26 +125,50 @@ export default function VehiclesPage() {
       }
   }
 
-  const handleSave = (e: React.FormEvent, updatedItem: Vehicle) => {
-    // Auto update modified date
-    const now = new Date().toLocaleString('vi-VN')
-    const newItem = { ...updatedItem, lastModified: now }
+  const handleSave = async (e: React.FormEvent, updatedItem: Vehicle) => {
+    e.preventDefault();
     
-    let newData: Vehicle[] = []
+    const isNew = !editingItem?.id || editingItem.id === 0;
+    
+    // Map Frontend -> Backend
+    const payload = {
+      car_plate: updatedItem.plate,
+      car_brand: '',
+      car_model: updatedItem.truckModel,
+      car_color: updatedItem.color,
+      car_wheel: updatedItem.axles,
+      car_dimension: updatedItem.boxDimensions,
+      car_volume: updatedItem.standardVolume,
+      car_owner: updatedItem.contractor,
+      car_note: updatedItem.axles,
+    };
 
-    if (!editingItem?.id) {
-        // Add new
-        newItem.id = Date.now() 
-        newData = [...data, newItem]
-    } else {
-        // Update
-        newData = data.map(item => item.id === editingItem.id ? newItem : item)
-    }
-    
-    saveToBackend(newData)
-    setIsDialogOpen(false)
-    setEditingItem(null)
-  }
+    const promise = isNew
+      ? fetch('/api/registered_cars', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+      : fetch(`/api/registered_cars/${updatedItem.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+    toast.promise(promise, {
+      loading: isNew ? 'Đang thêm xe...' : 'Đang cập nhật xe...',
+      success: () => {
+        fetchInitialData();
+        setIsDialogOpen(false);
+        setEditingItem(null);
+        return isNew ? 'Đã thêm xe mới' : 'Đã cập nhật xe';
+      },
+      error: (err) => {
+        console.error(err);
+        return 'Lỗi khi lưu dữ liệu';
+      },
+    });
+  };
 
   const handleExportExcel = () => {
     if (filteredData.length === 0) {

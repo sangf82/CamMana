@@ -23,7 +23,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from backend.car_process.core.checkin_service import get_checkin_service, CheckInResult
+from backend.workflow.checkin import get_checkin_service, CheckInResult
 from backend.api._shared import cameras as active_cameras
 from backend.data_process import get_registered_cars
 
@@ -169,7 +169,16 @@ async def capture_and_process(request: CaptureAndProcessRequest):
             shutil.copy2(top_path, folder / f"top_{result.uuid}.jpg")
             
             # Prepare for Volume API
-            from backend.car_process.functions.volume_detection import estimate_volume
+            # Prepare for Volume API
+            from backend.model_process.control import orchestrator
+            # Wrapper to match expected interface if possible, or use orchestrator directly
+            # The code below uses 'estimate_volume' as a function.
+            # I can do:
+            async def estimate_volume(side_image_path, top_fg_image_path, top_bg_image_path, side_calib_path, top_calib_path):
+                res = await orchestrator.process_volume(side_image_path, top_fg_image_path, top_bg_image_path, side_calib_path, top_calib_path)
+                # API expects return dict or None
+                if res.get('success'): return res
+                return None
             
             # Paths
             calib_dir = Path("database/calibration")

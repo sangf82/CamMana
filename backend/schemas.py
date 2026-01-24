@@ -77,6 +77,7 @@ class Camera(CameraBase):
 
 # History Models
 class HistoryRecord(BaseModel):
+    id: Optional[str] = None
     plate: str
     location: str
     time_in: str
@@ -86,18 +87,22 @@ class HistoryRecord(BaseModel):
     status: str = ""
     verify: str = ""
     note: str = ""
+    folder_path: str = ""
 
 # Registered Car Models
 class RegisteredCar(BaseModel):
-    id: Optional[str] = None
-    plate_number: str
-    owner: str = ""
-    model: str = ""
-    color: str = ""
-    notes: str = ""
-    created_at: str = ""
-    box_dimensions: str = ""
-    standard_volume: str = ""
+    car_id: Optional[str] = None
+    car_plate: str
+    car_brand: str = ""
+    car_model: str = "" # Added to match typical needs
+    car_owner: str = ""
+    car_color: str = ""
+    car_wheel: str = ""
+    car_dimension: str = ""
+    car_volume: str = ""
+    car_note: str = ""
+    car_register_date: str = ""
+    car_update_date: str = ""
 
 # Other Models
 class LogRecord(BaseModel):

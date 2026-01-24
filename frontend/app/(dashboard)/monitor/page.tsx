@@ -176,9 +176,9 @@ function MonitorPageContent() {
     const loadCameras = async () => {
       try {
         const [resCam, resLoc, resTypes] = await Promise.all([
-          fetch("/api/cameras/saved"),
-          fetch("/api/cameras/locations"),
-          fetch("/api/cameras/types")
+          fetch("/api/cameras"),
+          fetch("/api/locations"),
+          fetch("/api/camera_types")
         ]);
         
         if (resCam.ok) {
@@ -214,9 +214,11 @@ function MonitorPageContent() {
 
   // Helper to check functions
   const hasFunction = useCallback((cam: Camera, func: string) => {
-    const typeObj = camTypes.find(t => t.name === cam.type || t.id === cam.type);
-    if (!typeObj || !typeObj.functions) return false;
-    return typeObj.functions.includes(func);
+    const typeObj = camTypes.find(t => t.type_name === cam.type || t.type_id === cam.type || t.name === cam.type || t.id === cam.type);
+    if (!typeObj) return false;
+    const functions = typeObj.type_functions || typeObj.functions || [];
+    if (typeof functions === 'string') return functions.split(';').filter(Boolean).includes(func);
+    return Array.isArray(functions) && functions.includes(func);
   }, [camTypes]);
 
   const frontCamera = React.useMemo(() => {
@@ -263,30 +265,20 @@ function MonitorPageContent() {
 
       try {
         addLog(`Đang kết nối ${cam.name}...`, "info");
-        const connectRes = await fetch("/api/cameras/connect", {
+        const connectRes = await fetch(`/api/cameras/${cam.id}/connect`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ip: cam.ip,
-            port: cam.port || 8899,
-            user: cam.username || "admin",
-            password: cam.password || "",
-            name: cam.name,
-            location: cam.location,
-          }),
         });
 
         if (connectRes.ok) {
           const data = await connectRes.json();
-          if (data.success || data.id) {
-            const activeId = data.id;
-            setActiveCameras((prev) => ({ ...prev, [cam.id]: activeId }));
+          // Backend connects and returns success. activeId is cam.id or handled internally.
+          // data.details has connection info
+          if (data.success) {
+            setActiveCameras((prev) => ({ ...prev, [cam.id]: cam.id }));
             addLog(`✓ Đã kết nối ${cam.name}`, "success");
-            await fetch(`/api/cameras/${activeId}/stream/start`, {
-              method: "POST",
-            });
+            // Stream start handled by backend /stream endpoint lazy loading or implicitly started
           } else {
-            addLog(`✗ Lỗi kết nối ${cam.name}: ${data.error}`, "error");
+             addLog(`✗ Lỗi kết nối ${cam.name}: ${data.details?.error || 'Unknown'}`, "error");
           }
         }
       } catch (e) {
@@ -478,7 +470,7 @@ function MonitorPageContent() {
   const handleConfirm = async () => {
     if (!currentDetection || !currentTimeIn) return;
     try {
-      const res = await fetch("/api/history", {
+      const res = await fetch(`/api/history/${currentDetection.uuid}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -506,7 +498,7 @@ function MonitorPageContent() {
   const handleReject = async () => {
     if (!currentDetection || !currentTimeIn) return;
     try {
-      const res = await fetch("/api/history", {
+      const res = await fetch(`/api/history/${currentDetection.uuid}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -547,7 +539,13 @@ function MonitorPageContent() {
       return;
     }
     try {
-      const res = await fetch("/api/history", {
+      // Need uuid for editing. currentDetection needs to be valid.
+      const uuid = currentDetection?.uuid;
+      if (!uuid) {
+          toast.error("Không tìm thấy ID bản ghi");
+          return;
+      }
+      const res = await fetch(`/api/history/${uuid}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
