@@ -15,6 +15,7 @@ interface DetectionResult {
   snapshot_url?: string;
   folder_path?: string;
   uuid?: string;
+  volume?: number | null;
 }
 
 interface EvidenceModalProps {

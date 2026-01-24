@@ -45,7 +45,6 @@ export default function VehiclesPage() {
                     truckModel: item.car_model || '',
                     color: item.car_color || '',
                     axles: item.car_wheel || '',
-                    boxDimensions: item.car_dimension || '',
                     standardVolume: item.car_volume || '',
                     contractor: item.car_owner || '',
                     registrationDate: item.car_register_date || '',
@@ -71,8 +70,7 @@ export default function VehiclesPage() {
           plate_number: item.plate,
           model: item.truckModel,
           color: item.color,
-          notes: item.axles, // Storing axles in notes
-          box_dimensions: item.boxDimensions,
+          notes: item.axles,
           standard_volume: item.standardVolume,
           owner: item.contractor,
           created_at: item.registrationDate
@@ -137,10 +135,10 @@ export default function VehiclesPage() {
       car_model: updatedItem.truckModel,
       car_color: updatedItem.color,
       car_wheel: updatedItem.axles,
-      car_dimension: updatedItem.boxDimensions,
       car_volume: updatedItem.standardVolume,
       car_owner: updatedItem.contractor,
       car_note: updatedItem.axles,
+      car_register_date: updatedItem.registrationDate,
     };
 
     const promise = isNew
@@ -192,7 +190,6 @@ export default function VehiclesPage() {
       item.truckModel,
       item.color,
       `"${(item.axles || '').replace(/"/g, '""')}"`,
-      `"${(item.boxDimensions || '').replace(/"/g, '""')}"`,
       item.standardVolume,
       `"${(item.contractor || '').replace(/"/g, '""')}"`,
       item.registrationDate
@@ -230,7 +227,6 @@ export default function VehiclesPage() {
             truckModel: getVal(['loại xe', 'truckmodel', 'loại', 'model']),
             color: getVal(['màu xe', 'color', 'mau xe', 'mau']),
             axles: getVal(['số trục/bánh', 'axles', 'so truc', 'notes']),
-            boxDimensions: getVal(['kích thước thùng', 'boxdimensions', 'kich thuoc', 'box_dimensions']),
             standardVolume: getVal(['thể tích tiêu chuẩn', 'standardvolume', 'the tich', 'standard_volume']),
             contractor: getVal(['nhà thầu', 'contractor', 'nha thau', 'owner']),
             registrationDate: getVal(['ngày đk', 'registrationdate', 'ngay dk', 'created_at']) || new Date().toISOString().split('T')[0],
@@ -266,8 +262,7 @@ export default function VehiclesPage() {
         plate: '', 
         truckModel: '', 
         color: '',            
-        axles: '',            
-        boxDimensions: '',
+        axles: '',
         standardVolume: '',
         contractor: '', 
         registrationDate: today,

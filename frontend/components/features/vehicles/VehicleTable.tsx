@@ -7,7 +7,6 @@ export interface Vehicle {
   truckModel: string          
   color: string               
   axles: string               
-  boxDimensions: string       
   standardVolume: string      
   contractor: string
   registrationDate: string
@@ -27,7 +26,6 @@ export default function VehicleTable({ data, loading, onEdit, onDelete }: Vehicl
     { header: 'Loại xe', accessorKey: 'truckModel', width: '150px' },
     { header: 'Màu xe', accessorKey: 'color', width: '100px' },
     { header: 'Số trục/bánh', accessorKey: 'axles', width: '130px' },
-    { header: 'Kích thước thùng', accessorKey: 'boxDimensions', width: '180px' },
     { header: 'Thể tích (m³)', accessorKey: 'standardVolume', width: '130px' },
     { header: 'Nhà thầu', accessorKey: 'contractor', width: '180px' },
     { 

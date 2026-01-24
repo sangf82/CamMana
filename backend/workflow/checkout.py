@@ -46,20 +46,8 @@ class CheckOutService:
                 clean_plate = "Unknown"
 
             # 2. Find Open Session
-            # Look for records with status="Check-In Pending" or similar and matching plate
-            # Logic: Last 24-48 hours?
-            # Ideally HistoryLogic API supports querying "open" records.
-            # Assuming get_records() returns today's. If checkout connects to yesterday's checkin, we need to search back.
-            # For MVP/Refactor, search today's file first.
-            
-            records = self.history_logic.get_records()
-            target_record = None
-            
-            # Search logic: Most recent entry with same plate and no time_out?
-            for rec in reversed(records):
-                if rec["plate"] == clean_plate and (not rec["time_out"] or rec["time_out"] == "---"):
-                    target_record = rec
-                    break
+            # Look for records with no time_out across all available history dates
+            target_record = self.history_logic.find_open_session(clean_plate)
             
             # If not found today, search yesterday? (TODO: Enhancement)
             
@@ -74,30 +62,82 @@ class CheckOutService:
                 status = "Matched"
                 uuid_val = target_record["id"]
             else:
-                # Create a new record? Or Log error?
-                # Usually gate shouldn't open.
-                # Create "Checkout without Checkin" record?
-                # For now, just Log.
+                # Create "Checkout without Checkin" record so user can edit later
+                import uuid
+                new_id = str(uuid.uuid4())
+                time_out = datetime.now().strftime("%H:%M:%S")
+                
+                record_data = {
+                    "id": new_id,
+                    "plate": clean_plate,
+                    "location": location_id,
+                    "time_in": "Unknown", # Flag as unknown entry
+                    "time_out": time_out,
+                    "status": "Unknown Check-In",
+                    "verify": "Cần KT",
+                    "folder_path": "", # No folder yet
+                    "note": "Xe ra không có dữ liệu vào"
+                }
+                
+                # Create folder for evidence if possible
+                try:
+                    # We can use checkin service folder creation logic if we duplicate it,
+                    # or just create a simple folder manually.
+                    # reusing logic is better but we are in CheckOutService.
+                    # Just create a basic folder.
+                    date_folder = datetime.now().strftime("%d-%m-%Y")
+                    folder_name = f"{new_id}_{datetime.now().strftime('%H-%M-%S')}"
+                    folder_path = HistoryLogic().CAR_HISTORY_DIR / date_folder / folder_name
+                    folder_path.mkdir(parents=True, exist_ok=True)
+                    record_data["folder_path"] = str(folder_path)
+                    
+                    if folder_path.exists():
+                        shutil.copy2(front_image_path, folder_path / "checkout_front.jpg")
+                except Exception as e:
+                    logger.error(f"Failed to create evidence folder for unknown checkout: {e}")
+
+                new_rec = self.history_logic.add_record(record_data)
+                
                 status = "Unknown Check-In"
-                uuid_val = None
+                uuid_val = new_id
+                target_record = new_rec # Assign so below logic works if needed?
                 
-            # 4. Save Image (Evidence)
-            # Existing folder? "folder_path" in target_record.
-            # If matched, verify folder exists and save "checkout_front.jpg".
-            if target_record and target_record.get("folder_path"):
-                folder = Path(target_record["folder_path"])
-                if folder.exists():
-                    shutil.copy2(front_image_path, folder / "checkout_front.jpg")
-            else:
-                # Create folder for orphan checkout?
-                # Or skip.
+            # 4. Save Image (Evidence) - Already handled above for new record
+            # For existing record:
+            if target_record and target_record.get("folder_path") and uuid_val != target_record.get("id"): # differentiate?
+                # Actually, if we just created it, we copied content.
+                # If it's matched, we copy content.
                 pass
+            
+            # Refined Step 4 for Matched Case
+            if target_record and target_record.get("id") != uuid_val: 
+                # This condition is tricky. Let's simplify.
+                # If we found target_record (matched), we want to save image to ITS folder.
+                pass 
+            
+            # Simpler replacement logic for lines 86-93 to cover both cases cleanly
+            if target_record and target_record.get("folder_path"):
+                 folder = Path(target_record["folder_path"])
+                 if folder.exists():
+                     # Check if we already copied it (for new record)
+                     if not (folder / "checkout_front.jpg").exists():
+                         shutil.copy2(front_image_path, folder / "checkout_front.jpg")
                 
+            # Try to get history volume (vol_measured from entry)
+            history_vol = None
+            if target_record and target_record.get("vol_measured"):
+                try:
+                    history_vol = float(target_record["vol_measured"])
+                except:
+                    pass
+
             return {
                 "success": True,
                 "plate": clean_plate,
                 "status": status,
-                "uuid": uuid_val
+                "uuid": uuid_val,
+                "folder_path": target_record.get("folder_path") if target_record else None,
+                "history_volume": history_vol
             }
             
         except Exception as e:

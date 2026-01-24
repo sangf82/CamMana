@@ -9,9 +9,8 @@ from .logic import CameraLogic
 from .connection import CameraConnection, CameraConnectionConfig
 from .capture import VideoStreamer
 from .control import PTZController
+from backend.api._shared import cameras as active_cameras
 
-# Shared state
-active_cameras: Dict[str, Dict[str, Any]] = {}
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/cameras", tags=["Cameras"])

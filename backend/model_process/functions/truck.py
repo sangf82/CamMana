@@ -17,9 +17,9 @@ class TruckDetector:
 
         try:
             from ultralytics import YOLO
-            # Configurable model path?
-            # Using standard yolov8n.pt for now
-            self.model = YOLO('yolov8n.pt')
+            # Configurable model path
+            # Using yolo11n.pt for better performance
+            self.model = YOLO('models/car_detect/yolo11n.pt')
             self.class_names = self.model.names
         except ImportError:
             logger.error("Ultralytics not installed. Truck detection unavailable.")

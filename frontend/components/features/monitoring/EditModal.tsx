@@ -13,6 +13,9 @@ interface EditModalProps {
   setEditVerify: (value: string) => void;
   editNote: string;
   setEditNote: (value: string) => void;
+  editVolume: string;
+  setEditVolume: (value: string) => void;
+  isVolumeEnabled?: boolean;
 }
 
 export default function EditModal({
@@ -27,6 +30,9 @@ export default function EditModal({
   setEditVerify,
   editNote,
   setEditNote,
+  editVolume,
+  setEditVolume,
+  isVolumeEnabled = true,
 }: EditModalProps) {
   if (!isOpen) return null;
 
@@ -57,21 +63,37 @@ export default function EditModal({
             />
           </div>
 
-          <div>
-            <label className="text-xs text-muted-foreground uppercase tracking-wider">
-              Trạng thái
-            </label>
-            <select
-              value={editStatus}
-              onChange={(e) => setEditStatus(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
-            >
-              <option value="vào cổng">Vào cổng</option>
-              <option value="đã vào">Đã vào</option>
-              <option value="đang cân">Đang cân</option>
-              <option value="ra cổng">Ra cổng</option>
-              <option value="đã ra">Đã ra</option>
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider">
+                Trạng thái
+              </label>
+              <select
+                value={editStatus}
+                onChange={(e) => setEditStatus(e.target.value)}
+                className="w-full mt-1 px-2 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="vào cổng">Vào cổng</option>
+                <option value="đã vào">Đã vào</option>
+                <option value="đang cân">Đang cân</option>
+                <option value="ra cổng">Ra cổng</option>
+                <option value="đã ra">Đã ra</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wider">
+                Thể tích (m³)
+              </label>
+              <input
+                type="text"
+                value={editVolume}
+                onChange={(e) => setEditVolume(e.target.value)}
+                disabled={!isVolumeEnabled}
+                className={`w-full mt-1 px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary font-mono ${!isVolumeEnabled ? "opacity-50 blur-[0.5px] cursor-not-allowed select-none" : ""}`}
+                placeholder="0.00"
+              />
+            </div>
           </div>
 
           <div>

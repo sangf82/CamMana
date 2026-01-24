@@ -15,7 +15,7 @@ class RegisteredCarLogic:
     HEADERS = [
         "car_id", "car_plate", "car_brand", "car_model", 
         "car_owner", "car_color", "car_wheel", 
-        "car_dimension", "car_volume", "car_note",
+        "car_volume", "car_note",
         "car_register_date", "car_update_date"
     ]
     DATE_FORMAT = "%d-%m-%Y"
@@ -89,6 +89,14 @@ class RegisteredCarLogic:
     def normalize_plate(plate: str) -> str:
         return re.sub(r'[^a-zA-Z0-9]', '', plate).upper()
 
+    def get_car_by_plate(self, plate: str) -> Optional[Dict[str, str]]:
+        norm_plate = self.normalize_plate(plate)
+        cars = self.get_all_cars()
+        for car in cars:
+            if self.normalize_plate(car['car_plate']) == norm_plate:
+                return car
+        return None
+
     def add_car(self, car_data: Dict[str, Any]) -> Dict[str, str]:
         current_data = self._read_csv()
         
@@ -105,7 +113,6 @@ class RegisteredCarLogic:
             "car_owner": car_data.get('car_owner', ''),
             "car_color": car_data.get('car_color', ''),
             "car_wheel": str(car_data.get('car_wheel', '')),
-            "car_dimension": car_data.get('car_dimension', ''),
             "car_volume": str(car_data.get('car_volume', '')),
             "car_note": car_data.get('car_note', ''),
             "car_register_date": datetime.now().strftime(self.DATE_FORMAT),
@@ -124,7 +131,7 @@ class RegisteredCarLogic:
             if car['car_id'] == car_id:
                 # Update fields
                 for key in self.HEADERS:
-                    if key in update_data and key not in ['car_id', 'car_register_date', 'car_plate']:
+                    if key in update_data and key not in ['car_id', 'car_plate']:
                         car[key] = str(update_data[key])
                 
                 car['car_update_date'] = datetime.now().strftime(self.DATE_FORMAT)
@@ -192,7 +199,6 @@ class RegisteredCarLogic:
                 # Update fields
                 existing['car_brand'] = str(new_row.get('car_brand', existing['car_brand']))
                 existing['car_wheel'] = str(new_row.get('car_wheel', existing['car_wheel']))
-                existing['car_dimension'] = str(new_row.get('car_dimension', existing['car_dimension']))
                 existing['car_volume'] = str(new_row.get('car_volume', existing['car_volume']))
                 existing['car_update_date'] = datetime.now().strftime(self.DATE_FORMAT)
                 final_list.append(existing)
@@ -204,7 +210,6 @@ class RegisteredCarLogic:
                     "car_plate": new_row.get('car_plate', norm_plate),
                     "car_brand": str(new_row.get('car_brand', '')),
                     "car_wheel": str(new_row.get('car_wheel', '')),
-                    "car_dimension": str(new_row.get('car_dimension', '')),
                     "car_volume": str(new_row.get('car_volume', '')),
                     "car_register_date": datetime.now().strftime(self.DATE_FORMAT),
                     "car_update_date": datetime.now().strftime(self.DATE_FORMAT)

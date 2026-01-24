@@ -23,10 +23,15 @@ class HistoryLogic:
     CAR_HISTORY_DIR = PROJECT_ROOT / "database" / "car_history"
 
     def __init__(self):
-        self.today = datetime.now().strftime(self.DATE_FORMAT)
-        self.current_file = DATA_DIR / f"{self.FILE_PREFIX}{self.today}.csv"
         self._ensure_dirs()
-        self.rotate_daily_file()
+        self.refresh_state()
+
+    def refresh_state(self):
+        new_today = datetime.now().strftime(self.DATE_FORMAT)
+        if not hasattr(self, 'today') or self.today != new_today:
+            self.today = new_today
+            self.current_file = DATA_DIR / f"{self.FILE_PREFIX}{self.today}.csv"
+            self.rotate_daily_file()
 
     def _ensure_dirs(self):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -67,34 +72,32 @@ class HistoryLogic:
     def cleanup_expired_folders(self, limit_date: datetime):
         """
         Delete car history folders older than limit_date.
-        Folder name format: {plate}_{YYYYMMDD}_{HHMMSS}
+        Path format: database/car_history/dd-mm-yyyy/uuid_hh-mm-ss
         """
         if not self.CAR_HISTORY_DIR.exists():
             return
 
         count = 0
-        for folder in self.CAR_HISTORY_DIR.iterdir():
-            if not folder.is_dir():
+        limit_day = limit_date.date()
+
+        for date_folder in self.CAR_HISTORY_DIR.iterdir():
+            if not date_folder.is_dir():
                 continue
             
-            # Try to parse date from folder name
-            # Format: *_YYYYMMDD_HHMMSS
             try:
-                parts = folder.name.split('_')
-                if len(parts) >= 3:
-                    date_str = parts[-2]
-                    time_str = parts[-1]
-                    folder_dt = datetime.strptime(f"{date_str}_{time_str}", "%Y%m%d_%H%M%S")
-                    
-                    if folder_dt < limit_date:
-                        shutil.rmtree(folder)
-                        logger.info(f"Deleted expired car folder {folder.name}")
-                        count += 1
-            except Exception as e:
-                logger.warning(f"Skipping folder cleanup for {folder.name}: {e}")
+                # Folder name: DD-MM-YYYY
+                folder_date = datetime.strptime(date_folder.name, self.DATE_FORMAT).date()
+                
+                if folder_date < limit_day:
+                    shutil.rmtree(date_folder)
+                    logger.info(f"Deleted expired date folder: {date_folder.name}")
+                    count += 1
+            except ValueError:
+                # Not a date folder folder, skip
+                continue
         
         if count > 0:
-            logger.info(f"Cleaned up {count} expired car history folders")
+            logger.info(f"Cleaned up {count} expired car history day folders")
         
     def _read_csv(self, file_path: Path = None) -> List[Dict[str, str]]:
         target = file_path if file_path else self.current_file
@@ -111,6 +114,7 @@ class HistoryLogic:
             writer.writerows(data)
 
     def get_records(self, date_str: Optional[str] = None) -> List[Dict[str, str]]:
+        self.refresh_state()
         if date_str:
             target_file = DATA_DIR / f"{self.FILE_PREFIX}{date_str}.csv"
         else:
@@ -119,25 +123,31 @@ class HistoryLogic:
         return self._read_csv(target_file)
 
     def get_available_dates(self) -> List[str]:
+        self.refresh_state()
         files = list(DATA_DIR.glob(f"{self.FILE_PREFIX}*.csv"))
-        dates = []
+        date_objs = []
         for f in files:
             d = self._get_file_date(f.name)
             if d:
-                dates.append(d.strftime(self.DATE_FORMAT))
-        dates.sort(reverse=True)
-        return dates
+                date_objs.append(d)
+        
+        # Sort chronologically, newest first
+        date_objs.sort(reverse=True)
+        return [d.strftime(self.DATE_FORMAT) for d in date_objs]
 
-    def create_car_folder(self, plate: str) -> Path:
+    def create_car_folder(self, record_id: str) -> Path:
         """
-        Create a folder for the car interaction: car_history/{plate}_{timestamp}
+        Create a folder for the car interaction: car_history/dd-mm-yyyy/uuid_hh-mm-ss
         """
-        timestamp = datetime.now().strftime("%H%M%S") # Just time? Or date_time?
-        # Folder structure usually keeps grouping. Maybe by Date/Plate?
-        # Requirement: "folder for each car within the @directory:car_history folder"
-        # Let's use {plate}_{date}_{time} for uniqueness
-        folder_name = f"{plate}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        folder_path = self.CAR_HISTORY_DIR / folder_name
+        date_folder_name = datetime.now().strftime(self.DATE_FORMAT)
+        time_suffix = datetime.now().strftime("%H-%M-%S") # Use - for safety in paths
+        
+        folder_name = f"{record_id}_{time_suffix}"
+        
+        date_folder_path = self.CAR_HISTORY_DIR / date_folder_name
+        date_folder_path.mkdir(parents=True, exist_ok=True)
+        
+        folder_path = date_folder_path / folder_name
         folder_path.mkdir(parents=True, exist_ok=True)
         return folder_path
 
@@ -145,6 +155,7 @@ class HistoryLogic:
         """
         Add a new record to today's history.
         """
+        self.refresh_state()
         current_data = self._read_csv()
         
         # If folder_path is not provided, maybe create it?
@@ -176,20 +187,82 @@ class HistoryLogic:
         self._write_csv(self.current_file, current_data)
         return clean_record
 
-    def update_record(self, record_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str, str]]:
-        current_data = self._read_csv()
-        updated = None
-        
-        for rec in current_data:
-            if rec["id"] == record_id:
-                for k, v in update_data.items():
-                    if k in self.HEADERS:
-                        rec[k] = str(v)
-                updated = rec
-                break
-        
-        if updated:
-            self._write_csv(self.current_file, current_data)
-            return updated
+    def update_record(self, record_id: str, update_data: Dict[str, Any], date_str: Optional[str] = None) -> Optional[Dict[str, str]]:
+        """
+        Update a record by ID. Searches across all available files if date_str is not provided.
+        """
+        if date_str:
+            dates_to_check = [date_str]
+        else:
+            dates_to_check = self.get_available_dates()
+            
+        for d in dates_to_check:
+            target_file = DATA_DIR / f"{self.FILE_PREFIX}{d}.csv"
+            if not target_file.exists():
+                continue
+                
+            current_data = self._read_csv(target_file)
+            updated_rec = None
+            for rec in current_data:
+                if rec["id"] == record_id:
+                    for k, v in update_data.items():
+                        if k in self.HEADERS:
+                            rec[k] = str(v)
+                    updated_rec = rec
+                    break
+            
+            if updated_rec:
+                self._write_csv(target_file, current_data)
+                return updated_rec
+                
         return None
+
+    def find_open_session(self, plate: str) -> Optional[Dict[str, str]]:
+        """
+        Find the most recent open session (no time_out) for a given plate.
+        Robust matching using normalized plate comparison.
+        """
+        import re
+        def normalize_p(p): return re.sub(r'[^a-zA-Z0-9]', '', str(p)).upper()
+        
+        search_plate = normalize_p(plate)
+        if not search_plate or search_plate == "UNKNOWN":
+            return None
+
+        dates = self.get_available_dates()
+        for d in dates:
+            target_file = DATA_DIR / f"{self.FILE_PREFIX}{d}.csv"
+            if not target_file.exists(): continue
+            
+            records = self._read_csv(target_file)
+            # Search newest to oldest within file
+            for rec in reversed(records):
+                # Robust match: normalize plate from record too
+                rec_plate = normalize_p(rec.get("plate", ""))
+                time_out = rec.get("time_out", "")
+                
+                # An open session has no time_out value or "---"
+                is_open = not time_out or time_out == "---"
+                
+                if rec_plate == search_plate and is_open:
+                    return rec
+        return None
+
+    def delete_record(self, record_id: str) -> bool:
+        """
+        Delete a record by ID.
+        """
+        dates = self.get_available_dates()
+        for d in dates:
+            target_file = DATA_DIR / f"{self.FILE_PREFIX}{d}.csv"
+            if not target_file.exists(): continue
+            
+            current_data = self._read_csv(target_file)
+            initial_len = len(current_data)
+            current_data = [r for r in current_data if r["id"] != record_id]
+            
+            if len(current_data) < initial_len:
+                self._write_csv(target_file, current_data)
+                return True
+        return False
 

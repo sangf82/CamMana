@@ -4,12 +4,12 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 
 class LocationTag(str, Enum):
-    GATE_IN = "Gate In"
-    GATE_OUT = "Gate Out"
-    SCALE_IN = "Scale In"
-    SCALE_OUT = "Scale Out"
-    VOLUME = "Volume Measurement"
-    PARKING = "Parking"
+    GATE_IN = "Cổng vào"
+    GATE_OUT = "Cổng ra"
+    VOLUME_TOP_DOWN = "Tính thể tích vật liệu (Trên dưới)"
+    VOLUME_LEFT_RIGHT = "Tính thể tích vật liệu (Trái phải)"
+    PARKING = "Gửi xe"
+    CORE = "Cơ bản"
 
 class DetectionStrategy(BaseModel):
     tag: LocationTag
@@ -27,17 +27,17 @@ LOCATION_STRATEGIES = {
     LocationTag.GATE_OUT: DetectionStrategy(
         tag=LocationTag.GATE_OUT,
         description="Gate Out - Verify Exit",
-        suggested_functions=["plate", "truck"]
+        suggested_functions=["plate"]
     ),
-    LocationTag.SCALE_IN: DetectionStrategy(
-        tag=LocationTag.SCALE_IN,
-        description="Scale In - Weighing",
-        suggested_functions=["plate", "truck"]
+    LocationTag.VOLUME_TOP_DOWN: DetectionStrategy(
+        tag=LocationTag.VOLUME_TOP_DOWN,
+        description="Volume Measurement Area (Top-Down + Side)",
+        suggested_functions=["volume_top_down", "wheel", "truck"]
     ),
-    LocationTag.VOLUME: DetectionStrategy(
-        tag=LocationTag.VOLUME,
-        description="Volume Measurement Area",
-        suggested_functions=["volume", "wheel"] # Volume logic might imply wheel check too
+    LocationTag.VOLUME_LEFT_RIGHT: DetectionStrategy(
+        tag=LocationTag.VOLUME_LEFT_RIGHT,
+        description="Volume Measurement Area (Left-Right)",
+        suggested_functions=["volume_left_right", "truck"]
     ),
 }
 

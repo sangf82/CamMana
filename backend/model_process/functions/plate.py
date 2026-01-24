@@ -26,7 +26,7 @@ class PlateDetector:
         
         try:
             url = f"{MODEL_API_URL}{self.ENDPOINT}"
-            resp = requests.post(url, files=files, timeout=10)
+            resp = requests.post(url, files=files, timeout=30)
             
             if resp.status_code != 200:
                 logger.error(f"API Error {resp.status_code}: {resp.text}")

@@ -3,6 +3,9 @@ import logging
 import json
 import uuid
 import shutil
+import asyncio
+import cv2
+import numpy as np
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -35,8 +38,7 @@ class CheckInService:
 
     async def process_checkin(
         self,
-        front_image_path: Path,
-        side_image_path: Path,
+        images: List[Dict[str, Any]],
         location_id: str,
         date_str: Optional[str] = None
     ) -> CheckInResult:
@@ -47,43 +49,51 @@ class CheckInService:
         - Save Data.
         """
         try:
-            # 1. AI Detection
-            # Determine functions based on location location_id?
-            # Assuming location_id correlates to a tag, or we use standard CheckIn strategy.
-            # Ideally we look up location tag by ID. 
-            # For now, default to GATE_IN strategy functions: Plate, Truck, Color, Wheels(if side present)
+            # 0. Initialize UUID for the session
+            session_id = str(uuid.uuid4())
             
-            functions = ["plate", "truck", "color"]
-            if side_image_path and side_image_path.exists():
-                functions.append("wheel")
             
-            # We process FRONT image for Plate, Truck, Color
-            # We process SIDE image for Wheel
+            # 1. AI Detection on all images
+            tasks = []
+            for img_info in images:
+                path = img_info["path"]
+                funcs = img_info.get("functions", [])
+                if not path.exists(): continue
+                
+                frame = cv2.imread(str(path))
+                if frame is not None:
+                    # Run functions in parallel for this frame
+                    tasks.append(self.orchestrator.process_image(frame, funcs))
+
+            # Gather all results
+            all_results_list = await asyncio.gather(*tasks)
+            results = {}
+            for res_dict in all_results_list:
+                results.update(res_dict)
             
-            # Helper to read cv2 frame? Orchestrator expects frame.
-            import cv2
-            import numpy as np
+            # 2. Create Folder and Save Model Outputs
+            folder_path = self.history_logic.create_car_folder(session_id)
             
-            front_frame = cv2.imread(str(front_image_path))
-            side_frame = cv2.imread(str(side_image_path)) if side_image_path else None
-            
-            # Parallel calls
-            # Front functions
-            front_funcs = ["plate", "truck", "color"]
-            front_task = self.orchestrator.process_image(front_frame, front_funcs)
-            
-            # Side functions
-            side_funcs = ["wheel"]
-            side_task = self.orchestrator.process_image(side_frame, side_funcs) if side_frame else None
-            
-            results = await front_task
-            side_results = await side_task if side_task else {}
-            results.update(side_results)
-            
+            # Save individual model outputs as JSON
+            for func_name, res in results.items():
+                if func_name != "raw":
+                    with open(folder_path / f"model_{func_name}.json", "w", encoding="utf-8") as f:
+                        json.dump(res, f, indent=4)
+
+            # 3. Save Images with custom naming: {cam_name}_{functions}.jpg
+            for img_info in images:
+                path = img_info["path"]
+                cam_name = img_info.get("cam_name", "UnknownCam").replace(" ", "_")
+                funcs_str = "_".join(img_info.get("functions", []))
+                
+                ext = path.suffix or ".jpg"
+                new_name = f"{cam_name}_{funcs_str}{ext}"
+                if path.exists():
+                    shutil.copy2(path, folder_path / new_name)
+
             # Extract Data
             plate_res = results.get("plate", {})
             plate_number = plate_res.get("plate", "Unknown")
-            plate_conf = plate_res.get("confidence", 0.0) # Might not be available in simple dict
             
             color_res = results.get("color", {})
             primary_color = color_res.get("primary_color", "Unknown")
@@ -91,44 +101,34 @@ class CheckInService:
             wheel_res = results.get("wheel", {})
             wheel_count = wheel_res.get("wheel_count_total", 0)
             
-            # 2. Check Registration
-            # Use RegisteredCarLogic
-            is_registered = False
-            # registered_cars = self.registered_logic.get_all_cars()
-            # For simplicity, just store raw data for verification step
+            # 4. Check Registration
+            car = self.registered_logic.get_car_by_plate(plate_number)
+            vol_std = car.get("car_volume", "") if car else ""
+
+            # 5. Create History Record (CSV)
+            clean_plate = self.registered_logic.normalize_plate(plate_number) if plate_number != "Unknown" else f"Unknown_{session_id[:4]}"
             
-            # 3. Create Folder and Save History
-            # If plate is Unknown, use Unknown_{uuid}
-            clean_plate = self.registered_logic.normalize_plate(plate_number) if plate_number != "Unknown" else f"Unknown_{uuid.uuid4().hex[:4]}"
-            
-            folder_path = self.history_logic.create_car_folder(clean_plate)
-            
-            # Copy images to folder
-            if front_image_path.exists():
-                shutil.copy2(front_image_path, folder_path / "front.jpg")
-            if side_image_path and side_image_path.exists():
-                shutil.copy2(side_image_path, folder_path / "side.jpg")
-            
-            # 4. Create History Record
             record_data = {
+                "id": session_id,
                 "plate": clean_plate,
-                "location": location_id, # or name
+                "location": location_id,
                 "status": "Check-In Pending",
                 "folder_path": str(folder_path),
-                "vol_std": "", # Fill from registration later
+                "vol_std": vol_std, 
                 "vol_measured": ""
             }
             record = self.history_logic.add_record(record_data)
             
-            # 5. Save CheckIn Status JSON (for UI/Pending flow)
+            # 6. Save Master JSON (checkin_status.json)
             status_data = {
-                "uuid": record.get("id"),
+                "uuid": session_id,
                 "plate_number": clean_plate,
                 "color": primary_color,
                 "wheel_count": wheel_count,
-                "status": "pending_verification", # "pending_verification" triggers UI
+                "status": "pending_verification",
                 "folder_path": str(folder_path),
                 "created_at": datetime.now().isoformat(),
+                "registered_info": car if car else {},
                 "ai_results": {k: v for k, v in results.items() if k != "raw"}
             }
             
@@ -137,7 +137,7 @@ class CheckInService:
                 json.dump(status_data, f, indent=4)
             
             return CheckInResult(
-                uuid=record.get("id"),
+                uuid=session_id,
                 folder_path=str(folder_path),
                 plate_number=clean_plate,
                 color=primary_color,

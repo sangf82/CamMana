@@ -26,6 +26,7 @@ from pydantic import BaseModel
 from backend.workflow.checkin import get_checkin_service, CheckInResult
 from backend.api._shared import cameras as active_cameras
 from backend.data_process import get_registered_cars
+from backend.workflow.config import LocationTag
 
 
 checkin_router = APIRouter(prefix="/api/checkin", tags=["check-in"])
@@ -93,9 +94,11 @@ class CaptureResponse(BaseModel):
     duration: float = 0.0
     time_in: Optional[str] = None
     history_plate: Optional[str] = None
+    history_volume: Optional[float] = None
     error: Optional[str] = None
     reason: Optional[str] = None
     confidence: Optional[float] = None
+    is_checkout: bool = False
 
 
 
@@ -123,16 +126,24 @@ async def capture_and_process(request: CaptureAndProcessRequest):
 
         # Capture frames
         front_frame = get_frame(request.front_camera_id)
-        if front_frame is None:
-            return CaptureResponse(
-                success=False, 
-                error=f"Camera trước chưa kết nối hoặc không có hình ảnh: {request.front_camera_id}",
-                reason="front_capture_failed"
-            )
-
         side_frame = get_frame(request.side_camera_id) if request.side_camera_id else None
         top_frame = get_frame(request.top_camera_id) if request.top_camera_id else None
-        
+
+        if front_frame is None:
+            if side_frame is not None:
+                # Use side as fallback for front (plate detection)
+                print(f"[API] Front camera failed ({request.front_camera_id}), using side camera as fallback")
+                front_frame = side_frame
+            elif top_frame is not None:
+                 print(f"[API] Both front and side failed, using top as fallback")
+                 front_frame = top_frame
+            else:
+                return CaptureResponse(
+                    success=False, 
+                    error=f"Không thể chụp hình từ bất kỳ camera nào. Kiểm tra kết nối Camera: {request.front_camera_id}",
+                    reason="capture_failed"
+                )
+
         # Fallback if side camera fails or not provided (use front as dummy)
         if side_frame is None:
             side_frame = front_frame
@@ -151,103 +162,198 @@ async def capture_and_process(request: CaptureAndProcessRequest):
              with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as top_temp:
                 await asyncio.to_thread(cv2.imwrite, top_temp.name, top_frame)
                 top_path = Path(top_temp.name)
+
+        from backend.data_process.config import get_locations
+        locations = get_locations()
+        location_obj = next((l for l in locations if l.id == request.location_id or l.name == request.location_id), None)
+        location_tag = location_obj.tag if location_obj else "Cơ bản"
+
+        # Helper to get cam info and functions
+        def get_cam_info(cam_id):
+            if not cam_id: return None
+            # Fetch camera configuration to get its functions
+            from backend.camera.logic import CameraLogic
+            cam_logic = CameraLogic()
+            cam_config = cam_logic.get_camera_by_id(cam_id)
+            
+            functions = []
+            if cam_config:
+                from backend.data_process.config import get_cam_types
+                cam_types = get_cam_types()
+                type_obj = next((t for t in cam_types if t.name == cam_config.get('type')), None)
+                if type_obj:
+                    # 'functions' field in CSV might be semicolon-separated
+                    funcs_raw = type_obj.functions
+                    if isinstance(funcs_raw, str):
+                        functions = funcs_raw.split(';')
+                    elif isinstance(funcs_raw, list):
+                        functions = funcs_raw
+            
+            return {
+                "name": cam_config.get('name', 'Unknown') if cam_config else "Unknown",
+                "functions": [f for f in functions if f]
+            }
+
+        # 1. Front Camera
+        front_info = get_cam_info(request.front_camera_id)
         
-        # Process check-in (Core AI tasks: Plate, Color, Wheels)
+        # Prepare images list for workflow
+        images_to_process = [
+            {
+                "path": front_path, 
+                "cam_name": front_info["name"] if front_info else "FrontCam", 
+                "functions": front_info["functions"] if front_info else ["plate", "truck", "color"]
+            }
+        ]
+        
+        # 2. Side Camera
+        if side_path:
+            side_info = get_cam_info(request.side_camera_id)
+            images_to_process.append({
+                "path": side_path, 
+                "cam_name": side_info["name"] if side_info else "SideCam", 
+                "functions": side_info["functions"] if side_info else ["wheel"]
+            })
+            
+        # 3. Top Camera
+        if top_path:
+            top_info = get_cam_info(request.top_camera_id)
+            images_to_process.append({
+                "path": top_path, 
+                "cam_name": top_info["name"] if top_info else "TopCam", 
+                "functions": top_info["functions"] if top_info else ["volume_top_down"]
+            })
+
+        # Determine if Check-In or Check-Out
+        if location_tag == "Cổng ra":
+             # Process as Check-Out
+             from backend.workflow.checkout import get_checkout_service
+             checkout_service = get_checkout_service()
+             result_dict = await checkout_service.process_checkout(
+                 front_image_path=front_path,
+                 location_id=request.location_id
+             )
+             # Wrap in CaptureResponse format
+             folder_path = result_dict.get("folder_path")
+             front_url = None
+             if folder_path:
+                 folder = Path(folder_path)
+                 if folder.exists():
+                     imgs = list(folder.glob("*.jpg"))
+                     if imgs:
+                         parent_name = folder.parent.name
+                         folder_name = folder.name
+                         front_url = f"/api/images/{parent_name}/{folder_name}/{imgs[0].name}"
+
+             return CaptureResponse(
+                 success=True,
+                 uuid=result_dict.get("uuid"),
+                 plate=result_dict.get("plate"),
+                 status=result_dict.get("status"),
+                 folder_path=folder_path,
+                 front_image_url=front_url,
+                 history_volume=result_dict.get("history_volume"),
+                 duration=time.time() - start_total,
+                 is_checkout=True
+             )
+
+        # Default to Check-In
         date_str = datetime.now().strftime("%d-%m-%Y")
         result = await checkin_service.process_checkin(
-            front_image_path=front_path,
-            side_image_path=side_path,
+            images=images_to_process,
             location_id=request.location_id,
             date_str=date_str
         )
         
         # --- Volume Estimation ---
         volume_val = None
-        if top_path and result.folder_path:
+        is_volume_loc = location_tag in [
+            "Tính thể tích vật liệu (Trên dưới)", 
+            "Tính thể tích vật liệu (Trái phải)",
+            LocationTag.VOLUME_TOP_DOWN.value,
+            LocationTag.VOLUME_LEFT_RIGHT.value
+        ]
+
+        if is_volume_loc and top_path and result.folder_path:
             # Save top image to folder
             folder = Path(result.folder_path)
-            shutil.copy2(top_path, folder / f"top_{result.uuid}.jpg")
+            # Use cam name for the top image filename
+            top_cam_name = top_info["name"] if top_info else "TopCam"
+            shutil.copy2(top_path, folder / f"{top_cam_name}_volume.jpg")
             
-            # Prepare for Volume API
-            # Prepare for Volume API
             from backend.model_process.control import orchestrator
-            # Wrapper to match expected interface if possible, or use orchestrator directly
-            # The code below uses 'estimate_volume' as a function.
-            # I can do:
-            async def estimate_volume(side_image_path, top_fg_image_path, top_bg_image_path, side_calib_path, top_calib_path):
-                res = await orchestrator.process_volume(side_image_path, top_fg_image_path, top_bg_image_path, side_calib_path, top_calib_path)
-                # API expects return dict or None
-                if res.get('success'): return res
-                return None
             
-            # Paths
+            # Paths for calibration and backgrounds
             calib_dir = Path("database/calibration")
             bg_dir = Path("database/backgrounds")
             
-            # For simplicity, using default/dummy files if specifics not found
-            # Ideal: calib_side_{cam_id}.json
-            calib_side = calib_dir / "calib_side.json"
-            calib_top = calib_dir / "calib_topdown.json"
+            # 1. Resolve Calibration Files
+            # Priority: calib_side_{cam_id}.json -> calib_side.json -> default
+            side_cam_id = request.side_camera_id or "default"
+            top_cam_id = request.top_camera_id or "default"
             
-            # Try to find a background for this top camera or location
-            # Ideally: bg_{top_cam_id}.jpg
-            # For now, searching for ANY jpg in backgrounds or skipping
-            bg_image = None
-            if bg_dir.exists():
+            calib_side = calib_dir / f"calib_side_{side_cam_id}.json"
+            if not calib_side.exists():
+                calib_side = calib_dir / "calib_side.json"
+                
+            calib_top = calib_dir / f"calib_top_{top_cam_id}.json"
+            if not calib_top.exists():
+                calib_top = calib_dir / "calib_topdown.json"
+                
+            # 2. Resolve Background Image
+            # Priority: bg_{top_cam_id}.jpg -> any jpg in backgrounds
+            bg_image = bg_dir / f"bg_{top_cam_id}.jpg"
+            if not bg_image.exists():
                 bgs = list(bg_dir.glob("*.jpg"))
-                if bgs: bg_image = bgs[0]
+                bg_image = bgs[0] if bgs else None
             
             if calib_side.exists() and calib_top.exists() and bg_image:
-                 print(f"[API] Starting volume estimation...")
-                 # Start volume estimation in background or await? 
-                 # Await for now to return result immediately
-                 volume_res = await estimate_volume(
-                     side_image_path=side_path,
-                     top_fg_image_path=top_path,
-                     top_bg_image_path=bg_image,
-                     side_calib_path=calib_side,
-                     top_calib_path=calib_top
-                 )
-                 
-                 # Save volume to history record if successful
-                 if volume_res is not None:
-                     volume_val = volume_res.get("volume")
-                     
-                     # Save full volume JSON to folder
-                     try:
-                         vol_file = folder / "volume_estimation.json"
-                         with open(vol_file, "w", encoding="utf-8") as f:
-                             json.dump(volume_res, f, indent=4, ensure_ascii=False)
-                         print(f"[API] Saved volume JSON to {vol_file}")
-                     except Exception as e:
-                         print(f"[API] Error saving volume json: {e}")
-                     
-                     from backend.data_process import update_history
-                     
-                     # Update checkin_status.json as well if possible
-                     try:
-                         status_file = folder / "checkin_status.json"
-                         if status_file.exists():
-                             with open(status_file, "r+", encoding="utf-8") as f:
-                                 status_data = json.load(f)
-                                 status_data["volume"] = volume_val
-                                 status_data["volume_data_file"] = "volume_estimation.json"
-                                 f.seek(0)
-                                 json.dump(status_data, f, indent=4, ensure_ascii=False)
-                                 f.truncate()
-                     except Exception as e:
-                         print(f"[API] Error updating checkin_status.json: {e}")
-
-                     # CheckInResult has .history_record which is the dict
-                     if result.history_record:
-                         # Update local variable
-                         result.history_record['vol_measured'] = str(volume_val)
-                         # Persist to CSV
-                         update_history({
-                             'plate': result.plate_number,
-                             'time_in': result.history_record.get('time_in'),
-                             'vol_measured': str(volume_val)
-                         })
+                print(f"[API] Starting volume estimation for location {request.location_id}...")
+                try:
+                    volume_res = await orchestrator.process_volume(
+                        side_image_path=side_path,
+                        top_fg_image_path=top_path,
+                        top_bg_image_path=bg_image,
+                        side_calib_path=calib_side,
+                        top_calib_path=calib_top
+                    )
+                    
+                    if volume_res and volume_res.get("success"):
+                        volume_val = volume_res.get("volume")
+                        print(f"[API] Volume detected: {volume_val} m3")
+                        
+                        # Save full volume JSON to folder
+                        vol_file = folder / "volume_estimation.json"
+                        with open(vol_file, "w", encoding="utf-8") as f:
+                            json.dump(volume_res, f, indent=4, ensure_ascii=False)
+                        
+                        # Update checkin_status.json
+                        status_file = folder / "checkin_status.json"
+                        if status_file.exists():
+                            with open(status_file, "r+", encoding="utf-8") as f:
+                                try:
+                                    status_data = json.load(f)
+                                    status_data["volume"] = volume_val
+                                    status_data["volume_data_file"] = "volume_estimation.json"
+                                    f.seek(0)
+                                    json.dump(status_data, f, indent=4, ensure_ascii=False)
+                                    f.truncate()
+                                except: pass
+                        
+                        # Persist to History CSV
+                        checkin_service.history_logic.update_record(result.uuid, {
+                            'vol_measured': str(volume_val)
+                        })
+                    else:
+                        print(f"[API] Volume estimation failed: {volume_res.get('error') if volume_res else 'Unknown error'}")
+                except Exception as ve:
+                    print(f"[API] Volume estimation exception: {ve}")
+            else:
+                missing = []
+                if not calib_side.exists(): missing.append("calib_side")
+                if not calib_top.exists(): missing.append("calib_top")
+                if not bg_image: missing.append("bg_image")
+                print(f"[API] Skipping volume estimation, missing: {', '.join(missing)}")
                          
         # Cleanup temp files
         front_path.unlink(missing_ok=True)

@@ -4,12 +4,12 @@ import VideoPlayer from "../../../components/features/monitoring/VideoPlayer";
 import { toast } from "sonner";
 
 interface Camera {
-  id: string;
+  id: string | number;
   name: string;
   ip: string;
   location: string;
   location_id?: string;
-  status: "Online" | "Offline" | "Connected" | "Local";
+  status: string;
   type: string;
   tag?: string;
   username?: string;

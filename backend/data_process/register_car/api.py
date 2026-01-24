@@ -22,7 +22,6 @@ class CarBase(BaseModel):
     car_color: str = ""
     car_note: str = ""
     car_wheel: str = ""
-    car_dimension: Optional[str] = ""
     car_volume: Optional[str] = ""
     
     # Alias for frontend? 
@@ -40,7 +39,6 @@ class CarUpdate(BaseModel):
     car_color: Optional[str] = None
     car_note: Optional[str] = None
     car_wheel: Optional[str] = None
-    car_dimension: Optional[str] = None
     car_volume: Optional[str] = None
 
 class CarResponse(CarBase):

@@ -33,11 +33,11 @@ interface TypeItem {
 }
 
 interface Camera {
-  id: number;
+  id: string | number;
   name: string;
   ip: string;
   location: string;
-  status: "Online" | "Offline" | "Connected" | "Local";
+  status: string;
   type: string; // Stores the TypeItem.name
   username?: string;
   password?: string;
@@ -67,14 +67,14 @@ const SMART_FUNCTIONS = [
     desc: "Đếm số bánh và nhận diện loại trục xe",
   },
   {
-    id: "box_detect",
-    name: "Kích thước thùng xe",
-    desc: "Tính toán dài x rộng x cao của thùng xe",
+    id: "volume_top_down",
+    name: "Tính thể tích vật liệu (Trên dưới)",
+    desc: "Ước tính thể tích hàng hóa dùng camera Trên và Hông",
   },
   {
-    id: "volume_detect",
-    name: "Tính thể tích vật liệu",
-    desc: "Ước tính thể tích hàng hóa trong thùng xe",
+    id: "volume_left_right",
+    name: "Tính thể tích vật liệu (Trái phải)",
+    desc: "Ước tính thể tích hàng hóa dùng camera Hai bên",
   },
 ];
 
@@ -91,7 +91,7 @@ export default function CamerasPage() {
   const [editingItem, setEditingItem] = useState<Camera | null>(null);
 
   // Delete confirm states
-  const [deleteCamId, setDeleteCamId] = useState<number | null>(null);
+  const [deleteCamId, setDeleteCamId] = useState<string | number | null>(null);
   const [deleteLocId, setDeleteLocId] = useState<string | number | null>(null);
   const [deleteLocName, setDeleteLocName] = useState<string>("");
 
@@ -135,9 +135,9 @@ export default function CamerasPage() {
         const types = await typeRes.json();
         // Transform backend format to frontend format
         const formattedTypes = types.map((t: any) => ({
-          id: t.type_id,
-          name: t.type_name,
-          functions: Array.isArray(t.type_functions) ? t.type_functions.join(';') : (t.type_functions || '')
+          id: t.id,
+          name: t.name,
+          functions: Array.isArray(t.functions) ? t.functions.join(';') : (t.functions || '')
         }));
         setCamTypes(formattedTypes);
       }
@@ -362,8 +362,8 @@ export default function CamerasPage() {
   const handleAddType = async () => {
     if (newTypeName && !camTypes.some((t) => t.name === newTypeName)) {
       const newType = {
-        type_name: newTypeName,
-        type_functions: newTypeFunctions,
+        name: newTypeName,
+        functions: newTypeFunctions,
       };
       
       const promise = fetch('/api/camera_types', {
@@ -384,9 +384,9 @@ export default function CamerasPage() {
           const savedType = await response.json();
           // Convert backend format to frontend format
           const formattedType = {
-            id: savedType.type_id,
-            name: savedType.type_name,
-            functions: savedType.type_functions.join(';')
+            id: savedType.id,
+            name: savedType.name,
+            functions: (savedType.functions || []).join(';')
           };
           setCamTypes(prev => [...prev, formattedType]);
           setNewTypeName('');
@@ -402,8 +402,8 @@ export default function CamerasPage() {
     const current = isNew ? newTypeFunctions : tempTypeFunctions;
     const setter = isNew ? setNewTypeFunctions : setTempTypeFunctions;
     if (current.includes(funcId)) setter(current.filter((id) => id !== funcId));
-    else if (current.length < 2) setter([...current, funcId]);
-    else toast.error("Tối đa 2 chức năng cho mỗi loại camera");
+    else if (current.length < 4) setter([...current, funcId]);
+    else toast.error("Tối đa 4 chức năng cho mỗi loại camera");
   };
 
   const handleSaveEditType = async (index: number) => {
@@ -413,8 +413,8 @@ export default function CamerasPage() {
     ) {
       const typeToUpdate = camTypes[index];
       const updateData = {
-        type_name: tempTypeName,
-        type_functions: tempTypeFunctions,
+        name: tempTypeName,
+        functions: tempTypeFunctions,
       };
       
       const promise = fetch(`/api/camera_types/${typeToUpdate.id}`, {
@@ -435,9 +435,9 @@ export default function CamerasPage() {
           const updatedType = await response.json();
           // Convert backend format to frontend format
           const formattedType = {
-            id: updatedType.type_id,
-            name: updatedType.type_name,
-            functions: updatedType.type_functions.join(';')
+            id: updatedType.id,
+            name: updatedType.name,
+            functions: (updatedType.functions || []).join(';')
           };
           setCamTypes(prev => prev.map((t, i) => i === index ? formattedType : t));
           setEditTypeIndex(null);
@@ -903,7 +903,7 @@ export default function CamerasPage() {
                   </button>
                   {isNewLocDropdownOpen && (
                     <div className="absolute top-full left-0 w-full z-[60] mt-2 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                      {["Cơ bản", "Cổng vào", "Cổng ra", "Đo thể tích"].map(
+                      {["Cơ bản", "Cổng vào", "Cổng ra"].map(
                         (v) => (
                           <button
                             key={v}
@@ -965,7 +965,6 @@ export default function CamerasPage() {
                                 "Cơ bản",
                                 "Cổng vào",
                                 "Cổng ra",
-                                "Đo thể tích",
                               ].map((v) => (
                                 <button
                                   key={v}

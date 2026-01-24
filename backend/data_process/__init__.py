@@ -17,28 +17,22 @@ def get_cameras_config():
     # Convert to schema.Camera (legacy format compatibility)
     res = []
     for c in raw_cams:
-        addr = c.get('cam_address', '')
-        ip = addr.split(':')[0] if ':' in addr else addr
-        port = 80
-        if ':' in addr:
-            try: port = int(addr.split(':')[1]) 
-            except: pass
-            
-        c_obj = Camera(
-            id=c['cam_id'],
-            name=c['cam_name'],
-            ip=ip,
-            port=port,
-            user=c.get('cam_user', ''),
-            password=c.get('cam_pass', ''),
-            location=c.get('cam_location', ''),
-            type=c.get('cam_type', ''),
-            tag="", # mapping needed?
-            username=c.get('cam_user', ''),
-            brand="",
-            cam_id=c['cam_id'], # Legacy field
-        )
-        res.append(c_obj)
+        res.append(Camera(
+            id=c.get('id', str(uuid.uuid4())),
+            name=c.get('name', ''),
+            ip=c.get('ip', ''),
+            port=int(c.get('port', 80)) if c.get('port') else 80,
+            user=c.get('username', 'admin'),
+            password=c.get('password', ''),
+            location=c.get('location', ''),
+            location_id=c.get('location_id', ''),
+            type=c.get('type', ''),
+            status=c.get('status', 'Offline'),
+            tag=c.get('tag', ''),
+            username=c.get('username', 'admin'),
+            brand=c.get('brand', ''),
+            cam_id=c.get('cam_id', '')
+        ))
     return res
 
 def save_camera(data):
@@ -58,19 +52,25 @@ def save_camera(data):
     addr = f"{ip}:{port}" if port and port != 80 else ip
     
     new_data = {
-        "cam_name": d.get('name', ''),
-        "cam_address": addr,
-        "cam_user": d.get('user', ''),
-        "cam_pass": d.get('password', ''),
-        "cam_location": d.get('location', ''),
-        "cam_type": d.get('type', ''),
-        "cam_functions": [] # logic handles persistence
+        "id": cam_id,
+        "name": d.get('name', ''),
+        "ip": d.get('ip', ''),
+        "port": d.get('port', 80),
+        "username": d.get('username', d.get('user', 'admin')),
+        "password": d.get('password', ''),
+        "location": d.get('location', ''),
+        "location_id": d.get('location_id', ''),
+        "type": d.get('type', ''),
+        "status": d.get('status', 'Offline'),
+        "tag": d.get('tag', ''),
+        "brand": d.get('brand', ''),
+        "cam_id": d.get('cam_id', '')
     }
     
     # Check if exists to update or add
     exists = False
     all_cams = _cam_logic.get_cameras()
-    if any(c['cam_id'] == cam_id for c in all_cams):
+    if any(str(c.get('id')) == cam_id or str(c.get('cam_id')) == cam_id for c in all_cams):
         _cam_logic.update_camera(cam_id, new_data)
     else:
         new_data['cam_id'] = cam_id # Logic add_camera generates ID usually, but here we might want to preserve?
@@ -112,12 +112,11 @@ def find_registered_car(plate: str):
             # checkin.py uses: car.owner, car.model.
             # So it expects an Object.
             from types import SimpleNamespace
-            # Map dict keys to attributes
             return SimpleNamespace(
-                owner=c.get('car_brand', ''), # Logic mapping needed? Schema says car_brand. Legacy says owner?
-                model=c.get('car_dimension', ''), # Mapping?
-                color='', # CSV doesn't have color!
-                standard_volume=c.get('car_volume', 0)
+                owner=c.get('car_owner', ''),
+                model=c.get('car_model', ''),
+                color=c.get('car_color', ''),
+                standard_volume=c.get('car_volume', '')
             )
     return None
     

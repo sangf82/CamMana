@@ -23,69 +23,51 @@ export default function VehicleDetailDialog({
   onSave,
   onImport
 }: VehicleDetailDialogProps) {
-  // Sub-fields
-  const [dimL, setDimL] = useState('')
-  const [dimW, setDimW] = useState('')
-  const [dimH, setDimH] = useState('')
-  const [volMin, setVolMin] = useState('')
-  const [volMax, setVolMax] = useState('')
+  const minVolRef = useRef<HTMLInputElement>(null)
+  const maxVolRef = useRef<HTMLInputElement>(null)
 
-  // Refs for navigation
-  const dimLRef = useRef<HTMLInputElement>(null)
-  const dimWRef = useRef<HTMLInputElement>(null)
-  const dimHRef = useRef<HTMLInputElement>(null)
-  const volMinRef = useRef<HTMLInputElement>(null)
-  const volMaxRef = useRef<HTMLInputElement>(null)
+  // Use local state for immediate feedback, synced with editingItem
+  const [vMin, vMax] = (editingItem?.standardVolume || '').split(' - ').concat(['', ''])
 
-  useEffect(() => {
-    if (editingItem && isOpen) {
-        // Parse dimensions: "6.5 x 4.7 x 5.6 m"
-        const dimStr = editingItem.boxDimensions || ''
-        const dimMatch = dimStr.match(/([\d.]+)\s*x\s*([\d.]+)\s*x\s*([\d.]+)/)
-        if (dimMatch) {
-            setDimL(dimMatch[1])
-            setDimW(dimMatch[2])
-            setDimH(dimMatch[3])
-        } else {
-            setDimL(''); setDimW(''); setDimH('')
-        }
+  const updateVolume = (minVal: string, maxVal: string) => {
+    const combined = minVal && maxVal ? `${minVal} - ${maxVal}` : (minVal || maxVal || '')
+    setEditingItem(prev => ({ ...prev!, standardVolume: combined.trim() }))
+  }
 
-        // Parse volume: "15.6 - 20"
-        const volStr = editingItem.standardVolume || ''
-        const volMatch = volStr.match(/([\d.]+)\s*-\s*([\d.]+)/)
-        if (volMatch) {
-            setVolMin(volMatch[1])
-            setVolMax(volMatch[2])
-        } else {
-            setVolMin(''); setVolMax('')
-        }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, side: 'min' | 'max') => {
+    const input = e.currentTarget
+    if (e.key === 'ArrowRight' && side === 'min' && input.selectionStart === input.value.length) {
+      maxVolRef.current?.focus()
+    } else if (e.key === 'ArrowLeft' && side === 'max' && input.selectionStart === 0) {
+      minVolRef.current?.focus()
     }
-  }, [editingItem, isOpen])
+  }
 
-  const handleArrowNav = (e: React.KeyboardEvent<HTMLInputElement>, prev?: React.RefObject<HTMLInputElement | null>, next?: React.RefObject<HTMLInputElement | null>) => {
-    if (e.key === 'ArrowRight' && next?.current) {
-        next.current.focus()
-        e.preventDefault()
-    } else if (e.key === 'ArrowLeft' && prev?.current) {
-        prev.current.focus()
-        e.preventDefault()
+  const formatDateForInput = (dateStr: string) => {
+    if (!dateStr) return ''
+    const parts = dateStr.split('-')
+    if (parts.length === 3) {
+      if (parts[0].length === 4) return dateStr // YYYY-MM-DD
+      return `${parts[2]}-${parts[1]}-${parts[0]}` // DD-MM-YYYY -> YYYY-MM-DD
     }
+    return ''
+  }
+
+  const formatDateForBackend = (dateStr: string) => {
+    if (!dateStr) return ''
+    const parts = dateStr.split('-')
+    if (parts.length === 3) {
+      if (parts[2].length === 4) return dateStr // DD-MM-YYYY
+      return `${parts[2]}-${parts[1]}-${parts[0]}` // YYYY-MM-DD -> DD-MM-YYYY
+    }
+    return dateStr
   }
 
   const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault()
       
-      // Validation: Min volume should not be greater than Max volume
-      if (volMin && volMax && parseFloat(volMin) > parseFloat(volMax)) {
-          toast.error("Thể tích Min không thể lớn hơn Thể tích Max")
-          return
-      }
-      
-      const boxDimensions = dimL && dimW && dimH ? `${dimL} x ${dimW} x ${dimH} m` : ''
-      const standardVolume = volMin && volMax ? `${volMin} - ${volMax}` : ''
-      
       if (editingItem) {
-          onSave(e, { ...editingItem, boxDimensions, standardVolume })
+          onSave(e, editingItem)
       }
   }
 
@@ -225,68 +207,36 @@ export default function VehicleDetailDialog({
                 </div>
              </div>
 
-             <div className="grid grid-cols-2 gap-6 pt-2">
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Kích thước thùng (DxRxC)</label>
-                    <div className="flex items-center gap-0.5 bg-background border border-border rounded p-1 focus-within:border-primary transition-colors">
-                        <input 
-                            ref={dimLRef}
-                            type="number" step="0.1"
-                            className="w-14 p-1.5 bg-transparent outline-none text-center font-mono text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            value={dimL}
-                            onChange={e => setDimL(e.target.value)}
-                            onKeyDown={e => handleArrowNav(e, undefined, dimWRef)}
-                            placeholder="D"
-                        />
-                        <span className="text-muted-foreground/50 font-bold text-[10px]">x</span>
-                        <input 
-                            ref={dimWRef}
-                            type="number" step="0.1"
-                            className="w-14 p-1.5 bg-transparent outline-none text-center font-mono text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            value={dimW}
-                            onChange={e => setDimW(e.target.value)}
-                            onKeyDown={e => handleArrowNav(e, dimLRef, dimHRef)}
-                            placeholder="R"
-                        />
-                        <span className="text-muted-foreground/50 font-bold text-[10px]">x</span>
-                        <input 
-                            ref={dimHRef}
-                            type="number" step="0.1"
-                            className="w-14 p-1.5 bg-transparent outline-none text-center font-mono text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            value={dimH}
-                            onChange={e => setDimH(e.target.value)}
-                            onKeyDown={e => handleArrowNav(e, dimWRef, undefined)}
-                            placeholder="C"
-                        />
-                        <span className="text-muted-foreground ml-auto pr-2 font-mono text-xs opacity-50 italic">m</span>
-                    </div>
-                </div>
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Thể tích tiêu chuẩn (m³)</label>
-                    <div className="flex items-center gap-0.5 bg-background border border-border rounded p-1 focus-within:border-primary transition-colors overflow-hidden">
-                        <input 
-                            ref={volMinRef}
-                            type="number" step="0.1"
-                            className="w-20 p-1.5 bg-transparent outline-none text-center font-mono text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            value={volMin}
-                            onChange={e => setVolMin(e.target.value)}
-                            onKeyDown={e => handleArrowNav(e, undefined, volMaxRef)}
-                            placeholder="Min"
-                        />
-                        <span className="text-muted-foreground/50 font-bold text-[10px]">&mdash;</span>
-                        <input 
-                            ref={volMaxRef}
-                            type="number" step="0.1"
-                            className="w-20 p-1.5 bg-transparent outline-none text-center font-mono text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                            value={volMax}
-                            onChange={e => setVolMax(e.target.value)}
-                            onKeyDown={e => handleArrowNav(e, volMinRef, undefined)}
-                            placeholder="Max"
-                        />
-                         <span className="text-muted-foreground ml-auto pr-2 font-mono text-xs opacity-50 italic">m³</span>
-                    </div>
-                </div>
-             </div>
+                 <div className="space-y-2">
+                     <label className="text-sm font-medium text-muted-foreground">Thể tích tiêu chuẩn (m³)</label>
+                     <div className="flex items-center gap-3">
+                         <div className="relative flex-1">
+                             <input 
+                                 ref={minVolRef}
+                                 type="text" 
+                                 className="w-full p-2.5 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none font-mono text-md text-center"
+                                 value={vMin}
+                                 onChange={e => updateVolume(e.target.value, vMax)}
+                                 onKeyDown={e => handleKeyDown(e, 'min')}
+                                 placeholder="Min"
+                             />
+                         </div>
+                         <span className="text-muted-foreground font-bold">-</span>
+                         <div className="relative flex-1">
+                             <input 
+                                 ref={maxVolRef}
+                                 type="text" 
+                                 className="w-full p-2.5 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none font-mono text-md text-center"
+                                 value={vMax}
+                                 onChange={e => updateVolume(vMin, e.target.value)}
+                                 onKeyDown={e => handleKeyDown(e, 'max')}
+                                 placeholder="Max"
+                             />
+                         </div>
+                         <span className="text-sm font-bold text-primary bg-primary/10 px-2 py-1 rounded border border-primary/20">m³</span>
+                     </div>
+                     <p className="text-[10px] text-muted-foreground italic mt-1">Sử dụng phím mũi tên để di chuyển giữa 2 ô</p>
+                 </div>
           </div>
 
           {/* Section 3: Administrative Info */}
@@ -311,9 +261,9 @@ export default function VehicleDetailDialog({
                     <label className="text-sm font-medium text-muted-foreground">Ngày đăng ký</label>
                     <input 
                         type="date"
-                        className="w-full p-2.5 bg-background border border-border rounded focus:border-primary focus:ring-0 outline-none font-sans text-md"
-                        value={editingItem?.registrationDate || ''}
-                        onChange={e => setEditingItem(prev => ({ ...prev!, registrationDate: e.target.value }))}
+                        className="w-full p-2.5 bg-background border border-border rounded focus:border-primary focus:ring-1 focus:ring-primary outline-none font-sans text-md appearance-none [color-scheme:dark]"
+                        value={formatDateForInput(editingItem?.registrationDate || '')}
+                        onChange={e => setEditingItem(prev => ({ ...prev!, registrationDate: formatDateForBackend(e.target.value) }))}
                         required
                     />
                 </div>

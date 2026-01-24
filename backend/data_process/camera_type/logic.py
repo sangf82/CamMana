@@ -8,7 +8,7 @@ from backend.config import DATA_DIR
 logger = logging.getLogger(__name__)
 
 class CameraTypeLogic:
-    HEADERS = ["type_id", "type_name", "type_functions"]
+    HEADERS = ["id", "name", "functions"]
     FILE_NAME = "camtypes.csv"
 
     def __init__(self):
@@ -30,20 +30,20 @@ class CameraTypeLogic:
             data = list(reader)
             # transform string to list
             for row in data:
-                funcs = row.get('type_functions', '')
+                funcs = row.get('functions', '')
                 if funcs:
                     # Remove empty strings if split results in them
-                    row['type_functions'] = [f for f in funcs.split(';') if f]
+                    row['functions'] = [f for f in funcs.split(';') if f]
                 else:
-                    row['type_functions'] = []
+                    row['functions'] = []
             return data
 
     def _write_csv(self, data: List[Dict[str, Any]]):
         rows_to_write = []
         for row in data:
             r = row.copy()
-            if isinstance(r.get('type_functions'), list):
-                r['type_functions'] = ";".join(r['type_functions'])
+            if isinstance(r.get('functions'), list):
+                r['functions'] = ";".join(r['functions'])
             rows_to_write.append(r)
             
         with open(self.file_path, 'w', newline='', encoding='utf-8') as f:
@@ -56,22 +56,22 @@ class CameraTypeLogic:
 
     def add_type(self, data: Dict[str, Any]) -> Dict[str, Any]:
         new_type = {
-            "type_id": str(uuid.uuid4()),
-            "type_name": str(data['type_name']),
-            "type_functions": data.get('type_functions', [])
+            "id": str(uuid.uuid4()),
+            "name": str(data['name']),
+            "functions": data.get('functions', [])
         }
         current = self._read_csv()
         current.append(new_type)
         self._write_csv(current)
         return new_type
 
-    def update_type(self, type_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def update_type(self, id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         current = self._read_csv()
         updated = None
         for t in current:
-            if t['type_id'] == type_id:
-                if 'type_name' in data: t['type_name'] = str(data['type_name'])
-                if 'type_functions' in data: t['type_functions'] = data['type_functions']
+            if t['id'] == id:
+                if 'name' in data: t['name'] = str(data['name'])
+                if 'functions' in data: t['functions'] = data['functions']
                 updated = t
                 break
         if updated:
@@ -79,10 +79,10 @@ class CameraTypeLogic:
             return updated
         return None
 
-    def delete_type(self, type_id: str) -> bool:
+    def delete_type(self, id: str) -> bool:
         current = self._read_csv()
         initial = len(current)
-        current = [t for t in current if t['type_id'] != type_id]
+        current = [t for t in current if t['id'] != id]
         if len(current) < initial:
             self._write_csv(current)
             return True
