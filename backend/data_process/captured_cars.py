@@ -9,6 +9,10 @@ from backend.data_process._common import (
     CAR_HEADERS, LOG_HEADERS, DATA_DIR, LOGS_DIR, _generate_id, _read_csv, 
     _get_today_date, _ensure_dirs, _write_lock, _init_csv_if_needed
 )
+import shutil
+
+CAR_HISTORY_DIR = Path("database/car_history")
+EXPIRATION_HOURS = 48
 
 
 def _get_car_csv_path(date: Optional[str] = None) -> Path:
@@ -197,3 +201,37 @@ def get_detection_logs(camera_id: Optional[str] = None, date: Optional[str] = No
     
     # Return most recent first, limited
     return list(reversed(logs))[:limit]
+
+
+def cleanup_expired_car_history_folders() -> int:
+    """Remove car history folders older than 48 hours.
+    
+    Returns: Number of folders deleted
+    """
+    if not CAR_HISTORY_DIR.exists():
+        return 0
+        
+    folders = list(CAR_HISTORY_DIR.iterdir())
+    now = datetime.now()
+    deleted_count = 0
+    
+    for f in folders:
+        if not f.is_dir():
+            continue
+            
+        name = f.name  # dd-mm-yyyy
+        try:
+            # Try parsing multiple formats if needed, but currently it's dd-mm-yyyy
+            folder_date = datetime.strptime(name, "%d-%m-%Y")
+            age = now - folder_date
+            
+            # Use strict > 48 hours check
+            if age > timedelta(hours=EXPIRATION_HOURS):
+                shutil.rmtree(f)
+                deleted_count += 1
+                print(f"[cleanup] Deleted expired car history folder: {name}")
+        except ValueError:
+            pass  # Skip folders that don't match date format
+            
+    return deleted_count
+

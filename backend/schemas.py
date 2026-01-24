@@ -51,7 +51,7 @@ class CameraBase(BaseModel):
     detection_mode: str = "disabled"
 
 class CameraCreate(CameraBase):
-    pass
+    id: Optional[Union[str, int, float]] = None
 
 class CameraUpdate(BaseModel):
     name: Optional[str] = None
@@ -128,6 +128,7 @@ class CapturedCar(BaseModel):
     confidence: Union[float, str] = ""
     class_name: str = ""
     bbox: Optional[Union[List[Any], str]] = None
+    volume: Union[float, str] = ""
 
 class ExecuteDetectionRequest(BaseModel):
     force: bool = False

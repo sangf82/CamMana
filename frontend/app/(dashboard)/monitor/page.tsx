@@ -50,12 +50,20 @@ interface DetectionResult {
   snapshot_url?: string;
   folder_path?: string;
   uuid?: string;
+  volume?: number;
+  top_image_url?: string;
 }
 
 interface EventLogEntry {
   time: string;
   message: string;
   type: "info" | "success" | "warning" | "error";
+}
+
+interface Location {
+  id: string;
+  name: string;
+  tag: string;
 }
 
 function MonitorPageContent() {
@@ -72,17 +80,32 @@ function MonitorPageContent() {
   // Data State
   const [logs, setLogs] = useState<EventLogEntry[]>([]);
   const [cameras, setCameras] = useState<Camera[]>([]);
-  const [activeCameras, setActiveCameras] = useState<Record<string, string>>({});
-  const [connectingCameras, setConnectingCameras] = useState<Set<string>>(new Set());
-  const [streamInfo, setStreamInfo] = useState<{ resolution: string; fps: number } | null>(null);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [camTypes, setCamTypes] = useState<any[]>([]);
+  const [activeCameras, setActiveCameras] = useState<Record<string, string>>(
+    {},
+  );
+  const [connectingCameras, setConnectingCameras] = useState<Set<string>>(
+    new Set(),
+  );
+  const [streamInfo, setStreamInfo] = useState<{
+    resolution: string;
+    fps: number;
+  } | null>(null);
 
   // Detection State
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentDetection, setCurrentDetection] = useState<DetectionResult | null>(null);
+  const [currentDetection, setCurrentDetection] =
+    useState<DetectionResult | null>(null);
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
-  const [capturedImages, setCapturedImages] = useState<{ front?: string; side?: string }>({});
+  const [capturedImages, setCapturedImages] = useState<{
+    front?: string;
+    side?: string;
+  }>({});
   const [showEvidenceModal, setShowEvidenceModal] = useState(false);
-  const [evidenceActiveTab, setEvidenceActiveTab] = useState<"front" | "side">("front");
+  const [evidenceActiveTab, setEvidenceActiveTab] = useState<"front" | "side">(
+    "front",
+  );
   const [currentTimeIn, setCurrentTimeIn] = useState<string | null>(null);
 
   // Edit Modal State
@@ -92,7 +115,7 @@ function MonitorPageContent() {
   const [editNote, setEditNote] = useState("");
 
   const STORAGE_KEY = "monitor_pending_detection";
-  
+
   // Load from sessionStorage
   useEffect(() => {
     try {
@@ -112,7 +135,12 @@ function MonitorPageContent() {
   // Save to sessionStorage
   useEffect(() => {
     if (currentDetection || snapshotUrl || currentTimeIn) {
-      const data = { currentDetection, snapshotUrl, capturedImages, currentTimeIn };
+      const data = {
+        currentDetection,
+        snapshotUrl,
+        capturedImages,
+        currentTimeIn,
+      };
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     }
   }, [currentDetection, snapshotUrl, capturedImages, currentTimeIn]);
@@ -125,28 +153,48 @@ function MonitorPageContent() {
     sessionStorage.removeItem(STORAGE_KEY);
   }, []);
 
-  const addLog = useCallback((message: string, type: EventLogEntry["type"] = "info") => {
-    const time = new Date().toLocaleTimeString("vi-VN");
-    setLogs((prev) => {
-      // Skip duplicate messages within 2s
-      if (prev.length > 0 && prev[0].message === message && prev[0].time === time) {
-        return prev;
-      }
-      return [{ time, message, type }, ...prev.slice(0, 49)];
-    });
-  }, []);
+  const addLog = useCallback(
+    (message: string, type: EventLogEntry["type"] = "info") => {
+      const time = new Date().toLocaleTimeString("vi-VN");
+      setLogs((prev) => {
+        // Skip duplicate messages within 2s
+        if (
+          prev.length > 0 &&
+          prev[0].message === message &&
+          prev[0].time === time
+        ) {
+          return prev;
+        }
+        return [{ time, message, type }, ...prev.slice(0, 49)];
+      });
+    },
+    [],
+  );
 
   // 1. Load Data & Sync Filter
   useEffect(() => {
     const loadCameras = async () => {
       try {
-        const res = await fetch("/api/cameras/saved");
-        if (res.ok) {
-          const data = await res.json();
+        const [resCam, resLoc, resTypes] = await Promise.all([
+          fetch("/api/cameras/saved"),
+          fetch("/api/cameras/locations"),
+          fetch("/api/cameras/types")
+        ]);
+        
+        if (resCam.ok) {
+          const data = await resCam.json();
           setCameras(data);
         }
+        if (resLoc.ok) {
+           const data = await resLoc.json();
+           setLocations(data);
+        }
+        if (resTypes.ok) {
+            const data = await resTypes.json();
+            setCamTypes(data);
+        }
       } catch (e) {
-        console.error("Failed to load cameras", e);
+        console.error("Failed to load data", e);
       }
     };
     loadCameras();
@@ -161,37 +209,44 @@ function MonitorPageContent() {
   // 2. Auto-connect cameras
   const filteredCameras = React.useMemo(
     () => cameras.filter((c) => c.location === currentGate),
-    [cameras, currentGate]
+    [cameras, currentGate],
   );
 
+  // Helper to check functions
+  const hasFunction = useCallback((cam: Camera, func: string) => {
+    const typeObj = camTypes.find(t => t.name === cam.type || t.id === cam.type);
+    if (!typeObj || !typeObj.functions) return false;
+    return typeObj.functions.includes(func);
+  }, [camTypes]);
+
   const frontCamera = React.useMemo(() => {
-    const typeLower = (c: Camera) => (c.type || "").toLowerCase();
-    const nameLower = (c: Camera) => (c.name || "").toLowerCase();
-    return filteredCameras.find((c) => 
-      c.tag === "front_cam" || 
-      typeLower(c).includes("plate") || 
-      typeLower(c).includes("biển số") ||
-      typeLower(c).includes("bien so") ||
-      nameLower(c).includes("trước") ||
-      nameLower(c).includes("truoc") ||
-      nameLower(c).includes("front")
+    return filteredCameras.find(
+      (c) => 
+        c.tag === "front_cam" || 
+        hasFunction(c, "plate_detect") || 
+        (c.type || "").toLowerCase().includes("plate") // Fallback
     );
-  }, [filteredCameras]);
+  }, [filteredCameras, hasFunction]);
 
   const sideCamera = React.useMemo(() => {
-    const typeLower = (c: Camera) => (c.type || "").toLowerCase();
-    const nameLower = (c: Camera) => (c.name || "").toLowerCase();
-    return filteredCameras.find((c) => 
-      c.tag === "side_cam" || 
-      typeLower(c).includes("color") || 
-      typeLower(c).includes("wheel") ||
-      typeLower(c).includes("màu") ||
-      typeLower(c).includes("bánh") ||
-      nameLower(c).includes("hông") ||
-      nameLower(c).includes("hong") ||
-      nameLower(c).includes("side")
+    return filteredCameras.find(
+      (c) =>
+        c.tag === "side_cam" ||
+        hasFunction(c, "color_detect") ||
+        hasFunction(c, "wheel_detect") ||
+        (hasFunction(c, "volume_detect") && !hasFunction(c, "box_detect")) || // Side volume
+         (c.type || "").toLowerCase().includes("side") // Fallback
     );
-  }, [filteredCameras]);
+  }, [filteredCameras, hasFunction]);
+
+  const topCamera = React.useMemo(() => {
+    return filteredCameras.find(
+      (c) =>
+        c.tag === "top_cam" ||
+        hasFunction(c, "box_detect") || // Top usually does box/tracking
+        ((c.type || "").toLowerCase().includes("top")) // Fallback
+    );
+  }, [filteredCameras, hasFunction]);
 
   useEffect(() => {
     if (!currentGate || filteredCameras.length === 0) return;
@@ -227,7 +282,9 @@ function MonitorPageContent() {
             const activeId = data.id;
             setActiveCameras((prev) => ({ ...prev, [cam.id]: activeId }));
             addLog(`✓ Đã kết nối ${cam.name}`, "success");
-            await fetch(`/api/cameras/${activeId}/stream/start`, { method: "POST" });
+            await fetch(`/api/cameras/${activeId}/stream/start`, {
+              method: "POST",
+            });
           } else {
             addLog(`✗ Lỗi kết nối ${cam.name}: ${data.error}`, "error");
           }
@@ -295,18 +352,34 @@ function MonitorPageContent() {
 
   // Detection Request
   const handleManualDetection = async () => {
-    if (!frontCamera) {
-      toast.error("Không tìm thấy camera trước (biển số)");
-      return;
+    // Determine Location Type
+    const location = locations.find(l => l.name === currentGate);
+    const isVolumeGate = location?.tag === "Đo thể tích";
+
+    // Camera Selection Logic
+    // If Volume Gate, we can accept Side Camera as the Identity Camera (Front)
+    // if a dedicated Front Camera is missing.
+    let identityCamId = frontCamera ? getActiveId(frontCamera) : undefined;
+    
+    if (!identityCamId && isVolumeGate && sideCamera) {
+       identityCamId = getActiveId(sideCamera);
     }
 
-    const frontActiveId = getActiveId(frontCamera);
-    if (!frontActiveId) {
-      toast.error("Camera trước chưa được kết nối");
+    if (!identityCamId) {
+      if (isVolumeGate) toast.error("Cần ít nhất Camera Trước hoặc Hông (để nhận diện)");
+      else toast.error("Không tìm thấy camera trước (biển số)");
       return;
     }
 
     const sideActiveId = sideCamera ? getActiveId(sideCamera) : undefined;
+    const topActiveId = topCamera ? getActiveId(topCamera) : undefined;
+    
+    // For Volume Gate, check Top Camera
+    if (isVolumeGate && !topActiveId) {
+        toast.warning("Thiếu Camera Trên - Không thể đo thể tích");
+    }
+
+    const frontActiveId = identityCamId; // Alias for API request check
 
     setIsProcessing(true);
     addLog("Đang chụp và phân tích...", "info");
@@ -318,6 +391,7 @@ function MonitorPageContent() {
         body: JSON.stringify({
           front_camera_id: frontActiveId,
           side_camera_id: sideActiveId || null,
+          top_camera_id: topActiveId || null,
           location_id: frontCamera.location_id || currentGate,
           location_name: currentGate,
         }),
@@ -325,7 +399,7 @@ function MonitorPageContent() {
 
       if (res.ok) {
         const data = await res.json();
-        
+
         if (data.success) {
           const result: DetectionResult = {
             plate_number: data.plate || null,
@@ -333,10 +407,12 @@ function MonitorPageContent() {
             wheel_count: data.wheel_count || 0,
             confidence: data.confidence || 0,
             matched: !!data.matched,
+            volume: data.volume,
             registered_info: data.registered_info,
             snapshot_url: data.snapshot_url,
             folder_path: data.folder_path,
             uuid: data.uuid,
+            top_image_url: data.top_image_url,
           };
 
           setCurrentDetection(result);
@@ -346,11 +422,15 @@ function MonitorPageContent() {
             side: data.side_image_url || null,
           });
 
-          if (result.plate_number) addLog(`✓ Biển số: ${result.plate_number}`, "success");
+          if (result.plate_number)
+            addLog(`✓ Biển số: ${result.plate_number}`, "success");
           else addLog("⚠ Không nhận diện được biển số", "warning");
 
           if (result.color) addLog(`✓ Màu xe: ${result.color}`, "success");
-          if (result.wheel_count > 0) addLog(`✓ Số bánh: ${result.wheel_count}`, "success");
+          if (result.wheel_count > 0)
+            addLog(`✓ Số bánh: ${result.wheel_count}`, "success");
+          if (result.volume !== undefined && result.volume !== null)
+            addLog(`✓ Thể tích: ${result.volume} m³`, "success");
 
           if (result.matched) {
             addLog("✓ Xe có trong danh sách đăng ký", "success");
@@ -362,16 +442,18 @@ function MonitorPageContent() {
 
           const historyTimeIn = data.time_in;
           const historyPlate = data.history_plate;
-          
+
           if (historyTimeIn) {
             setCurrentTimeIn(historyTimeIn);
             if (historyPlate && historyPlate !== result.plate_number) {
-               result.plate_number = historyPlate;
-               setCurrentDetection(prev => prev ? {...prev, plate_number: historyPlate} : result);
+              result.plate_number = historyPlate;
+              setCurrentDetection((prev) =>
+                prev ? { ...prev, plate_number: historyPlate } : result,
+              );
             }
           } else {
-             const timeIn = new Date().toLocaleTimeString("vi-VN");
-             setCurrentTimeIn(timeIn);
+            const timeIn = new Date().toLocaleTimeString("vi-VN");
+            setCurrentTimeIn(timeIn);
           }
 
           addLog("💾 Đã lưu vào lịch sử", "info");
@@ -409,7 +491,10 @@ function MonitorPageContent() {
       });
 
       if (res.ok) {
-        addLog(`✓ Đã xác nhận xe ${currentDetection.plate_number || ""}`, "success");
+        addLog(
+          `✓ Đã xác nhận xe ${currentDetection.plate_number || ""}`,
+          "success",
+        );
         toast.success("Đã xác nhận xe vào cổng!");
         clearDetectionData();
       }
@@ -427,14 +512,17 @@ function MonitorPageContent() {
         body: JSON.stringify({
           plate: currentDetection.plate_number || "Không nhận diện",
           time_in: currentTimeIn,
-          status: "vào cổng",
+          status: "đã ra",
           verify: "xe chưa đk",
           note: "Xe không được xác thực",
         }),
       });
 
       if (res.ok) {
-        addLog(`✗ Đã từ chối xe ${currentDetection.plate_number || ""}`, "error");
+        addLog(
+          `✗ Đã từ chối xe ${currentDetection.plate_number || ""}`,
+          "error",
+        );
         toast.info("Đã cập nhật trạng thái từ chối");
       } else {
         toast.error("Lỗi khi lưu dữ liệu");
@@ -541,7 +629,7 @@ function MonitorPageContent() {
       {/* --- BOTTOM: VERIFICATION --- */}
       <div className="h-48 bg-card border border-border rounded-lg p-4 flex gap-6 shrink-0 shadow-lg">
         {/* 1. Evidence - Clickable to open modal */}
-        <div 
+        <div
           className={`w-64 bg-black rounded border border-border/50 relative overflow-hidden group ${currentDetection ? "cursor-pointer hover:border-primary/50" : ""}`}
           onClick={() => {
             if (currentDetection) {
@@ -560,7 +648,9 @@ function MonitorPageContent() {
               {/* Hover overlay */}
               {currentDetection && (
                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <span className="text-white text-xs font-medium">Nhấn để xem ảnh</span>
+                  <span className="text-white text-xs font-medium">
+                    Nhấn để xem ảnh
+                  </span>
                 </div>
               )}
             </>
@@ -569,14 +659,15 @@ function MonitorPageContent() {
               <PhotoCamera className="mr-2" /> Bằng chứng
             </div>
           )}
-
         </div>
 
         {/* 2. Comparison */}
         <div className="flex-1 flex gap-8">
           <div className="flex-1 space-y-3">
             <h4 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${currentDetection ? "bg-primary animate-pulse" : "bg-muted"}`} />
+              <div
+                className={`w-2 h-2 rounded-full ${currentDetection ? "bg-primary animate-pulse" : "bg-muted"}`}
+              />
               Kết quả AI
             </h4>
             <div className="grid grid-cols-2 gap-4">
@@ -584,7 +675,9 @@ function MonitorPageContent() {
                 <span className="block text-xs text-muted-foreground mb-1">
                   Biển số
                 </span>
-                <span className={`text-xl font-mono font-bold tracking-widest ${currentDetection?.plate_number ? "text-white" : "text-muted-foreground"}`}>
+                <span
+                  className={`text-xl font-mono font-bold tracking-widest ${currentDetection?.plate_number ? "text-white" : "text-muted-foreground"}`}
+                >
                   {currentDetection?.plate_number || "---"}
                 </span>
               </div>
@@ -592,8 +685,8 @@ function MonitorPageContent() {
                 <span className="block text-xs text-muted-foreground mb-1">
                   Thể tích
                 </span>
-                <span className="text-xl font-mono font-bold text-muted-foreground tracking-widest">
-                  ---
+                <span className={`text-xl font-mono font-bold tracking-widest ${currentDetection?.volume ? "text-white" : "text-muted-foreground"}`}>
+                  {currentDetection?.volume ? `${currentDetection.volume} m³` : "---"}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -602,18 +695,25 @@ function MonitorPageContent() {
                   <span className="block text-[10px] text-muted-foreground">
                     Màu xe
                   </span>
-                  <span className={`text-sm font-medium ${currentDetection?.color ? "text-foreground" : "text-muted-foreground"}`}>
+                  <span
+                    className={`text-sm font-medium ${currentDetection?.color ? "text-foreground" : "text-muted-foreground"}`}
+                  >
                     {currentDetection?.color || "---"}
                   </span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <TireRepair fontSize="small" className="text-muted-foreground" />
+                <TireRepair
+                  fontSize="small"
+                  className="text-muted-foreground"
+                />
                 <div>
                   <span className="block text-[10px] text-muted-foreground">
                     Số bánh
                   </span>
-                  <span className={`text-sm font-medium ${currentDetection?.wheel_count ? "text-foreground" : "text-muted-foreground"}`}>
+                  <span
+                    className={`text-sm font-medium ${currentDetection?.wheel_count ? "text-foreground" : "text-muted-foreground"}`}
+                  >
                     {currentDetection?.wheel_count || "---"}
                   </span>
                 </div>
@@ -621,7 +721,9 @@ function MonitorPageContent() {
             </div>
           </div>
           <div className="w-px bg-border my-2" />
-          <div className={`flex-1 space-y-3 ${!currentDetection?.matched ? "opacity-50" : ""}`}>
+          <div
+            className={`flex-1 space-y-3 ${!currentDetection?.matched ? "opacity-50" : ""}`}
+          >
             <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               {currentDetection?.matched ? (
                 <DriveEta className="text-green-400" fontSize="small" />
@@ -633,19 +735,27 @@ function MonitorPageContent() {
             {currentDetection?.matched && currentDetection.registered_info ? (
               <div className="space-y-2">
                 <div className="p-2 bg-green-500/10 border border-green-500/30 rounded">
-                  <span className="text-[10px] text-muted-foreground">Chủ xe</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    Chủ xe
+                  </span>
                   <p className="text-sm font-medium text-green-400">
                     {currentDetection.registered_info.owner}
                   </p>
                 </div>
                 <div className="p-2 bg-muted/20 rounded border border-border/50">
-                  <span className="text-[10px] text-muted-foreground">Model</span>
-                  <p className="text-sm">{currentDetection.registered_info.model}</p>
+                  <span className="text-[10px] text-muted-foreground">
+                    Model
+                  </span>
+                  <p className="text-sm">
+                    {currentDetection.registered_info.model}
+                  </p>
                 </div>
               </div>
             ) : (
               <div className="p-3 border border-dashed border-border rounded bg-muted/10 text-center text-sm text-muted-foreground">
-                {currentDetection ? "Xe không có trong danh sách" : "Chờ xe vào cổng..."}
+                {currentDetection
+                  ? "Xe không có trong danh sách"
+                  : "Chờ xe vào cổng..."}
               </div>
             )}
           </div>
@@ -721,7 +831,13 @@ function MonitorPageContent() {
 
 export default function MonitorPage() {
   return (
-    <Suspense fallback={<div className="h-full flex items-center justify-center">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="h-full flex items-center justify-center">
+          Loading...
+        </div>
+      }
+    >
       <MonitorPageContent />
     </Suspense>
   );

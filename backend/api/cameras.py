@@ -33,7 +33,7 @@ async def get_cameras():
             "connected": cam["manager"].connected,
             "streaming": streamer.is_streaming if streamer else False,
             "stream_uri": cam["manager"].stream_uri,
-            "tag": detection_service._camera_tags.get(cam_id),
+            "tag": cam.get('tag'),
             "detection_mode": cam.get("detection_mode", "disabled"),
             "auto_detection_running": detection_service.is_auto_detection_running(cam_id),
             "stream_info": streamer.get_stream_info() if streamer and streamer.is_streaming else None
@@ -54,12 +54,12 @@ async def save_camera_config(camera: CameraCreate):
     loc_name = cam_data.get('location')
     if loc_name:
         locations = data_process.get_locations()
-        match = next((l for l in locations if l.get('name') == loc_name), None)
+        match = next((l for l in locations if l.name == loc_name), None)
         if match:
-            if match.get('id'):
-                cam_data['location_id'] = match['id']
-            if match.get('tag'):
-                cam_data['tag'] = match['tag']
+            if match.id:
+                cam_data['location_id'] = match.id
+            if match.tag:
+                cam_data['tag'] = match.tag
             
     data_process.save_camera(cam_data)
     return {"success": True, "id": cam_data['id']}
@@ -112,7 +112,7 @@ async def connect_camera(request: CameraConnectRequest):
         if cam["config"].ip == request.ip:
             return {"success": True, "error": f"Camera {request.ip} already connected", "id": cam_id}
     
-    if request.tag and request.tag not in ("front_cam", "side_cam"):
+    if request.tag and request.tag not in ("front_cam", "side_cam", "top_cam"):
         raise HTTPException(status_code=400, detail="Invalid tag")
     
     config = CameraConfig(ip=request.ip, port=request.port, user=request.user, password=request.password)
@@ -213,7 +213,7 @@ async def update_detection_mode(camera_id: str, request: UpdateDetectionModeRequ
 async def update_camera_tag(camera_id: str, request: UpdateCameraTagRequest):
     """Update camera tag"""
     get_camera_state(camera_id)
-    if request.tag and request.tag not in ("front_cam", "side_cam"):
+    if request.tag and request.tag not in ("front_cam", "side_cam", "top_cam"):
         raise HTTPException(status_code=400, detail="Invalid tag")
     get_detection_service().set_camera_tag(camera_id, request.tag)
     return {"success": True, "tag": request.tag}

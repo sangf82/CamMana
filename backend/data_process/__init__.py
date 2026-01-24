@@ -28,11 +28,22 @@ from backend.data_process.history import (
     initialize_today_file as initialize_history_today
 )
 
+def update_history(data: dict):
+    """Wrapper for update_history_record accepting a dict"""
+    plate = data.get('plate')
+    time_in = data.get('time_in')
+    if plate and time_in:
+        # Extract updates (exclude keys used for lookup)
+        updates = {k: v for k, v in data.items() if k not in ['plate', 'time_in']}
+        update_history_record(plate, time_in, updates)
+
+
 # Captured Cars & Logs
 from backend.data_process.captured_cars import (
     save_captured_car, get_captured_cars, get_captured_cars_range,
     search_by_plate, get_available_dates, get_daily_stats,
-    log_detection_event, get_detection_logs
+    log_detection_event, get_detection_logs,
+    cleanup_expired_car_history_folders
 )
 
 # Configuration
@@ -57,12 +68,12 @@ __all__ = [
     'get_history_data', 'save_history_record', 'save_history_data',
     'get_history_date_range', 'get_available_history_dates',
     'update_history_record',
-    'cleanup_history_files', 'initialize_history_today',
+    'cleanup_history_files', 'initialize_history_today', 'update_history',
     
     # Captured Cars & Logs
     'save_captured_car', 'get_captured_cars', 'get_captured_cars_range',
     'search_by_plate', 'get_available_dates', 'get_daily_stats',
-    'log_detection_event', 'get_detection_logs',
+    'log_detection_event', 'get_detection_logs', 'cleanup_expired_car_history_folders',
     
     # Configuration
     'get_locations', 'save_locations', 'get_cam_types', 'save_cam_types',

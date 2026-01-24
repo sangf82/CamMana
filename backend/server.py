@@ -106,6 +106,11 @@ def run_server(host: str = config.HOST, port: int = config.PORT):
             print("[cam_mana] Created today's registered cars file")
         if data_process.initialize_history_today():
             print("[cam_mana] Created today's history file")
+            
+        # Cleanup expired car history folders
+        deleted = data_process.cleanup_expired_car_history_folders()
+        if deleted > 0:
+            print(f"[cam_mana] Cleaned up {deleted} expired car history folders")
     except Exception as e:
         print(f"[cam_mana] Warning: Failed to initialize daily files: {e}")
     

@@ -69,6 +69,7 @@ async def check_api_health():
 class CaptureAndProcessRequest(BaseModel):
     front_camera_id: str
     side_camera_id: Optional[str] = None
+    top_camera_id: Optional[str] = None
     location_id: str
     location_name: Optional[str] = None
 
@@ -82,11 +83,13 @@ class CaptureResponse(BaseModel):
     color_confidence: float = 0.0
     wheel_count: int = 0
     wheel_confidence: float = 0.0
+    volume: Optional[float] = None
     status: Optional[str] = None
     matched: bool = False
     registered_info: Optional[Dict[str, Any]] = None
     front_image_url: Optional[str] = None
     side_image_url: Optional[str] = None
+    top_image_url: Optional[str] = None
     duration: float = 0.0
     time_in: Optional[str] = None
     history_plate: Optional[str] = None
@@ -128,11 +131,12 @@ async def capture_and_process(request: CaptureAndProcessRequest):
             )
 
         side_frame = get_frame(request.side_camera_id) if request.side_camera_id else None
+        top_frame = get_frame(request.top_camera_id) if request.top_camera_id else None
         
-        # Fallback if side camera fails or not provided
+        # Fallback if side camera fails or not provided (use front as dummy)
         if side_frame is None:
             side_frame = front_frame
-        
+            
         # Save frames to temp files
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as front_temp:
             await asyncio.to_thread(cv2.imwrite, front_temp.name, front_frame)
@@ -141,8 +145,14 @@ async def capture_and_process(request: CaptureAndProcessRequest):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as side_temp:
             await asyncio.to_thread(cv2.imwrite, side_temp.name, side_frame)
             side_path = Path(side_temp.name)
+            
+        top_path = None
+        if top_frame is not None:
+             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as top_temp:
+                await asyncio.to_thread(cv2.imwrite, top_temp.name, top_frame)
+                top_path = Path(top_temp.name)
         
-        # Process check-in
+        # Process check-in (Core AI tasks: Plate, Color, Wheels)
         date_str = datetime.now().strftime("%d-%m-%Y")
         result = await checkin_service.process_checkin(
             front_image_path=front_path,
@@ -151,9 +161,89 @@ async def capture_and_process(request: CaptureAndProcessRequest):
             date_str=date_str
         )
         
+        # --- Volume Estimation ---
+        volume_val = None
+        if top_path and result.folder_path:
+            # Save top image to folder
+            folder = Path(result.folder_path)
+            shutil.copy2(top_path, folder / f"top_{result.uuid}.jpg")
+            
+            # Prepare for Volume API
+            from backend.car_process.functions.volume_detection import estimate_volume
+            
+            # Paths
+            calib_dir = Path("database/calibration")
+            bg_dir = Path("database/backgrounds")
+            
+            # For simplicity, using default/dummy files if specifics not found
+            # Ideal: calib_side_{cam_id}.json
+            calib_side = calib_dir / "calib_side.json"
+            calib_top = calib_dir / "calib_topdown.json"
+            
+            # Try to find a background for this top camera or location
+            # Ideally: bg_{top_cam_id}.jpg
+            # For now, searching for ANY jpg in backgrounds or skipping
+            bg_image = None
+            if bg_dir.exists():
+                bgs = list(bg_dir.glob("*.jpg"))
+                if bgs: bg_image = bgs[0]
+            
+            if calib_side.exists() and calib_top.exists() and bg_image:
+                 print(f"[API] Starting volume estimation...")
+                 # Start volume estimation in background or await? 
+                 # Await for now to return result immediately
+                 volume_res = await estimate_volume(
+                     side_image_path=side_path,
+                     top_fg_image_path=top_path,
+                     top_bg_image_path=bg_image,
+                     side_calib_path=calib_side,
+                     top_calib_path=calib_top
+                 )
+                 
+                 # Save volume to history record if successful
+                 if volume_res is not None:
+                     volume_val = volume_res.get("volume")
+                     
+                     # Save full volume JSON to folder
+                     try:
+                         vol_file = folder / "volume_estimation.json"
+                         with open(vol_file, "w", encoding="utf-8") as f:
+                             json.dump(volume_res, f, indent=4, ensure_ascii=False)
+                         print(f"[API] Saved volume JSON to {vol_file}")
+                     except Exception as e:
+                         print(f"[API] Error saving volume json: {e}")
+                     
+                     from backend.data_process import update_history
+                     
+                     # Update checkin_status.json as well if possible
+                     try:
+                         status_file = folder / "checkin_status.json"
+                         if status_file.exists():
+                             with open(status_file, "r+", encoding="utf-8") as f:
+                                 status_data = json.load(f)
+                                 status_data["volume"] = volume_val
+                                 status_data["volume_data_file"] = "volume_estimation.json"
+                                 f.seek(0)
+                                 json.dump(status_data, f, indent=4, ensure_ascii=False)
+                                 f.truncate()
+                     except Exception as e:
+                         print(f"[API] Error updating checkin_status.json: {e}")
+
+                     # CheckInResult has .history_record which is the dict
+                     if result.history_record:
+                         # Update local variable
+                         result.history_record['vol_measured'] = str(volume_val)
+                         # Persist to CSV
+                         update_history({
+                             'plate': result.plate_number,
+                             'time_in': result.history_record.get('time_in'),
+                             'vol_measured': str(volume_val)
+                         })
+                         
         # Cleanup temp files
         front_path.unlink(missing_ok=True)
         side_path.unlink(missing_ok=True)
+        if top_path: top_path.unlink(missing_ok=True)
         
         # Match with registered cars
         from backend.data_process import find_registered_car
@@ -176,6 +266,7 @@ async def capture_and_process(request: CaptureAndProcessRequest):
         # Generate Image URLs
         front_image_url = None
         side_image_url = None
+        top_image_url = None
         
         if result.folder_path:
             folder = Path(result.folder_path)
@@ -189,14 +280,16 @@ async def capture_and_process(request: CaptureAndProcessRequest):
                     url = f"/api/images/{parent_name}/{folder_name}/{img.name}"
                     if "front" in img_name or "plate" in img_name:
                         front_image_url = url
-                    elif "side" in img_name or "color" in img_name or "wheel" in img_name:
-                        side_image_url = url
+                    elif "side" in img_name or "row-crop" in img_name: # row-crop is usually side
+                         if not side_image_url: side_image_url = url # prioritization
+                    elif "top" in img_name:
+                        top_image_url = url
                 
-                # Fallback
+                # Fallback Logic
                 if not front_image_url and images:
                     front_image_url = f"/api/images/{parent_name}/{folder_name}/{images[0].name}"
                 if not side_image_url and len(images) > 1:
-                    side_image_url = f"/api/images/{parent_name}/{folder_name}/{images[1].name}"
+                     side_image_url = f"/api/images/{parent_name}/{folder_name}/{images[1].name}"
 
         total_duration = time.time() - start_total
         print(f"[API] capture-and-process completed in {total_duration:.2f}s")
@@ -211,12 +304,14 @@ async def capture_and_process(request: CaptureAndProcessRequest):
             color_confidence=result.color_confidence,
             wheel_count=result.wheel_count,
             wheel_confidence=result.wheel_confidence,
+            volume=volume_val,
             status=result.status,
             matched=matched,
             registered_info=registered_info,
             confidence=result.plate_confidence,
             front_image_url=front_image_url,
             side_image_url=side_image_url,
+            top_image_url=top_image_url,
             duration=total_duration,
             time_in=result.history_record.get("time_in") if result.history_record else None,
             history_plate=result.history_record.get("plate") if result.history_record else None
