@@ -38,6 +38,13 @@ class VideoStreamer:
         # Camera info for image naming
         self.cam_name = "Unknown"
         self.cam_location = "Unknown"
+        
+        # Stream info for resolution and FPS
+        self._width = 0
+        self._height = 0
+        self._fps = 0.0
+        self._fps_calc_frames = 0
+        self._fps_calc_start = 0.0
     
     def set_camera_info(self, name: str = None, location: str = None):
         if name: self.cam_name = name
@@ -56,6 +63,14 @@ class VideoStreamer:
                     self.frame_count += 1
                     self._last_frame_time = time.time()
                     self._reconnect_attempts = 0
+                    
+                    # Calculate FPS
+                    self._fps_calc_frames += 1
+                    elapsed = time.time() - self._fps_calc_start
+                    if elapsed >= 1.0:
+                        self._fps = self._fps_calc_frames / elapsed
+                        self._fps_calc_frames = 0
+                        self._fps_calc_start = time.time()
                     
                     # Manage queue
                     try:
@@ -106,6 +121,11 @@ class VideoStreamer:
             
             self.is_streaming = self.cap.isOpened()
             if self.is_streaming:
+                # Capture resolution
+                self._width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                self._height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                self._fps_calc_start = time.time()
+                self._fps_calc_frames = 0
                 self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
                 self.capture_thread.start()
             return self.is_streaming
@@ -166,3 +186,13 @@ class VideoStreamer:
         if self.last_frame is not None:
             return self.last_frame.copy()
         return None
+
+    def get_stream_info(self) -> Dict[str, Any]:
+        """Get current stream resolution and FPS."""
+        resolution = f"{self._width}x{self._height}" if self._width > 0 else "N/A"
+        return {
+            "resolution": resolution,
+            "width": self._width,
+            "height": self._height,
+            "fps": round(self._fps, 1)
+        }

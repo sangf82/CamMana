@@ -224,3 +224,11 @@ def capture_image(cam_id: str):
     if cam_id not in active_cameras:
          raise HTTPException(404, "Camera not connected")
     return active_cameras[cam_id]['streamer'].capture_image()
+
+# Stream Info
+@router.get("/{cam_id}/stream-info")
+def get_stream_info(cam_id: str):
+    """Get stream resolution and FPS for a connected camera."""
+    if cam_id not in active_cameras:
+        raise HTTPException(404, "Camera not connected")
+    return active_cameras[cam_id]['streamer'].get_stream_info()

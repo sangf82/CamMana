@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from backend.config import DATA_DIR
+from backend.data_process._sync import CameraDataSync
 
 logger = logging.getLogger(__name__)
 
@@ -68,22 +69,48 @@ class CameraTypeLogic:
     def update_type(self, id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         current = self._read_csv()
         updated = None
+        old_name = None
+        
         for t in current:
             if t['id'] == id:
+                old_name = t['name']  # Save old name for sync
+                
                 if 'name' in data: t['name'] = str(data['name'])
                 if 'functions' in data: t['functions'] = data['functions']
                 updated = t
                 break
+        
         if updated:
             self._write_csv(current)
+            
+            # Sync: Update cameras that have this type
+            new_name = updated['name']
+            if old_name and old_name != new_name:
+                CameraDataSync.sync_camtype_name(old_name, new_name)
+                logger.info(f"Camera type '{old_name}' -> '{new_name}': synced to cameras")
+            
             return updated
         return None
 
     def delete_type(self, id: str) -> bool:
         current = self._read_csv()
         initial = len(current)
+        
+        # Find the type name before deleting
+        type_name = None
+        for t in current:
+            if t['id'] == id:
+                type_name = t['name']
+                break
+        
         current = [t for t in current if t['id'] != id]
         if len(current) < initial:
             self._write_csv(current)
+            
+            # Sync: Clear type references in cameras
+            if type_name:
+                CameraDataSync.remove_camtype_references(type_name)
+                logger.info(f"Camera type '{type_name}' deleted: cleared from cameras")
+            
             return True
         return False

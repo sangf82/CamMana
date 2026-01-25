@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any
 from backend.config import DATA_DIR
 from backend.data_process._common import LOCATION_HEADERS
+from backend.data_process._sync import CameraDataSync
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ class LocationLogic:
     FILE_NAME = "locations.csv"
     
     # Valid tags
-    TAGS = ["check-in", "check-out", "basic", "Đo thể tích", "Cổng vào", "Cổng ra"] # Add legacy tags if needed
+    TAGS = ["check-in", "check-out", "basic", "Đo thể tích", "Cổng vào", "Cổng ra"]
 
     def __init__(self):
         self.file_path = DATA_DIR / self.FILE_NAME
@@ -46,10 +47,6 @@ class LocationLogic:
         # Mapping for API compatibility if API sends long keys
         name = data.get('name') or data.get('location_name')
         tag = data.get('tag') or data.get('location_tag')
-        
-        # Loose validation for now to support diverse tags
-        # if tag not in self.TAGS:
-        #      raise ValueError(f"Invalid tag. Must be one of {self.TAGS}")
 
         new_loc = {
             "id": str(uuid.uuid4()),
@@ -65,9 +62,12 @@ class LocationLogic:
     def update_location(self, loc_id: str, data: Dict[str, Any]) -> Optional[Dict[str, str]]:
         current = self._read_csv()
         updated_loc = None
+        old_name = None
         
         for loc in current:
             if loc['id'] == loc_id:
+                old_name = loc['name']  # Save old name for sync
+                
                 if 'name' in data: loc['name'] = str(data['name'])
                 if 'location_name' in data: loc['name'] = str(data['location_name'])
                 
@@ -79,6 +79,13 @@ class LocationLogic:
         
         if updated_loc:
             self._write_csv(current)
+            
+            # Sync: Update cameras that reference this location
+            new_name = updated_loc['name']
+            if old_name != new_name:
+                CameraDataSync.sync_location_name(loc_id, new_name)
+                logger.info(f"Location '{old_name}' -> '{new_name}': synced to cameras")
+            
             return updated_loc
         return None
 
@@ -88,5 +95,10 @@ class LocationLogic:
         current = [l for l in current if l['id'] != loc_id]
         if len(current) < initial_len:
             self._write_csv(current)
+            
+            # Sync: Clear location references in cameras
+            CameraDataSync.remove_location_references(loc_id)
+            logger.info(f"Location {loc_id} deleted: cleared from cameras")
+            
             return True
         return False

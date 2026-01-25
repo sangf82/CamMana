@@ -1,5 +1,5 @@
 import React from "react";
-import { GridView, CropFree, PhotoCamera } from "@mui/icons-material";
+import { GridView, CropFree, PhotoCamera, ControlCamera } from "@mui/icons-material";
 import VideoPlayer from "../../../components/features/monitoring/VideoPlayer";
 import { toast } from "sonner";
 
@@ -30,7 +30,10 @@ interface CameraGridProps {
   mainCamera: Camera | undefined;
   streamInfo: { resolution: string; fps: number } | null;
   addLog: (message: string, type: "success" | "info" | "error" | "warning") => void;
+  onPtzClick?: () => void;
+  isPtzActive?: boolean;
 }
+
 
 export default function CameraGrid({
   viewMode,
@@ -43,6 +46,8 @@ export default function CameraGrid({
   mainCamera,
   streamInfo,
   addLog,
+  onPtzClick,
+  isPtzActive,
 }: CameraGridProps) {
   return (
     <div className="flex-1 flex flex-col gap-1">
@@ -214,33 +219,50 @@ export default function CameraGrid({
                   </div>
                 </div>
 
-                <button
-                  onClick={async () => {
-                    const activeId = getActiveId(mainCamera);
-                    if (!activeId) return;
-                    try {
-                      const res = await fetch(
-                        `/api/cameras/${activeId}/capture`,
-                        { method: "POST" }
-                      );
-                      if (res.ok) {
-                        const data = await res.json();
-                        if (data.success) {
-                          toast.success(`Đã chụp ảnh: ${data.filename}`);
-                          addLog(`📸 Chụp ảnh: ${data.filename}`, "success");
-                        } else {
-                          toast.error(`Lỗi: ${data.error}`);
+                <div className="flex items-center gap-2">
+                  {/* PTZ Button */}
+                  <button
+                    onClick={onPtzClick}
+                    className={`flex items-center gap-2 px-4 py-2 font-semibold rounded-md transition-colors ${
+                      isPtzActive 
+                        ? "bg-blue-700 text-white ring-2 ring-blue-400" 
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                    title="Điều khiển PTZ"
+                  >
+                    <ControlCamera fontSize="small" />
+                    PTZ
+                  </button>
+
+                  {/* Capture Button */}
+                  <button
+                    onClick={async () => {
+                      const activeId = getActiveId(mainCamera);
+                      if (!activeId) return;
+                      try {
+                        const res = await fetch(
+                          `/api/cameras/${activeId}/capture`,
+                          { method: "POST" }
+                        );
+                        if (res.ok) {
+                          const data = await res.json();
+                          if (data.success) {
+                            toast.success(`Đã chụp ảnh: ${data.filename}`);
+                            addLog(`📸 Chụp ảnh: ${data.filename}`, "success");
+                          } else {
+                            toast.error(`Lỗi: ${data.error}`);
+                          }
                         }
+                      } catch (e) {
+                        toast.error("Lỗi khi chụp ảnh");
                       }
-                    } catch (e) {
-                      toast.error("Lỗi khi chụp ảnh");
-                    }
-                  }}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-black font-semibold rounded-md hover:bg-primary/90 transition-colors"
-                >
-                  <PhotoCamera fontSize="small" />
-                  Chụp ảnh
-                </button>
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-black font-semibold rounded-md hover:bg-primary/90 transition-colors"
+                  >
+                    <PhotoCamera fontSize="small" />
+                    Chụp ảnh
+                  </button>
+                </div>
               </div>
             )}
           </div>

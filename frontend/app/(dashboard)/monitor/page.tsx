@@ -78,6 +78,7 @@ function MonitorPageContent() {
   const [isAutoDetect, setIsAutoDetect] = useState(false);
   const [selectedCameraIndex, setSelectedCameraIndex] = useState(0);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showPtzPanel, setShowPtzPanel] = useState(false);
 
   // Data State
   const [logs, setLogs] = useState<EventLogEntry[]>([]);
@@ -312,9 +313,15 @@ function MonitorPageContent() {
 
   const mainCamera = filteredCameras[selectedCameraIndex] || filteredCameras[0];
 
+  // Reset camera index when gate changes
   useEffect(() => {
     setSelectedCameraIndex(0);
   }, [currentGate]);
+
+  // Auto-close PTZ panel when switching cameras to avoid conflicts
+  useEffect(() => {
+    setShowPtzPanel(false);
+  }, [mainCamera?.id]);
 
   useEffect(() => {
     const activeId = mainCamera ? activeCameras[mainCamera.id] : null;
@@ -325,19 +332,16 @@ function MonitorPageContent() {
 
     const fetchStreamInfo = async () => {
       try {
-        const res = await fetch("/api/cameras");
+        const res = await fetch(`/api/cameras/${activeId}/stream-info`);
         if (res.ok) {
-          const cameras = await res.json();
-          const cam = cameras.find((c: { id: string }) => c.id === activeId);
-          if (cam?.stream_info) {
-            setStreamInfo({
-              resolution: cam.stream_info.resolution || "N/A",
-              fps: cam.stream_info.fps || 0,
-            });
-          }
+          const data = await res.json();
+          setStreamInfo({
+            resolution: data.resolution || "N/A",
+            fps: data.fps || 0,
+          });
         }
       } catch (e) {
-        // Ignore
+        // Ignore - camera may not be connected yet
       }
     };
 
@@ -705,9 +709,11 @@ function MonitorPageContent() {
           mainCamera={mainCamera}
           streamInfo={streamInfo}
           addLog={addLog}
+          onPtzClick={() => setShowPtzPanel(!showPtzPanel)}
+          isPtzActive={showPtzPanel}
         />
 
-        {/* RIGHT: AI Logs */}
+        {/* RIGHT: AI Logs / PTZ Control */}
         <EventLog
           logs={logs}
           isAutoDetect={isAutoDetect}
@@ -715,6 +721,9 @@ function MonitorPageContent() {
           handleManualDetection={handleManualDetection}
           isProcessing={isProcessing}
           currentGate={currentGate}
+          activeMainCameraId={mainCamera ? getActiveId(mainCamera) : undefined}
+          showPtzPanel={showPtzPanel}
+          onClosePtz={() => setShowPtzPanel(false)}
         />
       </div>
 

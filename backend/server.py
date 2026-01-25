@@ -117,6 +117,18 @@ def run_server(host: str = config.HOST, port: int = config.PORT):
         from backend.data_process.history.logic import HistoryLogic
         HistoryLogic()
         print("[cam_mana] History logic initialized (daily rotation & cleanup)")
+        
+        # Sync camera data with locations and camera types
+        from backend.data_process._sync import CameraDataSync
+        from backend.data_process.location.logic import LocationLogic
+        from backend.data_process.camera_type.logic import CameraTypeLogic
+        
+        locations = LocationLogic().get_locations()
+        camtypes = CameraTypeLogic().get_types()
+        result = CameraDataSync.full_sync(locations, camtypes)
+        if result['locations'] > 0 or result['types'] > 0:
+            print(f"[cam_mana] Synced cameras: {result['locations']} locations, {result['types']} types")
+        
     except Exception as e:
         print(f"[cam_mana] Warning: Failed to initialize daily files: {e}")
     
