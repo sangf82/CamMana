@@ -13,8 +13,8 @@ from backend.config import DATA_DIR, PROJECT_ROOT
 
 os.environ["OPENCV_LOG_LEVEL"] = "SILENT"
 os.environ["OPENCV_FFMPEG_LOGLEVEL"] = "-8"
-# Try to use TCP for RTSP (more stable)
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+# Force TCP for RTSP (more stable for HEVC/H.265)
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|allowed_media_types;video"
 
 class VideoStreamer:
     def __init__(self, rtsp_uri: str):

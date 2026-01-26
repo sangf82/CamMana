@@ -59,41 +59,113 @@ class PTZController:
         # Get configuration first
         self._get_ptz_configuration()
         
-        # Try multiple methods in order of compatibility
+        # Determine if we successfully moved
+        success = False
+        last_error = None
+
+        # Helper to execute move with specific vectors
+        def execute_move(p, t, z):
+            methods = [
+                self._try_continuous_move_with_space,
+                self._try_continuous_move_simple,
+                self._try_relative_move,
+            ]
+            for method in methods:
+                result = method(p, t, z, duration)
+                if result.get("success"):
+                    return True, None
+                last_error = result.get("error")
+                logger.debug(f"{method.__name__} failed: {last_error}")
+            return False, last_error
+
+        # If we have both Pan/Tilt AND Zoom, we might need to try sending them together, 
+        # but if that fails, try separately.
+        # Ideally, we construct the request based on what IS changing.
+        
+        # Strategy: Build the Velocity object only with what is needed.
+        # But the sub-methods currently take all args. We will refactor them to be smart 
+        # about what they include in the payload.
+        
+        is_moving_pt = (abs(pan) > 0 or abs(tilt) > 0)
+        is_moving_zoom = (abs(zoom) > 0)
+
+        if not is_moving_pt and not is_moving_zoom:
+             return {"success": True, "message": "No movement requested"}
+
         methods = [
+            self._try_continuous_move_smart, # New smart method
             self._try_continuous_move_simple,
             self._try_relative_move,
-            self._try_continuous_move_with_space,
         ]
         
         for method in methods:
             result = method(pan, tilt, zoom, duration)
             if result.get("success"):
                 return result
-            logger.debug(f"{method.__name__} failed, trying next...")
+            # Log the specific error for debugging
+            logger.info(f"PTZ method {method.__name__} failed: {result.get('error')}")
         
         return {"success": False, "error": "All PTZ methods failed for this camera"}
 
-    def _try_continuous_move_simple(self, pan: float, tilt: float, zoom: float, duration: float) -> Dict[str, Any]:
-        """Try simple ContinuousMove without spaces (works for some cameras)."""
+    def _try_continuous_move_smart(self, pan: float, tilt: float, zoom: float, duration: float) -> Dict[str, Any]:
+        """Try ContinuousMove enclosing ONLY the vectors that are non-zero."""
         try:
-            # Simple request without namespace/space specifications
+            velocity = {}
+            
+            if abs(pan) > 0 or abs(tilt) > 0:
+                pt_vec = {'x': pan * 0.5, 'y': tilt * 0.5}
+                if self._velocity_space:
+                    pt_vec['space'] = self._velocity_space
+                velocity['PanTilt'] = pt_vec
+            
+            if abs(zoom) > 0:
+                z_vec = {'x': zoom * 0.5}
+                # Add zoom space if we had one (rare usually)
+                velocity['Zoom'] = z_vec
+            
+            if not velocity:
+                return {"success": True}
+
             self.conn.ptz_service.ContinuousMove({
                 'ProfileToken': self.conn.profile_token,
-                'Velocity': {
-                    'PanTilt': {'x': pan * 0.5, 'y': tilt * 0.5},
-                    'Zoom': {'x': zoom * 0.5}
-                }
+                'Velocity': velocity
             })
             time.sleep(duration)
             self.stop()
             return {"success": True}
         except Exception as e:
-            logger.debug(f"Simple ContinuousMove failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    def _try_continuous_move_simple(self, pan: float, tilt: float, zoom: float, duration: float) -> Dict[str, Any]:
+        """Try simple ContinuousMove without spaces (works for some cameras)."""
+        try:
+            # Build velocity with existing components
+            velocity = {}
+            if abs(pan) > 0 or abs(tilt) > 0:
+                velocity['PanTilt'] = {'x': pan * 0.5, 'y': tilt * 0.5}
+            if abs(zoom) > 0:
+                velocity['Zoom'] = {'x': zoom * 0.5}
+
+            # If both are empty (shouldn't happen given move() logic), fallback to all-zeros structure or abort
+            if not velocity:
+                 velocity = {
+                    'PanTilt': {'x': 0, 'y': 0},
+                    'Zoom': {'x': 0}
+                 }
+
+            self.conn.ptz_service.ContinuousMove({
+                'ProfileToken': self.conn.profile_token,
+                'Velocity': velocity
+            })
+            time.sleep(duration)
+            self.stop()
+            return {"success": True}
+        except Exception as e:
             return {"success": False, "error": str(e)}
 
     def _try_continuous_move_with_space(self, pan: float, tilt: float, zoom: float, duration: float) -> Dict[str, Any]:
-        """Try ContinuousMove with explicit space URIs."""
+        """Depreciated/Legacy: Try ContinuousMove with explicit space URIs for everything (older logic)."""
+        # This is largely superseded by 'smart' but kept as fallback if 'smart' misses a subtle case
         try:
             velocity = {'x': pan * 0.5, 'y': tilt * 0.5}
             if self._velocity_space:
@@ -110,34 +182,41 @@ class PTZController:
             self.stop()
             return {"success": True}
         except Exception as e:
-            logger.debug(f"ContinuousMove with space failed: {e}")
             return {"success": False, "error": str(e)}
 
     def _try_relative_move(self, pan: float, tilt: float, zoom: float, duration: float) -> Dict[str, Any]:
         """Try RelativeMove (more compatible with some cameras)."""
         try:
             scale = 0.05  # Small step for relative move
-            translation = {'x': pan * scale, 'y': tilt * scale}
-            if self._position_space:
-                translation['space'] = self._position_space
             
+            translation = {}
+            if abs(pan) > 0 or abs(tilt) > 0:
+                 pt = {'x': pan * scale, 'y': tilt * scale}
+                 if self._position_space:
+                    pt['space'] = self._position_space
+                 translation['PanTilt'] = pt
+            
+            if abs(zoom) > 0:
+                translation['Zoom'] = {'x': zoom * scale}
+                
+            if not translation:
+                 return {"success": True}
+
             self.conn.ptz_service.RelativeMove({
                 'ProfileToken': self.conn.profile_token,
-                'Translation': {
-                    'PanTilt': translation,
-                    'Zoom': {'x': zoom * scale}
-                }
+                'Translation': translation
             })
             time.sleep(duration)
             return {"success": True}
         except Exception as e:
-            logger.debug(f"RelativeMove failed: {e}")
             return {"success": False, "error": str(e)}
 
     def stop(self) -> Dict[str, Any]:
         if not self._ensure_ptz():
              return {"success": False, "error": "PTZ not available"}
         try:
+            # Only stop what needs stopping? 
+            # Most cameras accept boolean True/False for PanTilt and Zoom
             self.conn.ptz_service.Stop({
                 'ProfileToken': self.conn.profile_token,
                 'PanTilt': True,

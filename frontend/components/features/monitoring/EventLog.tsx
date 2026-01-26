@@ -9,8 +9,6 @@ import {
   ArrowDownward,
   ArrowBack,
   ArrowForward,
-  ZoomIn,
-  ZoomOut,
   Close,
 } from "@mui/icons-material";
 import { toast } from "sonner";
@@ -93,10 +91,6 @@ export default function EventLog({
       ArrowDown: "down",
       ArrowLeft: "left",
       ArrowRight: "right",
-      "+": "zoom_in",
-      "=": "zoom_in",
-      "-": "zoom_out",
-      "_": "zoom_out",
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -154,103 +148,74 @@ export default function EventLog({
       {/* Content Area */}
       {showPtzPanel ? (
         /* PTZ Control Panel */
-        <div className="flex-1 p-4 flex flex-col justify-center">
-          {/* Direction Controls */}
-          <div className="grid grid-cols-3 gap-2 mb-4">
-            <div />
-            <button
-              onMouseDown={() => sendPtzCommand("up")}
-              onMouseUp={stopPtz}
-              onMouseLeave={stopPtz}
-              className={`p-3 rounded-lg transition-colors flex items-center justify-center ${
-                activeKey === "ArrowUp" 
-                  ? "bg-primary text-black" 
-                  : "bg-muted hover:bg-primary hover:text-black"
-              }`}
-            >
-              <ArrowUpward />
-            </button>
-            <div />
+        <div className="flex-1 p-4 flex flex-col justify-between">
+          <div className="flex-1 flex items-center justify-center">
+             {/* Direction Controls - Square Layout */}
+             <div className="grid grid-cols-3 gap-2 w-full max-w-[200px] aspect-square">
+                <div />
+                <button
+                  onMouseDown={() => sendPtzCommand("up")}
+                  onMouseUp={stopPtz}
+                  onMouseLeave={stopPtz}
+                  className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
+                    activeKey === "ArrowUp" 
+                      ? "bg-primary text-black scale-95" 
+                      : "bg-muted hover:bg-primary hover:text-black active:scale-95"
+                  }`}
+                >
+                  <ArrowUpward />
+                </button>
+                <div />
 
-            <button
-              onMouseDown={() => sendPtzCommand("left")}
-              onMouseUp={stopPtz}
-              onMouseLeave={stopPtz}
-              className={`p-3 rounded-lg transition-colors flex items-center justify-center ${
-                activeKey === "ArrowLeft" 
-                  ? "bg-primary text-black" 
-                  : "bg-muted hover:bg-primary hover:text-black"
-              }`}
-            >
-              <ArrowBack />
-            </button>
-            <div className="p-3 bg-muted/50 rounded-lg flex items-center justify-center">
-              <ControlCamera className="text-muted-foreground" />
-            </div>
-            <button
-              onMouseDown={() => sendPtzCommand("right")}
-              onMouseUp={stopPtz}
-              onMouseLeave={stopPtz}
-              className={`p-3 rounded-lg transition-colors flex items-center justify-center ${
-                activeKey === "ArrowRight" 
-                  ? "bg-primary text-black" 
-                  : "bg-muted hover:bg-primary hover:text-black"
-              }`}
-            >
-              <ArrowForward />
-            </button>
+                <button
+                  onMouseDown={() => sendPtzCommand("left")}
+                  onMouseUp={stopPtz}
+                  onMouseLeave={stopPtz}
+                  className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
+                    activeKey === "ArrowLeft" 
+                      ? "bg-primary text-black scale-95" 
+                      : "bg-muted hover:bg-primary hover:text-black active:scale-95"
+                  }`}
+                >
+                  <ArrowBack />
+                </button>
+                <div className="aspect-square bg-muted/20 rounded-lg flex items-center justify-center border border-border/30">
+                  <ControlCamera className="text-muted-foreground/50" />
+                </div>
+                <button
+                  onMouseDown={() => sendPtzCommand("right")}
+                  onMouseUp={stopPtz}
+                  onMouseLeave={stopPtz}
+                  className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
+                    activeKey === "ArrowRight" 
+                      ? "bg-primary text-black scale-95" 
+                      : "bg-muted hover:bg-primary hover:text-black active:scale-95"
+                  }`}
+                >
+                  <ArrowForward />
+                </button>
 
-            <div />
-            <button
-              onMouseDown={() => sendPtzCommand("down")}
-              onMouseUp={stopPtz}
-              onMouseLeave={stopPtz}
-              className={`p-3 rounded-lg transition-colors flex items-center justify-center ${
-                activeKey === "ArrowDown" 
-                  ? "bg-primary text-black" 
-                  : "bg-muted hover:bg-primary hover:text-black"
-              }`}
-            >
-              <ArrowDownward />
-            </button>
-            <div />
+                <div />
+                <button
+                  onMouseDown={() => sendPtzCommand("down")}
+                  onMouseUp={stopPtz}
+                  onMouseLeave={stopPtz}
+                  className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
+                    activeKey === "ArrowDown" 
+                      ? "bg-primary text-black scale-95" 
+                      : "bg-muted hover:bg-primary hover:text-black active:scale-95"
+                  }`}
+                >
+                  <ArrowDownward />
+                </button>
+                <div />
+             </div>
           </div>
 
-          {/* Zoom Controls */}
-          <div className="flex gap-2 mb-4">
-            <button
-              onMouseDown={() => sendPtzCommand("zoom_out")}
-              onMouseUp={stopPtz}
-              onMouseLeave={stopPtz}
-              className={`flex-1 p-3 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                activeKey === "-" || activeKey === "_"
-                  ? "bg-primary text-black" 
-                  : "bg-muted hover:bg-primary hover:text-black"
-              }`}
-            >
-              <ZoomOut fontSize="small" /> Thu nhỏ
-            </button>
-            <button
-              onMouseDown={() => sendPtzCommand("zoom_in")}
-              onMouseUp={stopPtz}
-              onMouseLeave={stopPtz}
-              className={`flex-1 p-3 rounded-lg transition-colors flex items-center justify-center gap-2 ${
-                activeKey === "+" || activeKey === "="
-                  ? "bg-primary text-black" 
-                  : "bg-muted hover:bg-primary hover:text-black"
-              }`}
-            >
-              <ZoomIn fontSize="small" /> Phóng to
-            </button>
-          </div>
-
-          {/* Keyboard hints */}
-          <div className="bg-muted/30 rounded-lg p-3 text-center">
-            <p className="text-[10px] text-muted-foreground mb-1">
-              <span className="font-bold">Bàn phím:</span> Mũi tên ← ↑ → ↓
-            </p>
+          {/* Keyboard hints - moved to bottom */}
+          <div className="bg-muted/30 rounded-lg p-3 text-center mt-4">
             <p className="text-[10px] text-muted-foreground">
-              <span className="font-bold">Zoom:</span> + / - 
+              <span className="font-bold">Bàn phím:</span> Sử dụng phím mũi tên ← ↑ → ↓
             </p>
           </div>
         </div>

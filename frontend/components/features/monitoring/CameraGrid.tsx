@@ -162,10 +162,10 @@ export default function CameraGrid({
                 <div className="flex items-center gap-4">
                   <div className="flex flex-col">
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                      Mã Camera
+                      Tên Camera
                     </span>
-                    <span className="text-sm font-bold text-primary">
-                      {mainCamera.cam_id || "N/A"}
+                    <span className="text-sm font-bold text-primary truncate max-w-[150px]" title={mainCamera.name}>
+                      {mainCamera.name || "N/A"}
                     </span>
                   </div>
                   <div className="w-px h-6 bg-border" />
