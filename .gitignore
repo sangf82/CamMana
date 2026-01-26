@@ -16,5 +16,4 @@ wheels/
 
 # Database
 *.jpg
-*.json
 *.csv
