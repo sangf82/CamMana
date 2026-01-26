@@ -20,6 +20,7 @@ from backend.data_process.history.api import router as history_router
 from backend.data_process.register_car.api import router as registered_car_router
 from backend.data_process.location.api import router as location_router
 from backend.data_process.camera_type.api import router as camera_type_router
+from backend.data_process.report.api import router as report_router
 from backend.camera.api import router as camera_router
 
 BACKEND_DIR = Path(__file__).parent
@@ -62,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(registered_car_router)
     app.include_router(location_router)
     app.include_router(camera_type_router)
+    app.include_router(report_router)
     
     # Serve captured car images from car_history folder
     @app.get("/api/images/{date_folder}/{car_folder}/{filename}")
@@ -110,6 +112,21 @@ def run_server(host: str = config.HOST, port: int = config.PORT):
     
     # Initialize today's CSV files (auto-migration and cleanup)
     try:
+        # Start Daily Report Scheduler (10 PM GMT+7)
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from backend.data_process.report.logic import ReportLogic
+        
+        def daily_report_job():
+            today = datetime.now().strftime("%d-%m-%Y")
+            print(f"[cam_mana] Auto-generating daily report for {today}...")
+            ReportLogic().generate_report(today)
+            
+        scheduler = BackgroundScheduler()
+        # Schedule at 22:00 (10 PM)
+        scheduler.add_job(daily_report_job, 'cron', hour=22, minute=0)
+        scheduler.start()
+        print("[cam_mana] Daily report scheduler started (at 22:00)")
+        
         # Registered Cars initialization is now handled by RegisteredCarLogic on import
         # if data_process.initialize_registered_cars_today():
         #     print("[cam_mana] Created today's registered cars file")

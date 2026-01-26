@@ -58,7 +58,7 @@ export default function EditModal({
               type="text"
               value={editPlate}
               onChange={(e) => setEditPlate(e.target.value.toUpperCase())}
-              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-[#f59e0b]"
               placeholder="Nhập biển số..."
             />
           </div>
@@ -71,7 +71,7 @@ export default function EditModal({
               <select
                 value={editStatus}
                 onChange={(e) => setEditStatus(e.target.value)}
-                className="w-full mt-1 px-2 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                className="w-full mt-1 px-2 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#f59e0b]"
               >
                 <option value="vào cổng">Vào cổng</option>
                 <option value="đã vào">Đã vào</option>
@@ -90,7 +90,7 @@ export default function EditModal({
                 value={editVolume}
                 onChange={(e) => setEditVolume(e.target.value)}
                 disabled={!isVolumeEnabled}
-                className={`w-full mt-1 px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-primary font-mono ${!isVolumeEnabled ? "opacity-50 blur-[0.5px] cursor-not-allowed select-none" : ""}`}
+                className={`w-full mt-1 px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#f59e0b] font-mono ${!isVolumeEnabled ? "opacity-50 blur-[0.5px] cursor-not-allowed select-none" : ""}`}
                 placeholder="0.00"
               />
             </div>
@@ -103,7 +103,7 @@ export default function EditModal({
             <select
               value={editVerify}
               onChange={(e) => setEditVerify(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-[#f59e0b]"
             >
               <option value="đã xác minh">Đã xác minh</option>
               <option value="chưa xác minh">Chưa xác minh</option>
@@ -121,7 +121,7 @@ export default function EditModal({
               type="text"
               value={editNote}
               onChange={(e) => setEditNote(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-[#f59e0b]"
               placeholder="Nhập ghi chú..."
             />
           </div>
@@ -136,7 +136,7 @@ export default function EditModal({
           </button>
           <button
             onClick={onSave}
-            className="flex-1 py-2 bg-primary text-primary-foreground rounded-md font-bold"
+            className="flex-1 py-2 bg-[#f59e0b] text-black rounded-md font-bold"
           >
             Lưu
           </button>

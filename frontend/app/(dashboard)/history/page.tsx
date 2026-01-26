@@ -13,6 +13,7 @@ import {
   ExpandLess,
 } from "@mui/icons-material";
 import { toast } from "sonner";
+import { LoadingPanel } from "@/components/ui/loading-spinner";
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   // Primary flow statuses (Trạng thái)
@@ -274,7 +275,7 @@ export default function HistoryPage() {
             <h1 className="text-2xl font-bold tracking-tight">
               Lịch sử Ra Vào
             </h1>
-            <span className="text-primary font-mono bg-primary/10 px-2 py-0.5 rounded text-sm border border-primary/20">
+            <span className="text-[#f59e0b] font-mono bg-[#f59e0b]/10 px-2 py-0.5 rounded text-sm border border-[#f59e0b]/20">
               {today}
             </span>
           </div>
@@ -284,13 +285,13 @@ export default function HistoryPage() {
           {/* Search Bar */}
           <div className="relative group min-w-[300px]">
             <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-[#f59e0b] transition-colors"
               fontSize="small"
             />
             <input
               type="text"
               placeholder="Tìm kiếm biển số..."
-              className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary transition-all text-sm"
+              className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-[#f59e0b] focus:border-[#f59e0b] transition-all text-sm"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -303,7 +304,7 @@ export default function HistoryPage() {
                       showFilters ||
                       filterGate !== "All" ||
                       filterStatus !== "All"
-                        ? "bg-primary text-primary-foreground border-primary shadow-primary/20"
+                        ? "bg-[#f59e0b] text-black border-[#f59e0b] shadow-[#f59e0b]/20"
                         : "bg-card border-border text-foreground hover:bg-muted"
                     }`}
           >
@@ -340,7 +341,7 @@ export default function HistoryPage() {
                   setIsGateOpen(!isGateOpen);
                   setIsStatusOpen(false);
                 }}
-                className="w-full flex items-center justify-between min-w-[180px] px-3 py-1.5 bg-background border border-border rounded-md text-sm font-semibold focus:border-primary transition-all"
+                className="w-full flex items-center justify-between min-w-[180px] px-3 py-1.5 bg-background border border-border rounded-md text-sm font-semibold focus:border-[#f59e0b] transition-all"
               >
                 <span>
                   {pendingFilterGate === "All"
@@ -361,7 +362,7 @@ export default function HistoryPage() {
                         setPendingFilterGate(g);
                         setIsGateOpen(false);
                       }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${pendingFilterGate === g ? "text-primary bg-primary/5" : "text-muted-foreground"}`}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-[#f59e0b]/10 ${pendingFilterGate === g ? "text-[#f59e0b] bg-[#f59e0b]/5" : "text-muted-foreground"}`}
                     >
                       {g === "All" ? "Tất cả vị trí" : g}
                     </button>
@@ -382,7 +383,7 @@ export default function HistoryPage() {
                   setIsStatusOpen(!isStatusOpen);
                   setIsGateOpen(false);
                 }}
-                className="w-full flex items-center justify-between min-w-[180px] px-3 py-1.5 bg-background border border-border rounded-md text-sm font-semibold focus:border-primary transition-all"
+                className="w-full flex items-center justify-between min-w-[180px] px-3 py-1.5 bg-background border border-border rounded-md text-sm font-semibold focus:border-[#f59e0b] transition-all"
               >
                 <span>
                   {pendingFilterStatus === "All"
@@ -404,7 +405,7 @@ export default function HistoryPage() {
                         setPendingFilterStatus(s);
                         setIsStatusOpen(false);
                       }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${pendingFilterStatus === s ? "text-primary bg-primary/5" : "text-muted-foreground"}`}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-[#f59e0b]/10 ${pendingFilterStatus === s ? "text-[#f59e0b] bg-[#f59e0b]/5" : "text-muted-foreground"}`}
                     >
                       {s === "All"
                         ? "Tất cả trạng thái"
@@ -436,7 +437,7 @@ export default function HistoryPage() {
             )}
             <button
               onClick={handleApplyFilters}
-              className="px-6 py-1.5 bg-primary text-primary-foreground text-sm font-bold rounded-md hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 active:scale-95"
+              className="px-6 py-1.5 bg-[#f59e0b] text-black text-sm font-bold rounded-md hover:bg-[#f59e0b]/90 transition-all shadow-lg shadow-[#f59e0b]/20 active:scale-95"
             >
               Áp dụng
             </button>
@@ -475,7 +476,7 @@ export default function HistoryPage() {
                     className="px-4 py-12 text-center text-muted-foreground font-medium"
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#f59e0b]"></div>
                       <span>Đang tải dữ liệu...</span>
                     </div>
                   </td>
@@ -518,7 +519,7 @@ export default function HistoryPage() {
       {showScrollTop && (
         <button
           onClick={scrollToTop}
-          className="fixed bottom-10 left-1/2 -translate-x-1/2 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-all animate-in fade-in zoom-in duration-300 z-50 flex items-center justify-center border border-primary/20"
+          className="fixed bottom-10 left-1/2 -translate-x-1/2 p-2 bg-[#f59e0b] text-black rounded-full shadow-lg hover:bg-[#f59e0b]/90 transition-all animate-in fade-in zoom-in duration-300 z-50 flex items-center justify-center border border-[#f59e0b]/20"
           aria-label="Back to top"
         >
           <ExpandLess fontSize="medium" />

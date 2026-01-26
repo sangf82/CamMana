@@ -25,7 +25,7 @@ export default function VehicleTable({ data, loading, onEdit, onDelete }: Vehicl
     { header: 'Biển số', accessorKey: 'plate', width: '120px' },
     { header: 'Loại xe', accessorKey: 'truckModel', width: '150px' },
     { header: 'Màu xe', accessorKey: 'color', width: '100px' },
-    { header: 'Số trục/bánh', accessorKey: 'axles', width: '130px' },
+    { header: 'Số bánh', accessorKey: 'axles', width: '130px' },
     { header: 'Thể tích (m³)', accessorKey: 'standardVolume', width: '130px' },
     { header: 'Nhà thầu', accessorKey: 'contractor', width: '180px' },
     { 
@@ -47,7 +47,7 @@ export default function VehicleTable({ data, loading, onEdit, onDelete }: Vehicl
         <div className="flex gap-2">
           <button 
             onClick={(e) => { e.stopPropagation(); onEdit(row) }}
-            className="p-1 text-blue-500 hover:bg-blue-500/10 rounded transition-colors"
+            className="p-1 text-[#f59e0b] hover:bg-[#f59e0b]/10 rounded transition-colors"
           >
             <Edit fontSize="small" />
           </button>

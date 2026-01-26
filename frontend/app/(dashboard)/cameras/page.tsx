@@ -545,7 +545,7 @@ export default function CamerasPage() {
         <div className="flex gap-2">
           <button
             onClick={() => handleEdit(row)}
-            className="p-1 text-blue-500 hover:bg-blue-500/10 rounded"
+            className="p-1 text-[#f59e0b] hover:bg-[#f59e0b]/10 rounded"
           >
             <Edit fontSize="small" />
           </button>
@@ -564,17 +564,17 @@ export default function CamerasPage() {
     <div className="h-full flex flex-col p-6 gap-4 overflow-hidden bg-background">
       {/* Header */}
       <div className="flex justify-between items-center shrink-0">
-        <h1 className="text-2xl font-bold tracking-tight text-primary">
+        <h1 className="text-2xl font-bold tracking-tight text-[#f59e0b]">
           Danh sách Camera
         </h1>
         <div className="flex items-center gap-3">
           <div className="relative min-w-[300px]">
             <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#f59e0b]"
               fontSize="small"
             />
             <input
-              className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-md text-sm outline-none focus:border-primary"
+              className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-md text-sm outline-none focus:border-[#f59e0b] focus:ring-1 focus:ring-[#f59e0b]"
               placeholder="Tìm kiếm camera..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -582,15 +582,15 @@ export default function CamerasPage() {
           </div>
           <button
             onClick={() => setIsConfigDialogOpen(true)}
-            className="px-4 py-2 bg-card border border-border rounded-md text-sm font-bold flex items-center gap-2 hover:bg-muted transition-all"
+            className="px-4 py-2 bg-card border border-border rounded-md text-sm font-bold flex items-center gap-2 hover:bg-muted transition-all hover:text-[#f59e0b]"
           >
-            <Settings fontSize="small" /> Cấu hình
+            <Settings fontSize="small" className="text-[#f59e0b]" /> Cấu hình
           </button>
           <button
             onClick={openAddDialog}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-bold flex items-center gap-2 hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
+            className="px-4 py-2 bg-[#f59e0b] text-black rounded-md text-sm font-bold flex items-center gap-2 hover:bg-[#f59e0b]/90 transition-all shadow-lg shadow-[#f59e0b]/20"
           >
-            <Add fontSize="small" /> Thêm camera
+            <Add fontSize="small" className="text-black" /> Thêm camera
           </button>
         </div>
       </div>
@@ -651,7 +651,7 @@ export default function CamerasPage() {
                 Tên Camera
               </label>
               <input
-                className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-primary"
+                className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b] outline-none transition-all"
                 value={editingItem?.name || ""}
                 onChange={(e) =>
                   setEditingItem((p) => ({ ...p!, name: e.target.value }))
@@ -664,7 +664,7 @@ export default function CamerasPage() {
                 Thương hiệu
               </label>
               <input
-                className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-primary"
+                className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b] outline-none transition-all"
                 value={editingItem?.brand || ""}
                 onChange={(e) =>
                   setEditingItem((p) => ({ ...p!, brand: e.target.value }))
@@ -678,7 +678,7 @@ export default function CamerasPage() {
               Địa chỉ IP
             </label>
             <input
-              className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-primary"
+              className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b] outline-none transition-all"
               value={editingItem?.ip || ""}
               onChange={(e) =>
                 setEditingItem((p) => ({ ...p!, ip: e.target.value }))
@@ -692,7 +692,7 @@ export default function CamerasPage() {
                 Tài khoản
               </label>
               <input
-                className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-primary"
+                className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b] outline-none transition-all"
                 value={editingItem?.username || ""}
                 onChange={(e) =>
                   setEditingItem((p) => ({ ...p!, username: e.target.value }))
@@ -707,7 +707,7 @@ export default function CamerasPage() {
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
-                  className="w-full p-2 pr-10 bg-background border border-border rounded text-sm outline-none focus:border-primary"
+                  className="w-full p-2 pr-10 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b] outline-none transition-all"
                   value={editingItem?.password || ""}
                   onChange={(e) =>
                     setEditingItem((p) => ({ ...p!, password: e.target.value }))
@@ -740,7 +740,7 @@ export default function CamerasPage() {
                     setIsCamLocOpen(!isCamLocOpen);
                     setIsCamTypeOpen(false);
                   }}
-                  className="w-full flex items-center justify-between p-2 bg-background border border-border rounded text-xs font-semibold focus:border-primary transition-all"
+                  className="w-full flex items-center justify-between p-2 bg-background border border-border rounded text-xs font-semibold focus:border-[#f59e0b] focus:ring-1 focus:ring-[#f59e0b] transition-all"
                 >
                   <span className="truncate">
                     {editingItem?.location || "Chọn vị trí..."}
@@ -760,7 +760,7 @@ export default function CamerasPage() {
                           setEditingItem((p) => ({ ...p!, location: l.name }));
                           setIsCamLocOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-1.5 rounded text-xs transition-colors hover:bg-primary/10 ${editingItem?.location === l.name ? "text-primary bg-primary/5" : "text-muted-foreground"}`}
+                        className={`w-full text-left px-3 py-1.5 rounded text-xs transition-colors hover:bg-primary/10 ${editingItem?.location === l.name ? "text-[#f59e0b] bg-primary/5" : "text-muted-foreground"}`}
                       >
                         {l.name}
                       </button>
@@ -780,7 +780,7 @@ export default function CamerasPage() {
                     setIsCamTypeOpen(!isCamTypeOpen);
                     setIsCamLocOpen(false);
                   }}
-                  className="w-full flex items-center justify-between p-2 bg-background border border-border rounded text-xs font-semibold focus:border-primary transition-all"
+                  className="w-full flex items-center justify-between p-2 bg-background border border-border rounded text-xs font-semibold focus:border-[#f59e0b] focus:ring-1 focus:ring-[#f59e0b] transition-all"
                 >
                   <span className="truncate">
                     {editingItem?.type || "Chọn loại..."}
@@ -810,7 +810,7 @@ export default function CamerasPage() {
                           setEditingItem((p) => ({ ...p!, type: t.name }));
                           setIsCamTypeOpen(false);
                         }}
-                        className={`w-full text-left px-3 py-1.5 rounded text-xs transition-colors hover:bg-primary/10 ${editingItem?.type === t.name ? "text-primary bg-primary/5" : "text-muted-foreground"}`}
+                        className={`w-full text-left px-3 py-1.5 rounded text-xs transition-colors hover:bg-primary/10 ${editingItem?.type === t.name ? "text-[#f59e0b] bg-primary/5" : "text-muted-foreground"}`}
                       >
                         {t.name}
                       </button>
@@ -835,7 +835,7 @@ export default function CamerasPage() {
                   .map((fid) => (
                     <span
                       key={fid}
-                      className="px-2 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded text-[10px] font-bold"
+                      className="px-2 py-0.5 bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/20 rounded text-[10px] font-bold"
                     >
                       {SMART_FUNCTIONS.find((sf) => sf.id === fid)?.name || fid}
                     </span>
@@ -852,7 +852,7 @@ export default function CamerasPage() {
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-primary text-primary-foreground rounded text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90"
+              className="px-6 py-2 bg-[#f59e0b] text-black rounded text-sm font-bold shadow-lg shadow-[#f59e0b]/20 hover:bg-[#f59e0b]/90"
             >
               Lưu cấu hình
             </button>
@@ -876,12 +876,12 @@ export default function CamerasPage() {
         <div className="grid grid-cols-2 gap-10 p-2">
           {/* Locations */}
           <div className="space-y-3">
-            <h3 className="font-bold text-xl text-primary tracking-wider">
+            <h3 className="font-bold text-xl text-[#f59e0b] tracking-wider">
               Vị trí (Locations)
             </h3>
             <div className="space-y-2 bg-muted/20 p-4 rounded-xl border border-border/50 shadow-inner">
               <input
-                className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs outline-none focus:border-primary transition-all placeholder:italic"
+                className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs outline-none focus:border-[#f59e0b] transition-all placeholder:italic"
                 placeholder="Tên vị trí (vd: Cổng Chính)..."
                 value={newLocation}
                 onChange={(e) => setNewLocation(e.target.value)}
@@ -893,7 +893,7 @@ export default function CamerasPage() {
                     onClick={() =>
                       setIsNewLocDropdownOpen(!isNewLocDropdownOpen)
                     }
-                    className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs font-semibold text-foreground text-left flex justify-between items-center focus:border-primary transition-all"
+                    className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs font-semibold text-foreground text-left flex justify-between items-center focus:border-[#f59e0b] transition-all"
                   >
                     <span>{newLocationTag}</span>
                     <ExpandMore
@@ -911,7 +911,7 @@ export default function CamerasPage() {
                               setNewLocationTag(v);
                               setIsNewLocDropdownOpen(false);
                             }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-primary/10 ${newLocationTag === v ? "text-primary bg-primary/5" : "text-muted-foreground"}`}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-[#f59e0b]/10 ${newLocationTag === v ? "text-[#f59e0b] bg-[#f59e0b]/5" : "text-muted-foreground"}`}
                           >
                             {v}
                           </button>
@@ -922,7 +922,7 @@ export default function CamerasPage() {
                 </div>
                 <button
                   onClick={handleAddLocation}
-                  className="w-[42px] h-[42px] shrink-0 bg-primary text-primary-foreground rounded-lg flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                  className="w-[42px] h-[42px] shrink-0 bg-[#f59e0b] text-black rounded-lg flex items-center justify-center shadow-lg shadow-[#f59e0b]/20 hover:scale-105 active:scale-95 transition-all"
                 >
                   <Add fontSize="small" />
                 </button>
@@ -932,12 +932,12 @@ export default function CamerasPage() {
               {locations.map((loc, idx) => (
                 <div
                   key={loc.id}
-                  className="p-3 bg-muted/10 border-l-4 border-l-primary rounded-r-xl flex items-center justify-between group hover:bg-muted/20 transition-all shadow-sm"
+                  className="p-3 bg-muted/10 border-l-4 border-l-[#f59e0b] rounded-r-xl flex items-center justify-between group hover:bg-muted/20 transition-all shadow-sm"
                 >
                   {editLocIndex === idx ? (
                     <div className="flex-1 flex flex-col gap-2">
                       <input
-                        className="w-full h-8 px-2 bg-background border border-primary rounded text-xs outline-none"
+                        className="w-full h-8 px-2 bg-background border border-[#f59e0b] rounded text-xs outline-none"
                         value={tempLocName}
                         onChange={(e) => setTempLocName(e.target.value)}
                         autoFocus
@@ -972,7 +972,7 @@ export default function CamerasPage() {
                                     setTempLocTag(v);
                                     setEditLocDropdownIndex(null);
                                   }}
-                                  className={`w-full text-left px-2 py-1.5 rounded text-[10px] font-medium transition-colors hover:bg-primary/10 ${tempLocTag === v ? "text-primary bg-primary/5" : "text-muted-foreground"}`}
+                                  className={`w-full text-left px-2 py-1.5 rounded text-[10px] font-medium transition-colors hover:bg-primary/10 ${tempLocTag === v ? "text-[#f59e0b] bg-primary/5" : "text-muted-foreground"}`}
                                 >
                                   {v}
                                 </button>
@@ -1008,7 +1008,7 @@ export default function CamerasPage() {
                         <div className="font-semibold text-sm text-foreground">
                           {loc.name}
                         </div>
-                        <div className="text-[10px] text-primary/80 font-medium mt-0.5">
+                        <div className="text-[10px] text-[#f59e0b]/80 font-medium mt-0.5">
                           {loc.tag}
                         </div>
                       </div>
@@ -1039,7 +1039,7 @@ export default function CamerasPage() {
 
           {/* Types */}
           <div className="space-y-3">
-            <h3 className="font-bold text-xl text-primary tracking-wider">
+            <h3 className="font-bold text-xl text-[#f59e0b] tracking-wider">
               Loại Camera (Types)
             </h3>
             <div className="space-y-2 bg-muted/20 p-4 rounded-xl border border-border/50 shadow-inner">
@@ -1057,7 +1057,7 @@ export default function CamerasPage() {
                     onClick={() =>
                       setIsNewTypeDropdownOpen(!isNewTypeDropdownOpen)
                     }
-                    className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs font-semibold text-foreground text-left flex justify-between items-center focus:border-primary transition-all"
+                    className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs font-semibold text-foreground text-left flex justify-between items-center focus:border-[#f59e0b] focus:ring-1 focus:ring-[#f59e0b] transition-all"
                   >
                     <span className="truncate">
                       {newTypeFunctions.length === 0
@@ -1082,10 +1082,10 @@ export default function CamerasPage() {
                             onChange={() =>
                               handleToggleTypeFunction(f.id, true)
                             }
-                            className="w-4 h-4 rounded border-border text-primary focus:ring-primary focus:ring-offset-0 bg-background"
+                            className="w-4 h-4 rounded border-border text-[#f59e0b] focus:ring-primary focus:ring-offset-0 bg-background"
                           />
                           <span
-                            className={`text-xs font-semibold transition-colors ${newTypeFunctions.includes(f.id) ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`}
+                            className={`text-xs font-semibold transition-colors ${newTypeFunctions.includes(f.id) ? "text-[#f59e0b]" : "text-muted-foreground group-hover:text-foreground"}`}
                           >
                             {f.name}
                           </span>
@@ -1096,7 +1096,7 @@ export default function CamerasPage() {
                 </div>
                 <button
                   onClick={handleAddType}
-                  className="w-[42px] h-[42px] shrink-0 bg-primary text-primary-foreground rounded-lg flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all"
+                  className="w-[42px] h-[42px] shrink-0 bg-[#f59e0b] text-black rounded-lg flex items-center justify-center shadow-lg shadow-[#f59e0b]/20 hover:scale-105 active:scale-95 transition-all"
                 >
                   <Add fontSize="small" />
                 </button>
@@ -1107,7 +1107,7 @@ export default function CamerasPage() {
                 <div
                   key={type.id}
                   id={`type-item-${idx}`}
-                  className="p-3 bg-muted/10 border-l-4 border-l-primary rounded-r-xl flex items-center justify-between group hover:bg-muted/20 transition-all shadow-sm"
+                  className="p-3 bg-muted/10 border-l-4 border-l-[#f59e0b] rounded-r-xl flex items-center justify-between group hover:bg-muted/20 transition-all shadow-sm"
                 >
                   {editTypeIndex === idx ? (
                     <div className="flex-1 space-y-2">
@@ -1156,10 +1156,10 @@ export default function CamerasPage() {
                                     onChange={() =>
                                       handleToggleTypeFunction(f.id, false)
                                     }
-                                    className="w-3 h-3 rounded text-primary"
+                                    className="w-3 h-3 rounded text-[#f59e0b]"
                                   />
                                   <span
-                                    className={`text-[10px] font-semibold ${tempTypeFunctions.includes(f.id) ? "text-primary" : "text-muted-foreground"}`}
+                                    className={`text-[10px] font-semibold ${tempTypeFunctions.includes(f.id) ? "text-[#f59e0b]" : "text-muted-foreground"}`}
                                   >
                                     {f.name}
                                   </span>
@@ -1196,7 +1196,7 @@ export default function CamerasPage() {
                         <div className="font-semibold text-sm text-foreground">
                           {type.name}
                         </div>
-                        <div className="text-[10px] text-primary/80 font-medium mt-0.5 truncate">
+                        <div className="text-[10px] text-[#f59e0b]/80 font-medium mt-0.5 truncate">
                           {(type.functions || "")
                             .split(";")
                             .filter(Boolean)

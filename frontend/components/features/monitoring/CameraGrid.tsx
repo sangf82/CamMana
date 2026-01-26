@@ -2,6 +2,7 @@ import React from "react";
 import { GridView, CropFree, PhotoCamera, ControlCamera } from "@mui/icons-material";
 import VideoPlayer from "../../../components/features/monitoring/VideoPlayer";
 import { toast } from "sonner";
+import { StreamingLoader } from "@/components/ui/loading-spinner";
 
 interface Camera {
   id: string | number;
@@ -54,7 +55,7 @@ export default function CameraGrid({
       {/* Controls Bar */}
       <div className="flex items-center justify-between bg-card border border-border px-2 py-1 rounded-lg">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-primary px-1 uppercase tracking-wide">
+          <span className="text-xs font-bold text-[#f59e0b] px-1 uppercase tracking-wide">
             {currentGate ? `GIÁM SÁT: ${currentGate}` : "CHỌN CỔNG ĐỂ XEM"}
           </span>
         </div>
@@ -69,7 +70,7 @@ export default function CameraGrid({
             }`}
             title="Chế độ Tập trung"
           >
-            <CropFree />
+            <CropFree className="text-[#f59e0b]" />
           </button>
           <button
             onClick={() => setViewMode("grid")}
@@ -80,7 +81,7 @@ export default function CameraGrid({
             }`}
             title="Chế độ Lưới"
           >
-            <GridView />
+            <GridView className="text-[#f59e0b]" />
           </button>
         </div>
       </div>
@@ -105,12 +106,7 @@ export default function CameraGrid({
                   {cam ? (
                     <>
                       {isConnecting(cam) && (
-                        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80">
-                          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-2" />
-                          <span className="text-xs text-muted-foreground">
-                            Đang kết nối...
-                          </span>
-                        </div>
+                        <StreamingLoader message="Đang kết nối..." />
                       )}
                       <VideoPlayer
                         label={cam.name}
@@ -142,12 +138,7 @@ export default function CameraGrid({
           <div className="h-full w-full flex flex-col overflow-hidden">
             <div className="w-full flex-1 min-h-0 relative bg-black rounded-lg overflow-hidden border border-border">
               {mainCamera && isConnecting(mainCamera) && (
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black">
-                  <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4" />
-                  <span className="text-sm text-muted-foreground">
-                    Đang kết nối {mainCamera.name}...
-                  </span>
-                </div>
+                <StreamingLoader message={`Đang kết nối ${mainCamera.name}...`} />
               )}
               <VideoPlayer
                 label={mainCamera?.name || "Camera Chính"}
@@ -164,7 +155,7 @@ export default function CameraGrid({
                     <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
                       Tên Camera
                     </span>
-                    <span className="text-sm font-bold text-primary truncate max-w-[150px]" title={mainCamera.name}>
+                    <span className="text-sm font-bold text-[#f59e0b] truncate max-w-[150px]" title={mainCamera.name}>
                       {mainCamera.name || "N/A"}
                     </span>
                   </div>
@@ -196,7 +187,7 @@ export default function CameraGrid({
                         mainCamera.type.split(",").map((fid) => (
                           <span
                             key={fid}
-                            className="px-1 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded-[2px] text-[8px] font-bold uppercase"
+                            className="px-1 py-0.5 bg-primary/10 text-[#f59e0b] border border-primary/20 rounded-[2px] text-[8px] font-bold uppercase"
                           >
                             {fid.replace("_detect", "").toUpperCase()}
                           </span>
@@ -257,7 +248,7 @@ export default function CameraGrid({
                         toast.error("Lỗi khi chụp ảnh");
                       }
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-black font-semibold rounded-md hover:bg-primary/90 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-[#f59e0b] text-black hover:bg-[#f59e0b]/90 transition-colors"
                   >
                     <PhotoCamera fontSize="small" />
                     Chụp ảnh

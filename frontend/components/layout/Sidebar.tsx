@@ -141,8 +141,8 @@ export default function Sidebar() {
       <div className={`h-16 flex items-center border-b border-sidebar-border relative ${isCollapsed ? 'justify-center px-0' : 'justify-between pl-6 pr-2'}`}>
         {!isCollapsed && (
             <div className="flex items-center">
-                <Construction className="text-primary mr-3" />
-                <span className="font-bold text-lg text-sidebar-foreground tracking-tight whitespace-nowrap">CamMana</span>
+                <Construction className="text-[#f59e0b] mr-3" />
+                <span className="font-bold text-lg text-[#f59e0b] tracking-tight whitespace-nowrap">CamMana</span>
             </div>
         )}
         
@@ -152,7 +152,7 @@ export default function Sidebar() {
             className={`text-muted-foreground hover:text-primary transition-colors ${isCollapsed ? '' : 'p-1'}`}
             title={isCollapsed ? "Mở rộng" : "Thu gọn"}
         >
-            {isCollapsed ? <Construction className="text-primary" /> : <div className="p-1 rounded hover:bg-sidebar-accent"><ChevronRight className="rotate-180" /></div>}
+            {isCollapsed ? <Construction className="text-[#f59e0b]" /> : <div className="p-1 rounded hover:bg-sidebar-accent"><ChevronRight className="rotate-180" /></div>}
         </button>
       </div>
 
@@ -176,7 +176,7 @@ export default function Sidebar() {
                         className={`flex-1 flex items-center gap-3 py-2 cursor-pointer ${isCollapsed ? 'justify-center px-0' : 'px-3'}`}
                         title={isCollapsed ? item.title : undefined}
                     >
-                        <item.icon fontSize="small" className="shrink-0" />
+                        <item.icon fontSize="small" className="shrink-0 text-[#f59e0b]" />
                         {!isCollapsed && <span className="whitespace-nowrap">{item.title}</span>}
                     </div>
 
@@ -254,7 +254,7 @@ export default function Sidebar() {
                 title={isCollapsed ? item.title : undefined}
               >
                 <div className="flex items-center gap-3">
-                    <item.icon fontSize="small" className="shrink-0" />
+                    <item.icon fontSize="small" className="shrink-0 text-[#f59e0b]" />
                     {!isCollapsed && <span className="whitespace-nowrap leading-none pt-0.5">{item.title}</span>}
                 </div>
                 {isCollapsed && (
@@ -289,10 +289,10 @@ export default function Sidebar() {
         {/* Popover */}
         {userMenuOpen && (
           <div className="absolute bottom-full left-4 right-4 mb-2 bg-popover border border-border rounded-lg shadow-lg py-1 z-50 animate-in fade-in zoom-in-95 duration-200 min-w-[150px]">
-            <button className="flex items-center gap-2 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors">
+            <a href="/settings" className="flex items-center gap-2 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors">
               <Settings fontSize="small" />
               <span>Cài đặt</span>
-            </button>
+            </a>
             <div className="h-px bg-border my-1" />
             <button className="flex items-center gap-2 w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors">
               <Logout fontSize="small" />

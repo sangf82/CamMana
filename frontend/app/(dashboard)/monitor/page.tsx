@@ -682,8 +682,8 @@ function MonitorPageContent() {
                 }}
                 className={`w-8 h-8 rounded flex items-center justify-center text-[10px] font-bold transition-colors ${
                   selectedCameraIndex === idx && viewMode === "focus"
-                    ? "bg-primary text-black"
-                    : "bg-muted text-muted-foreground hover:bg-primary hover:text-black"
+                    ? "bg-[#f59e0b] text-black"
+                    : "bg-muted text-muted-foreground hover:bg-[#f59e0b] hover:text-black"
                 }`}
                 title={cam.name}
               >
@@ -765,9 +765,9 @@ function MonitorPageContent() {
         {/* 2. Comparison */}
         <div className="flex-1 flex gap-8">
           <div className="flex-1 space-y-3">
-            <h4 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-2">
+            <h4 className="text-xs font-bold text-[#f59e0b] uppercase tracking-wider flex items-center gap-2">
               <div
-                className={`w-2 h-2 rounded-full ${currentDetection ? "bg-primary animate-pulse" : "bg-muted"}`}
+                className={`w-2 h-2 rounded-full ${currentDetection ? "bg-[#f59e0b] animate-pulse" : "bg-muted"}`}
               />
               Kết quả AI
             </h4>
@@ -882,7 +882,7 @@ function MonitorPageContent() {
                       const min = (baseline * 0.95).toFixed(2);
                       const max = (baseline * 1.05).toFixed(2);
                       return (
-                        <p className="text-sm font-mono text-primary">
+                        <p className="text-sm font-mono text-[#f59e0b]">
                           {min} - {max} m³
                         </p>
                       );
@@ -908,7 +908,7 @@ function MonitorPageContent() {
                         const min = (baseline * 0.95).toFixed(2);
                         const max = (baseline * 1.05).toFixed(2);
                         return (
-                        <p className="text-sm font-mono text-primary">
+                        <p className="text-sm font-mono text-[#f59e0b]">
                             {min} - {max} m³
                         </p>
                         );

@@ -45,10 +45,10 @@ export default function EvidenceModal({
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div className="flex items-center gap-3">
-            <PhotoCamera className="text-primary" />
+            <PhotoCamera className="text-[#f59e0b]" />
             <h3 className="text-lg font-bold">Bằng chứng</h3>
             {currentDetection?.plate_number && (
-              <span className="px-2 py-0.5 bg-primary/20 text-primary rounded text-sm font-mono">
+              <span className="px-2 py-0.5 bg-primary/20 text-[#f59e0b] rounded text-sm font-mono">
                 {currentDetection.plate_number}
               </span>
             )}
@@ -67,7 +67,7 @@ export default function EvidenceModal({
             onClick={() => setActiveTab("front")}
             className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
               activeTab === "front"
-                ? "text-primary border-b-2 border-primary bg-primary/10"
+                ? "text-[#f59e0b] border-b-2 border-[#f59e0b] bg-[#f59e0b]/10"
                 : "text-muted-foreground hover:bg-muted/50"
             }`}
           >
@@ -77,7 +77,7 @@ export default function EvidenceModal({
             onClick={() => setActiveTab("side")}
             className={`flex-1 py-3 px-4 text-sm font-medium transition-colors ${
               activeTab === "side"
-                ? "text-primary border-b-2 border-primary bg-primary/10"
+                ? "text-[#f59e0b] border-b-2 border-[#f59e0b] bg-[#f59e0b]/10"
                 : "text-muted-foreground hover:bg-muted/50"
             }`}
           >

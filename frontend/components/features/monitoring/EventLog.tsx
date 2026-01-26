@@ -128,7 +128,7 @@ export default function EventLog({
           {showPtzPanel ? (
             <ControlCamera fontSize="small" className="text-blue-500" />
           ) : (
-            <EventNote fontSize="small" className="text-primary" />
+            <EventNote fontSize="small" className="text-[#f59e0b]" />
           )}
           {showPtzPanel ? "Điều khiển PTZ" : "Nhật ký Sự kiện"}
         </div>
@@ -159,8 +159,8 @@ export default function EventLog({
                   onMouseLeave={stopPtz}
                   className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
                     activeKey === "ArrowUp" 
-                      ? "bg-primary text-black scale-95" 
-                      : "bg-muted hover:bg-primary hover:text-black active:scale-95"
+                      ? "bg-[#f59e0b] text-black scale-95" 
+                      : "bg-muted hover:bg-[#f59e0b] hover:text-black active:scale-95"
                   }`}
                 >
                   <ArrowUpward />
@@ -173,8 +173,8 @@ export default function EventLog({
                   onMouseLeave={stopPtz}
                   className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
                     activeKey === "ArrowLeft" 
-                      ? "bg-primary text-black scale-95" 
-                      : "bg-muted hover:bg-primary hover:text-black active:scale-95"
+                      ? "bg-[#f59e0b] text-black scale-95" 
+                      : "bg-muted hover:bg-[#f59e0b] hover:text-black active:scale-95"
                   }`}
                 >
                   <ArrowBack />
@@ -188,8 +188,8 @@ export default function EventLog({
                   onMouseLeave={stopPtz}
                   className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
                     activeKey === "ArrowRight" 
-                      ? "bg-primary text-black scale-95" 
-                      : "bg-muted hover:bg-primary hover:text-black active:scale-95"
+                      ? "bg-[#f59e0b] text-black scale-95" 
+                      : "bg-muted hover:bg-[#f59e0b] hover:text-black active:scale-95"
                   }`}
                 >
                   <ArrowForward />
@@ -202,8 +202,8 @@ export default function EventLog({
                   onMouseLeave={stopPtz}
                   className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
                     activeKey === "ArrowDown" 
-                      ? "bg-primary text-black scale-95" 
-                      : "bg-muted hover:bg-primary hover:text-black active:scale-95"
+                      ? "bg-[#f59e0b] text-black scale-95" 
+                      : "bg-muted hover:bg-[#f59e0b] hover:text-black active:scale-95"
                   }`}
                 >
                   <ArrowDownward />
@@ -256,7 +256,7 @@ export default function EventLog({
           <button
             onClick={() => setIsAutoDetect(!isAutoDetect)}
             className={`flex items-center gap-1 transition-colors ${
-              isAutoDetect ? "text-primary" : "text-muted-foreground"
+              isAutoDetect ? "text-[#f59e0b]" : "text-muted-foreground"
             }`}
           >
             <span className="text-[10px] font-bold">
@@ -282,7 +282,7 @@ export default function EventLog({
         >
           {isProcessing ? (
             <>
-              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-[#f59e0b] border-t-transparent rounded-full animate-spin" />
               ĐANG XỬ LÝ...
             </>
           ) : (

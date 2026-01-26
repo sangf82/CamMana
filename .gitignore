@@ -5,6 +5,7 @@ build/
 dist/
 wheels/
 *.egg-info
+node_modules/
 
 # Virtual environments
 .venv
@@ -17,3 +18,7 @@ wheels/
 # Database
 *.jpg
 *.csv
+database/captured_img/*
+database/car_history/*
+database/csv_data/*
+database/report/*
