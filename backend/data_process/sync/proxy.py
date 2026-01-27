@@ -56,6 +56,7 @@ async def proxy_get(endpoint: str, timeout: float = 5.0) -> Optional[Any]:
     
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
+            url = master_url.rstrip('/') + endpoint
             logger.info(f"[Proxy] Connecting to Master: {url}")
             response = await client.get(url)
             if response.status_code == 200:
