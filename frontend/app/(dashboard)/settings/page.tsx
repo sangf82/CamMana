@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { useTheme } from 'next-themes'
-import { Sun, Moon, Monitor, Settings as SettingsIcon, ShieldCheck, User as UserIcon, Trash2, Key, MapPin, Camera, CarFront, Edit2, X } from 'lucide-react'
+import { Sun, Moon, Monitor, Settings as SettingsIcon, ShieldCheck, User as UserIcon, Trash2, Key, MapPin, Camera, CarFront, Edit2, X, Server } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -41,6 +41,7 @@ export default function SettingsPage() {
   })
   const [firewallStatus, setFirewallStatus] = React.useState<{rule_exists?: boolean, supported?: boolean, message?: string}>({})
   const [isOpeningFirewall, setIsOpeningFirewall] = React.useState(false)
+  const [isFirewallDialogOpen, setIsFirewallDialogOpen] = React.useState(false)
 
   // Avoid hydration mismatch
   React.useEffect(() => {
@@ -190,8 +191,6 @@ export default function SettingsPage() {
   };
 
   const handleOpenFirewall = async () => {
-    if (!window.confirm("Hệ thống sẽ thử tự động mở cổng 8000 trong Windows Firewall. Bạn cần nhấn 'Yes' trong cửa sổ yêu cầu quyền Admin sắp hiện ra. Tiếp tục?")) return;
-    
     setIsOpeningFirewall(true);
     try {
         const token = localStorage.getItem('token');
@@ -203,7 +202,7 @@ export default function SettingsPage() {
         const data = await res.json();
         if (data.success) {
             toast.success(data.message);
-            setFirewallStatus({ rule_exists: true, supported: true, message: "Đã có quy tắc tường lửa" });
+            setFirewallStatus({ rule_exists: true, supported: true, message: "Đã mở firewall" });
         } else {
             toast.error(data.message || "Không thể thực hiện");
         }
@@ -211,6 +210,7 @@ export default function SettingsPage() {
         toast.error("Lỗi khi gửi yêu cầu");
     } finally {
         setIsOpeningFirewall(false);
+        setIsFirewallDialogOpen(false);
     }
   };
 
@@ -283,71 +283,80 @@ export default function SettingsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* 1. User Info Panel */}
           <Card className="border-border shadow-md overflow-hidden flex flex-col h-[300px]">
-            <div className="h-20 bg-gradient-to-r from-amber-500/20 to-amber-500/5 relative shrink-0">
-                <div className="absolute -bottom-8 left-6">
-                    <div className="w-16 h-16 rounded-xl bg-amber-500 flex items-center justify-center text-zinc-950 text-xl font-black shadow-lg border-2 border-background">
+            <div className="h-24 bg-gradient-to-r from-amber-500/20 to-amber-500/5 relative shrink-0">
+                <div className="absolute -bottom-8 left-8">
+                    <div className="w-16 h-16 rounded-2xl bg-amber-500 flex items-center justify-center text-zinc-950 text-xl font-black shadow-xl border-4 border-background">
                         {currentUser?.username?.substring(0, 2).toUpperCase()}
                     </div>
                 </div>
+                <div className="absolute top-4 right-6">
+                    <span className="text-[10px] font-semibold bg-amber-500/10 text-amber-500 px-3 py-1 rounded-full uppercase tracking-widest border border-amber-500/20">
+                        Tài khoản đang hoạt động
+                    </span>
+                </div>
             </div>
-            <CardContent className="pt-10 pb-4 flex-1 flex flex-col justify-between">
+            <CardContent className="pt-10 pb-6 flex-1 flex flex-col justify-between px-8">
                 <div>
-                    <h2 className="text-lg font-bold leading-tight">{currentUser?.full_name || currentUser?.username}</h2>
-                    <p className="text-[10px] text-muted-foreground font-mono flex items-center gap-1.5 uppercase tracking-tighter">
-                        <ShieldCheck size={10} className="text-amber-500" />
-                        Trạng thái: <span className="text-foreground">{currentUser?.role || 'Guest'}</span>
+                    <h2 className="text-xl font-semibold tracking-tight">{currentUser?.full_name || currentUser?.username}</h2>
+                    <p className="text-[10px] text-muted-foreground font-mono flex items-center gap-1.5 uppercase tracking-widest mt-1">
+                        <ShieldCheck size={12} className="text-amber-500" />
+                        VAI TRÒ HỆ THỐNG: <span className="text-foreground font-medium">{currentUser?.role || 'Khách'}</span>
                     </p>
                 </div>
 
-                <div className="space-y-2 text-xs">
+                <div className="space-y-3 py-2 border-y border-border/50">
                     <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">ID định danh:</span>
-                        <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">{String(currentUser?.id || '').split('-')[0]}...</span>
+                        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Mã định danh duy nhất</span>
+                        <span className="font-mono text-[10px] bg-muted px-2 py-0.5 rounded text-foreground/80">{String(currentUser?.id || '---').split('-')[0]}...</span>
                     </div>
                     <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Quyền Gate:</span>
-                        <span className="bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded-full font-bold text-[10px]">{currentUser?.allowed_gates === '*' ? 'Tất cả' : 'Hạn chế'}</span>
+                        <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Phạm vi truy cập</span>
+                        <span className="text-amber-500 font-semibold text-[10px] uppercase tracking-tighter">
+                            {currentUser?.allowed_gates === '*' ? 'Toàn quyền (Tất cả Cổng)' : 'Truy cập hạn chế'}
+                        </span>
                     </div>
                 </div>
 
-                <Button variant="outline" size="sm" className="w-full text-[10px] h-7 font-bold mt-2" onClick={() => {
+                <Button variant="outline" size="sm" className="w-full text-[10px] h-8 font-semibold mt-2 hover:bg-destructive hover:text-white transition-all duration-300" onClick={() => {
                     localStorage.clear();
                     window.location.href = '/login';
                 }}>
-                    ĐĂNG XUẤT TÀI KHOẢN
+                    ĐĂNG XUẤT AN TOÀN
                 </Button>
             </CardContent>
           </Card>
 
           {/* 2. PC Info Panel */}
           <Card className="bg-card border-border shadow-md h-[300px] flex flex-col">
-            <CardHeader className="pb-2 border-b border-border/50 bg-muted/20 shrink-0">
-                <CardTitle className="text-xs font-bold flex items-center gap-2 uppercase tracking-widest text-blue-500">
-                    <Monitor className="h-4 w-4" />
-                    Thiết bị đầu cuối
+            <CardHeader className="py-4 px-6 border-b border-border/50 bg-muted/20 shrink-0">
+                <CardTitle className="text-[10px] font-semibold flex items-center gap-2 uppercase tracking-[0.2em] text-foreground">
+                    <Monitor className="h-4 w-4 text-amber-500" />
+                    Thông số thiết bị đầu cuối
                 </CardTitle>
             </CardHeader>
-            <CardContent className="pt-4 flex-1 overflow-y-auto">
-                <div className="grid grid-cols-2 gap-y-4 gap-x-4 text-[11px]">
-                    <div className="space-y-0.5">
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold">Host Name</p>
-                        <p className="font-semibold truncate text-[12px]">{pcInfo?.pc_name || 'Đang tải...'}</p>
+            <CardContent className="p-6 flex-1 overflow-y-auto">
+                <div className="grid grid-cols-2 gap-y-5 gap-x-6">
+                    <div className="space-y-1">
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Tên máy chủ</p>
+                        <p className="font-mono font-medium truncate text-[12px]">{pcInfo?.pc_name || 'ĐANG TẢI...'}</p>
                     </div>
-                    <div className="space-y-0.5">
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold">OS Version</p>
-                        <p className="font-semibold text-[12px]">{pcInfo?.os || '---'}</p>
+                    <div className="space-y-1">
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Hệ điều hành</p>
+                        <p className="font-mono font-medium text-[12px]">{pcInfo?.os || '---'}</p>
                     </div>
-                    <div className="space-y-0.5">
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold">Physical RAM</p>
-                        <p className="font-semibold text-[12px]">{pcInfo?.ram || '---'}</p>
+                    <div className="space-y-1">
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Bộ nhớ RAM</p>
+                        <p className="font-mono font-medium text-[12px]">{pcInfo?.ram || '---'}</p>
                     </div>
-                    <div className="space-y-0.5">
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold">Network IP</p>
-                        <p className="font-semibold font-mono text-[12px]">{pcInfo?.ip_address || '---'}</p>
+                    <div className="space-y-1">
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Địa chỉ IP nội bộ</p>
+                        <p className="font-mono font-semibold text-[12px] text-amber-500">{pcInfo?.ip_address || '---'}</p>
                     </div>
-                    <div className="col-span-2 space-y-0.5 pt-1">
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold">Processor Unit</p>
-                        <p className="font-semibold truncate text-[11px] bg-muted/50 p-1 rounded italic">{pcInfo?.processor || '---'}</p>
+                    <div className="col-span-2 space-y-1 pt-2">
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Cấu trúc vi xử lý</p>
+                        <p className="font-mono text-[11px] bg-muted/50 p-2 rounded-lg text-foreground/70 italic border border-border/50">
+                            {pcInfo?.processor || 'ĐANG TRUY XUẤT THÔNG TIN...'}
+                        </p>
                     </div>
                 </div>
             </CardContent>
@@ -355,27 +364,27 @@ export default function SettingsPage() {
 
           {/* 3. Theme Panel */}
           <Card className="shadow-md border-border h-[200px] flex flex-col">
-            <CardHeader className="pb-3 border-b border-border/50 bg-muted/20 shrink-0">
-              <CardTitle className="text-xs font-bold flex items-center gap-2 uppercase tracking-widest text-amber-500">
-                {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-                Tùy chỉnh thị giác
+            <CardHeader className="py-3 px-6 border-b border-border/50 bg-muted/20 shrink-0">
+              <CardTitle className="text-[10px] font-semibold flex items-center gap-2 uppercase tracking-[0.2em] text-foreground">
+                {isDark ? <Moon className="h-4 w-4 text-amber-500" /> : <Sun className="h-4 w-4 text-amber-500" />}
+                Tùy chỉnh giao diện
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-6 flex-1 flex flex-col justify-center gap-6">
+            <CardContent className="p-6 flex-1 flex flex-col justify-center gap-5">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                    <Label className="text-xs font-bold">Chế độ tối (Dark mode)</Label>
-                    <p className="text-[9px] text-muted-foreground italic">Phù hợp làm việc ban đêm.</p>
+                    <Label className="text-xs font-semibold uppercase tracking-tight">Chế độ tối (Dark Mode)</Label>
+                    <p className="text-[10px] text-muted-foreground italic font-medium opacity-70">Tối ưu cho môi trường ánh sáng yếu.</p>
                 </div>
                 <Switch checked={isDark} onCheckedChange={(c) => setTheme(c ? 'dark' : 'light')} />
               </div>
-              <div className="flex gap-1 p-1 bg-muted rounded-lg border border-border">
+              <div className="flex gap-1.5 p-1 bg-muted/50 rounded-xl border border-border/50">
                 {['light', 'dark', 'system'].map((t) => (
                     <button
                         key={t}
                         onClick={() => setTheme(t)}
-                        className={`flex-1 py-2 text-[10px] font-black rounded transition-all uppercase tracking-tighter ${
-                            theme === t ? 'bg-background text-foreground shadow-md ring-1 ring-border' : 'text-muted-foreground hover:bg-background/40'
+                        className={`flex-1 py-1.5 text-[10px] font-semibold rounded-lg transition-all uppercase tracking-widest ${
+                            theme === t ? 'bg-background text-amber-500 shadow-sm ring-1 ring-border' : 'text-muted-foreground hover:bg-background/40'
                         }`}
                     >
                         {t === 'light' ? 'Sáng' : t === 'dark' ? 'Tối' : 'Hệ thống'}
@@ -386,40 +395,33 @@ export default function SettingsPage() {
           </Card>
 
           {/* 4. Sync Panel */}
-          <Card className="shadow-md border-border h-[280px] flex flex-col">
-            <CardHeader className="pb-3 border-b border-border/50 bg-muted/20 shrink-0">
-              <CardTitle className="text-xs font-bold flex items-center justify-between gap-2 uppercase tracking-widest text-blue-500">
+          <Card className="shadow-md border-border h-[200px] flex flex-col">
+            <CardHeader className="py-3 px-6 border-b border-border/50 bg-muted/20 shrink-0">
+              <CardTitle className="text-[10px] font-semibold flex items-center justify-between gap-2 uppercase tracking-[0.2em] text-foreground">
                 <div className="flex items-center gap-2">
-                    <Monitor className="h-4 w-4" />
+                    <Server className="h-4 w-4 text-amber-500" />
                     Đồng bộ hạ tầng
                 </div>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${syncConfig.is_destination ? 'bg-green-500/20 text-green-500' : 'bg-blue-500/20 text-blue-500'}`}>
-                    {syncConfig.is_destination ? 'MASTER' : 'CLIENT'}
+                <span className={`text-[9px] font-bold px-3 py-1 rounded-full border flex items-center justify-center min-w-[70px] ${syncConfig.is_destination ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-amber-500/10 text-amber-500 border-amber-500/30'}`}>
+                    {syncConfig.is_destination ? 'MÁY CHỦ' : 'TRẠM CUỐI'}
                 </span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-4 flex-1 flex flex-col space-y-4">
+            <CardContent className="p-6 flex-1 flex flex-col space-y-2">
               {/* CLIENT MODE - View Only */}
               {!syncConfig.is_destination ? (
                 <div className="flex-1 flex flex-col space-y-4">
-                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                    <p className="text-[10px] uppercase text-blue-400 font-black tracking-widest mb-1">Đang kết nối đến Master</p>
-                    <p className="font-mono text-sm text-blue-500 truncate">{syncConfig.remote_url || 'Chưa cấu hình'}</p>
+                  <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                    <p className="text-[10px] uppercase text-amber-500 font-semibold tracking-widest mb-1">MÁY CHỦ ĐANG KẾT NỐI</p>
+                    <p className="font-mono text-sm text-amber-500 font-medium truncate">{syncConfig.remote_url || 'CHƯA XÁC ĐỊNH'}</p>
                   </div>
                   
-                  <div className="flex-1 flex flex-col justify-center text-center opacity-60">
-                    <p className="text-[10px] text-muted-foreground italic">
-                      Dữ liệu đang được đồng bộ từ máy chủ Master.<br/>
-                      Để thay đổi chế độ, vui lòng quay lại trang Đăng nhập.
-                    </p>
-                  </div>
-
                   <Button 
                     variant="outline"
-                    className="h-8 text-[10px] font-black border-blue-600 text-blue-600" 
+                    className="h-9 text-[10px] font-semibold border-amber-500/50 text-amber-500 hover:bg-amber-500/10 transition-colors" 
                     onClick={async () => {
                       const token = localStorage.getItem('token');
-                      toast.loading("Đang kiểm tra kết nối...", { id: 'sync-test' });
+                      toast.loading("Kiểm tra kết nối...", { id: 'sync-test' });
                       try {
                         const res = await fetch('/api/sync/test-push', { 
                           method: 'POST',
@@ -432,67 +434,62 @@ export default function SettingsPage() {
                           toast.error(data.message, { id: 'sync-test' });
                         }
                       } catch (e) {
-                        toast.error("Lỗi kết nối đến máy chủ nội bộ", { id: 'sync-test' });
+                        toast.error("Lỗi kết nối máy chủ", { id: 'sync-test' });
                       }
                     }}
                   >
-                    KIỂM TRA KẾT NỐI ĐẾN MASTER
+                    CHẨN ĐOÁN KẾT NỐI
                   </Button>
                 </div>
               ) : (
                 /* MASTER MODE - Token Setup */
-                <div className="flex-1 flex flex-col space-y-4">
-                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
-                    <p className="text-[10px] uppercase text-green-400 font-black tracking-widest mb-1">Trạng thái</p>
-                    <p className="text-sm text-green-500">✓ PC này đang hoạt động ở chế độ Master</p>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label className="text-[10px] uppercase text-muted-foreground font-black tracking-widest">
-                      Địa chỉ để Client kết nối
+                <div className="flex-1 flex flex-col space-y-3">
+                  <div className="flex flex-col gap-1.5">
+                    <Label className="text-[10px] uppercase text-muted-foreground font-semibold tracking-widest px-1">
+                      Địa chỉ nhận kết nối (Endpoint)
                     </Label>
                     <div className="flex gap-2">
                       <Input 
                         readOnly
-                        value={pcInfo ? `http://${pcInfo.ip_address}:8000` : 'Đang tải...'}
-                        className="h-8 text-xs font-mono bg-muted flex-1"
+                        value={pcInfo ? `http://${pcInfo.ip_address}:8000` : 'ĐANG DÒ TÌM...'}
+                        className="h-8 text-[11px] font-mono font-medium bg-muted/30 flex-1 border-border/50 ring-0 focus-visible:ring-0"
                       />
                       <Button 
-                        variant="outline" 
+                        variant="secondary" 
                         size="sm" 
-                        className="h-8 text-[10px]"
+                        className="h-8 text-[10px] font-semibold px-4"
                         onClick={() => {
                           if (pcInfo?.ip_address) {
                             navigator.clipboard.writeText(`http://${pcInfo.ip_address}:8000`);
-                            toast.success("Đã sao chép địa chỉ!");
+                            toast.success("Đã sao chép vào bộ nhớ tạm!");
                           }
                         }}
                       >
-                        COPY
+                        SAO CHÉP
                       </Button>
                     </div>
                   </div>
 
-                  <div className="flex-1 flex flex-col justify-center text-center space-y-3">
-                    <div className="flex items-center justify-center gap-2">
-                      <span className={`text-[10px] uppercase font-bold ${firewallStatus.rule_exists ? 'text-green-500' : 'text-amber-500'}`}>
-                        Tường lửa: {firewallStatus.message || 'Chưa kiểm tra'}
+                  <div className="flex-1 flex flex-col justify-end text-center space-y-2">
+                    <div className="flex items-center justify-center gap-3">
+                      <span className={`text-[10px] uppercase font-semibold flex items-center gap-2 ${firewallStatus.rule_exists ? 'text-emerald-500' : 'text-amber-500'}`}>
+                        <ShieldCheck size={12} />
+                        {firewallStatus.message || 'SYS: ĐANG KIỂM TRA'}
                       </span>
                       {!firewallStatus.rule_exists && firewallStatus.supported && (
                         <Button 
                           size="sm" 
-                          variant="ghost" 
-                          className="h-6 text-[9px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30"
-                          onClick={handleOpenFirewall}
+                          variant="outline" 
+                          className="h-6 text-[9px] font-semibold bg-amber-500/5 hover:bg-amber-500/10 text-amber-500 border border-amber-500/30 rounded-full px-4"
+                          onClick={() => setIsFirewallDialogOpen(true)}
                           disabled={isOpeningFirewall}
                         >
-                          {isOpeningFirewall ? 'ĐANG MỞ...' : 'TỰ ĐỘNG MỞ'}
+                          {isOpeningFirewall ? 'ĐANG TRIỂN KHAI...' : 'GỠ LỖI NHANH'}
                         </Button>
                       )}
                     </div>
-                    <p className="text-[10px] text-muted-foreground italic">
-                      Các PC Client sẽ kết nối đến địa chỉ này để đồng bộ dữ liệu.<br/>
-                      Đảm bảo tường lửa cho phép cổng 8000.
+                    <p className="text-[9px] text-muted-foreground font-mono opacity-60 uppercase leading-none tracking-tight py-1 border-t border-border/30">
+                        Giao thức: TCP | Cổng Inbound: 8000 (Mở)
                     </p>
                   </div>
                 </div>
@@ -720,6 +717,57 @@ export default function SettingsPage() {
                 <Button variant="ghost" size="sm" onClick={() => setIsUserDialogOpen(false)}>Hủy</Button>
                 <Button className="bg-amber-500 hover:bg-amber-600 text-zinc-950 font-black px-8" onClick={handleCreateUser}>
                     {editingUsername ? 'CẬP NHẬT' : 'TẠO TÀI KHOẢN'}
+                </Button>
+            </div>
+        </div>
+      </Dialog>
+      
+      {/* Firewall Confirmation Dialog */}
+      <Dialog
+        isOpen={isFirewallDialogOpen}
+        onClose={() => !isOpeningFirewall && setIsFirewallDialogOpen(false)}
+        title="Yêu cầu cấu hình hệ thống"
+        maxWidth="md"
+      >
+        <div className="space-y-6 pt-2">
+            <div className="flex flex-col items-center text-center space-y-4">
+                <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500 animate-pulse">
+                    <ShieldCheck size={32} />
+                </div>
+                <div className="space-y-2">
+                    <h3 className="text-lg font-bold">Tự động cấu hình Windows Firewall</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                        Hệ thống sẽ thử tự động mở cổng <span className="font-bold text-foreground">8000</span> để cho phép các máy Client kết nối đến máy chủ này.
+                    </p>
+                </div>
+            </div>
+
+            <div className="bg-muted px-4 py-3 rounded-lg border border-border space-y-2">
+                <p className="text-[11px] font-bold uppercase text-amber-500 flex items-center gap-2">
+                    <Monitor size={12} /> HƯỚNG DẪN QUAN TRỌNG:
+                </p>
+                <ol className="text-[11px] text-muted-foreground list-decimal list-inside space-y-1">
+                    <li>Sau khi nhấn <span className="text-foreground font-bold">XÁC NHẬN</span>, một cửa sổ Windows (UAC) sẽ hiện ra.</li>
+                    <li>Bạn <span className="text-foreground font-bold underline">CẦN PHẢI CHỌN &quot;YES&quot;</span> để cấp quyền Administrator.</li>
+                    <li>Nếu không thấy cửa sổ, hãy kiểm tra thanh Taskbar phía dưới.</li>
+                </ol>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+                <Button 
+                    variant="ghost" 
+                    className="flex-1 h-10 font-bold" 
+                    onClick={() => setIsFirewallDialogOpen(false)}
+                    disabled={isOpeningFirewall}
+                >
+                    HỦY BỎ
+                </Button>
+                <Button 
+                    className="flex-[2] bg-amber-500 hover:bg-amber-600 text-zinc-950 font-black h-10" 
+                    onClick={handleOpenFirewall}
+                    disabled={isOpeningFirewall}
+                >
+                    {isOpeningFirewall ? 'ĐANG XỬ LÝ...' : 'XÁC NHẬN VÀ TIẾP TỤC'}
                 </Button>
             </div>
         </div>

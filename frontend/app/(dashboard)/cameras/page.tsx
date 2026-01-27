@@ -813,7 +813,7 @@ export default function CamerasPage() {
                   />
                 </button>
                 {isCamLocOpen && (
-                  <div className="absolute top-full left-0 w-full z-[110] mt-1 bg-[#121212] border border-border rounded-lg shadow-2xl p-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="absolute top-full left-0 w-full z-[110] mt-1 bg-popover text-popover-foreground border border-border rounded-lg shadow-2xl p-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                     {locations.map((l) => (
                       <button
                         key={l.id}
@@ -853,7 +853,7 @@ export default function CamerasPage() {
                   />
                 </button>
                 {isCamTypeOpen && (
-                  <div className="absolute top-full left-0 w-full z-[110] mt-1 bg-[#121212] border border-border rounded-lg shadow-2xl p-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="absolute top-full left-0 w-full z-[110] mt-1 bg-popover text-popover-foreground border border-border rounded-lg shadow-2xl p-1 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                     <button
                       type="button"
                       onClick={() => {
@@ -964,7 +964,7 @@ export default function CamerasPage() {
                     />
                   </button>
                   {isNewLocDropdownOpen && (
-                    <div className="absolute top-full left-0 w-full z-[60] mt-2 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="absolute top-full left-0 w-full z-[60] mt-2 bg-popover text-popover-foreground border border-border rounded-xl shadow-2xl p-1 animate-in fade-in slide-in-from-top-2 duration-200">
                       {["Cơ bản", "Cổng vào", "Cổng ra"].map(
                         (v) => (
                           <button
@@ -1022,7 +1022,7 @@ export default function CamerasPage() {
                             />
                           </button>
                           {editLocDropdownIndex === idx && (
-                            <div className="absolute top-full left-0 w-full z-[60] mt-1 bg-[#121212] border border-border rounded-lg shadow-2xl p-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                            <div className="absolute top-full left-0 w-full z-[60] mt-1 bg-popover text-popover-foreground border border-border rounded-lg shadow-2xl p-1 animate-in fade-in slide-in-from-top-2 duration-200">
                               {[
                                 "Cơ bản",
                                 "Cổng vào",
@@ -1132,7 +1132,7 @@ export default function CamerasPage() {
                     />
                   </button>
                   {isNewTypeDropdownOpen && (
-                    <div className="absolute top-full left-0 w-full z-[60] mt-2 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="absolute top-full left-0 w-full z-[60] mt-2 bg-popover text-popover-foreground border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
                       {SMART_FUNCTIONS.map((f) => (
                         <label
                           key={f.id}
@@ -1206,7 +1206,7 @@ export default function CamerasPage() {
                             <ExpandMore fontSize="small" />
                           </button>
                           {editTypeDropdownIndex === idx && (
-                            <div className="absolute top-full left-0 w-full z-[60] mt-1 bg-[#121212] border border-border rounded-lg shadow-2xl p-1 max-h-40 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+                            <div className="absolute top-full left-0 w-full z-[60] mt-1 bg-popover text-popover-foreground border border-border rounded-lg shadow-2xl p-1 max-h-40 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
                               {SMART_FUNCTIONS.map((f) => (
                                 <label
                                   key={f.id}

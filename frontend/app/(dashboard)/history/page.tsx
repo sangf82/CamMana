@@ -366,7 +366,7 @@ export default function HistoryPage() {
                 />
               </button>
               {isGateOpen && (
-                <div className="absolute top-full left-0 w-full z-[100] mt-1 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="absolute top-full left-0 w-full z-[100] mt-1 bg-popover text-popover-foreground border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                   {gates.map((g) => (
                     <button
                       key={g}
@@ -409,7 +409,7 @@ export default function HistoryPage() {
                 />
               </button>
               {isStatusOpen && (
-                <div className="absolute top-full left-0 w-full z-[100] mt-1 bg-[#121212] border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="absolute top-full left-0 w-full z-[100] mt-1 bg-popover text-popover-foreground border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                   {statuses.map((s) => (
                     <button
                       key={s}
