@@ -54,18 +54,25 @@ async def proxy_get(endpoint: str, timeout: float = 5.0) -> Optional[Any]:
     if not master_url:
         return None
     
-    try:
-        url = master_url.rstrip('/') + endpoint
-        async with httpx.AsyncClient(timeout=timeout) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        try:
+            logger.info(f"[Proxy] Connecting to Master: {url}")
             response = await client.get(url)
             if response.status_code == 200:
+                logger.info(f"[Proxy] Connection Successful: {url}")
                 return response.json()
             else:
-                logger.warning(f"Proxy GET {url} returned status {response.status_code}")
+                logger.warning(f"[Proxy] Master returned error {response.status_code} for {url}. Falling back to local/default.")
                 return None
-    except Exception as e:
-        logger.error(f"Proxy GET failed for {endpoint}: {e}")
-        return None
+        except httpx.ConnectTimeout:
+            logger.error(f"[Proxy] Connection TIMEOUT connecting to {url}. Check if Master PC IP is correct and Firewall allows port {config.PORT}.")
+            return None
+        except httpx.ConnectError as e:
+            logger.error(f"[Proxy] Connection REFUSED to {url}. Is Master Server running? Error: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"[Proxy] Connection FAILED to {url}: {e}")
+            return None
 
 
 async def proxy_post(endpoint: str, data: Dict[str, Any], timeout: float = 5.0) -> Optional[Any]:
