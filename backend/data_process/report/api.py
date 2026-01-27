@@ -1,12 +1,12 @@
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Query, Depends, Response
+from fastapi import APIRouter, HTTPException, Query, Depends, Response, Request
 import logging
 
 from .logic import ReportLogic
 from backend.api.user import get_current_user
 from backend.schemas import User as UserSchema
-from backend.data_process.sync.proxy import is_client_mode, proxy_get
+from backend.data_process.sync.proxy import is_client_mode, proxy_get, proxy_post
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +14,12 @@ router = APIRouter(prefix="/api/report", tags=["report"])
 logic = ReportLogic()
 
 @router.get("/today")
-async def get_today_report(user: UserSchema = Depends(get_current_user)):
+async def get_today_report(request: Request, user: UserSchema = Depends(get_current_user)):
     """Get today's report. Proxies to Master when in Client mode."""
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info("Client mode: Fetching today's report from master")
-        result = await proxy_get("/api/report/today")
+        result = await proxy_get("/api/report/today", token=token)
         if result is not None:
             return result
     
@@ -29,11 +30,12 @@ async def get_today_report(user: UserSchema = Depends(get_current_user)):
     return report
 
 @router.get("/history")
-async def get_report_history(user: UserSchema = Depends(get_current_user)):
+async def get_report_history(request: Request, user: UserSchema = Depends(get_current_user)):
     """Get report history. Proxies to Master when in Client mode."""
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info("Client mode: Fetching report history from master")
-        result = await proxy_get("/api/report/history")
+        result = await proxy_get("/api/report/history", token=token)
         if result is not None:
             return result
     
@@ -41,13 +43,15 @@ async def get_report_history(user: UserSchema = Depends(get_current_user)):
 
 @router.get("/detail")
 async def get_report_detail(
+    request: Request,
     date: str = Query(..., description="Date in dd-mm-yyyy format"),
     user: UserSchema = Depends(get_current_user)
 ):
     """Get report detail for a specific date. Proxies to Master when in Client mode."""
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info(f"Client mode: Fetching report detail for {date} from master")
-        result = await proxy_get(f"/api/report/detail?date={date}")
+        result = await proxy_get(f"/api/report/detail?date={date}", token=token)
         if result is not None:
             return result
     
@@ -58,13 +62,15 @@ async def get_report_detail(
 
 @router.post("/generate")
 async def generate_report(
+    request: Request,
     date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format. Defaults to today."),
     user: UserSchema = Depends(get_current_user)
 ):
     # Proxy to master if in client mode
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         query = f"?date={date}" if date else ""
-        result = await proxy_post(f"/api/report/generate{query}", {})
+        result = await proxy_post(f"/api/report/generate{query}", {}, token=token)
         if result is not None:
             return result
         raise HTTPException(status_code=503, detail="Cannot connect to master node")
@@ -75,6 +81,7 @@ async def generate_report(
 
 @router.get("/export/pdf")
 async def export_report_pdf(
+    request: Request,
     date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format. Defaults to today."),
     user: UserSchema = Depends(get_current_user)
 ):
@@ -90,8 +97,11 @@ async def export_report_pdf(
         url = f"{master_url.rstrip('/')}/api/report/export/pdf{query}"
         
         try:
+            token = request.headers.get("authorization", "").replace("Bearer ", "")
+            headers = {}
+            if token: headers["Authorization"] = f"Bearer {token}"
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(url)
+                response = await client.get(url, headers=headers)
                 if response.status_code == 200:
                      return Response(
                         content=response.content,

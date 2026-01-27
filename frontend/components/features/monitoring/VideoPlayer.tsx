@@ -26,37 +26,8 @@ export default function VideoPlayer({
   const [isLoading, setIsLoading] = useState(true)
   const [streamInfo, setStreamInfo] = useState<{resolution: string, fps: number} | null>(null)
 
-  // Fetch stream info periodically
-  useEffect(() => {
-    if (!activeId || !src) return
-
-    const fetchStreamInfo = async () => {
-      try {
-        const token = localStorage.getItem('token')
-        if (!token) return
-        
-        const res = await fetch(`/api/cameras`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-        if (res.ok) {
-          const cameras = await res.json()
-          const cam = cameras.find((c: { id: string }) => c.id === activeId)
-          if (cam?.stream_info) {
-            setStreamInfo({
-              resolution: cam.stream_info.resolution || 'N/A',
-              fps: cam.stream_info.fps || 0
-            })
-          }
-        }
-      } catch (e) {
-        // Ignore errors
-      }
-    }
-
-    fetchStreamInfo()
-    const interval = setInterval(fetchStreamInfo, 2000) // Update every 2s
-    return () => clearInterval(interval)
-  }, [activeId, src])
+  // Consolidating polling into the parent page to prevent connection flooding
+  // Stream info is now passed down or fetched centrally
 
 
   const handleRetry = useCallback((e: React.MouseEvent) => {
@@ -78,11 +49,21 @@ export default function VideoPlayer({
         <img 
           src={src}
           alt={displayLabel}
-          className={`w-full h-full object-contain transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
+          className={`w-full h-full object-cover transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
           onLoad={() => setIsLoading(false)}
           onError={() => { setHasError(true); setIsLoading(false); }}
         />
       )}
+
+      {/* Label Overlay */}
+      <div className="absolute top-0 left-0 right-0 p-2 bg-gradient-to-b from-black/70 to-transparent z-20 pointer-events-none">
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${src && !hasError && !isLoading ? 'bg-green-500 animate-pulse' : 'bg-zinc-500'}`} />
+          <span className="text-[10px] font-bold text-white uppercase tracking-wider drop-shadow-md">
+            {displayLabel}
+          </span>
+        </div>
+      </div>
 
       {/* Loading State */}
       {isLoading && !hasError && src && (

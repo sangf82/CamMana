@@ -6,7 +6,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 class TruckDetector:
-    def __init__(self, confidence: float = 0.5):
+    def __init__(self, confidence: float = 0.2):
         self.confidence = confidence
         self.model = None
         self.class_names = None

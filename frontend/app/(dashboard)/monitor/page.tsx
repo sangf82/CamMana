@@ -298,7 +298,7 @@ function MonitorPageContent() {
     };
 
     filteredCameras.forEach((cam, index) => {
-      setTimeout(() => connectAndStream(cam), index * 100);
+      setTimeout(() => connectAndStream(cam), index * 500);
     });
   }, [currentGate, filteredCameras, activeCameras, addLog]);
 
@@ -349,7 +349,7 @@ function MonitorPageContent() {
     };
 
     fetchStreamInfo();
-    const interval = setInterval(fetchStreamInfo, 2000);
+    const interval = setInterval(fetchStreamInfo, 5000); // Reduce frequency to 5s
     return () => clearInterval(interval);
   }, [mainCamera?.id, activeCameras]);
 
