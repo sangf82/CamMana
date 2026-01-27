@@ -23,3 +23,5 @@ database/car_history/*
 database/csv_data/*
 database/report/*
 database/sync_config.json
+
+.github
