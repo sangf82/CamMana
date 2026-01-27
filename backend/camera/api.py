@@ -186,7 +186,15 @@ async def delete_camera(cam_id: str, user: UserSchema = Depends(get_current_user
 async def connect_camera(cam_id: str, user: UserSchema = Depends(get_current_user)):
     if user.role != "admin" and not user.can_manage_cameras:
         raise HTTPException(status_code=403, detail="Permission denied")
-        
+    
+    # Proxy to master if in client mode
+    if is_client_mode():
+        logger.info(f"Client mode: Connect camera {cam_id} via master")
+        result = await proxy_post(f"/api/cameras/{cam_id}/connect", {})
+        if result is not None:
+             return result
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+
     cameras = logic.get_cameras()
     cam_data = next((c for c in cameras if c.get('cam_id') == cam_id or c.get('id') == cam_id), None)
     if not cam_data:
@@ -231,9 +239,18 @@ async def connect_camera(cam_id: str, user: UserSchema = Depends(get_current_use
     return {"success": True, "details": res}
 
 @router.post("/{cam_id}/disconnect")
-def disconnect_camera(cam_id: str, user: UserSchema = Depends(get_current_user)):
+async def disconnect_camera(cam_id: str, user: UserSchema = Depends(get_current_user)):
     if user.role != "admin" and not user.can_manage_cameras:
         raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Proxy to master if in client mode
+    if is_client_mode():
+        logger.info(f"Client mode: Disconnect camera {cam_id} via master")
+        result = await proxy_post(f"/api/cameras/{cam_id}/disconnect", {})
+        if result is not None:
+             return result
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+
     _disconnect_camera(cam_id)
     return {"success": True}
 
@@ -249,6 +266,32 @@ def _disconnect_camera(cam_id: str):
 # Streaming
 @router.get("/{cam_id}/stream")
 async def video_feed(cam_id: str):
+    # CLIENT MODE PROXY
+    if is_client_mode():
+        from backend.data_process.sync.proxy import get_master_url
+        import httpx
+        master_url = get_master_url()
+        if not master_url:
+            raise HTTPException(503, "Master URL not configured")
+
+        url = f"{master_url.rstrip('/')}/api/cameras/{cam_id}/stream"
+        
+        # Generator for proxying stream
+        async def proxy_gen():
+            async with httpx.AsyncClient(timeout=None) as client:
+                try:
+                    async with client.stream("GET", url) as response:
+                        if response.status_code != 200:
+                            return 
+                        async for chunk in response.aiter_bytes():
+                            yield chunk
+                except Exception as e:
+                    logger.error(f"Stream proxy error: {e}")
+                    pass
+        
+        return StreamingResponse(proxy_gen(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+
     if cam_id not in active_cameras:
         # Try auto-connect? (requires careful consideration without user object)
         # For now, just raise if not connected
@@ -268,7 +311,15 @@ async def video_feed(cam_id: str):
 
 # PTZ
 @router.post("/{cam_id}/ptz/{action}")
-def ptz_action(cam_id: str, action: str, req: PTZRequest, user: UserSchema = Depends(get_current_user)):
+async def ptz_action(cam_id: str, action: str, req: PTZRequest, user: UserSchema = Depends(get_current_user)):
+    # Proxy to master if in client mode
+    if is_client_mode():
+        logger.info(f"Client mode: PTZ {action} for {cam_id} via master")
+        result = await proxy_post(f"/api/cameras/{cam_id}/ptz/{action}", req.dict())
+        if result is not None:
+             return result
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+
     if cam_id not in active_cameras:
         raise HTTPException(404, "Camera not connected")
     
@@ -286,15 +337,29 @@ def ptz_action(cam_id: str, action: str, req: PTZRequest, user: UserSchema = Dep
 
 # Capture
 @router.post("/{cam_id}/capture")
-def capture_image(cam_id: str, user: UserSchema = Depends(get_current_user)):
+async def capture_image(cam_id: str, user: UserSchema = Depends(get_current_user)):
+    # Proxy to master if in client mode
+    if is_client_mode():
+        result = await proxy_post(f"/api/cameras/{cam_id}/capture", {})
+        if result is not None:
+            return result
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+
     if cam_id not in active_cameras:
          raise HTTPException(404, "Camera not connected")
     return active_cameras[cam_id]['streamer'].capture_image()
 
 # Stream Info
 @router.get("/{cam_id}/stream-info")
-def get_stream_info(cam_id: str, user: UserSchema = Depends(get_current_user)):
+async def get_stream_info(cam_id: str, user: UserSchema = Depends(get_current_user)):
     """Get stream resolution and FPS for a connected camera."""
+    # Proxy to master if in client mode
+    if is_client_mode():
+        result = await proxy_get(f"/api/cameras/{cam_id}/stream-info")
+        if result is not None:
+            return result
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+
     if cam_id not in active_cameras:
         raise HTTPException(404, "Camera not connected")
     return active_cameras[cam_id]['streamer'].get_stream_info()

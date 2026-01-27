@@ -258,8 +258,9 @@ class SyncLogic:
                     headers={"Content-Type": "application/json"}
                 )
                 return response.status_code == 200
-        except Exception:
-            # Silently fail if remote is down to not block local workflow
+        except Exception as e:
+            # Log failure but return False to not crash caller
+            logger.warning(f"[Sync] Push to remote failed: {e}")
             return False
 
     def __del__(self):
