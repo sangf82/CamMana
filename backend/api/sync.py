@@ -28,9 +28,21 @@ async def get_sync_status():
 @sync_router.post("/configure")
 async def configure_sync(remote_url: Optional[str] = None, is_destination: bool = True):
     """Configure the synchronization settings."""
+    old_is_destination = sync_logic.is_destination
+    
     sync_logic.remote_url = remote_url
     sync_logic.is_destination = is_destination
     sync_logic.save_config()
+    
+    # Handle Zeroconf advertising when mode changes
+    if is_destination and not old_is_destination:
+        # Switched to Master mode - start advertising
+        sync_logic.start_advertising()
+    elif not is_destination and old_is_destination:
+        # Switched to Client mode - optionally could stop advertising
+        # (Zeroconf doesn't have easy stop, but it's fine for now)
+        pass
+    
     return {
         "status": "configured", 
         "remote_url": remote_url,

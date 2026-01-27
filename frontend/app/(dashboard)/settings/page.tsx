@@ -364,63 +364,88 @@ export default function SettingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-4 flex-1 flex flex-col space-y-4">
-              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50 border border-border">
-                <div className="space-y-0.5">
-                    <Label className="text-xs font-bold">Chế độ Lưu trữ (Master)</Label>
-                    <p className="text-[9px] text-muted-foreground italic leading-tight">Bật nếu PC này là nơi lưu trữ dữ liệu tập trung.</p>
-                </div>
-                <Switch 
-                    checked={syncConfig.is_destination} 
-                    onCheckedChange={(c) => setSyncConfig(prev => ({ ...prev, is_destination: c }))} 
-                />
-              </div>
+              {/* CLIENT MODE - View Only */}
+              {!syncConfig.is_destination ? (
+                <div className="flex-1 flex flex-col space-y-4">
+                  <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                    <p className="text-[10px] uppercase text-blue-400 font-black tracking-widest mb-1">Đang kết nối đến Master</p>
+                    <p className="font-mono text-sm text-blue-500 truncate">{syncConfig.remote_url || 'Chưa cấu hình'}</p>
+                  </div>
+                  
+                  <div className="flex-1 flex flex-col justify-center text-center opacity-60">
+                    <p className="text-[10px] text-muted-foreground italic">
+                      Dữ liệu đang được đồng bộ từ máy chủ Master.<br/>
+                      Để thay đổi chế độ, vui lòng quay lại trang Đăng nhập.
+                    </p>
+                  </div>
 
-              {!syncConfig.is_destination && (
-                <div className="space-y-1.5 animate-in slide-in-from-top-2">
-                    <Label className="text-[10px] uppercase text-muted-foreground font-black tracking-widest">Địa chỉ Master PC (Endpoint)</Label>
-                    <Input 
-                        placeholder="http://192.168.1.50:8000" 
-                        className="h-8 text-xs font-mono bg-background focus-visible:ring-blue-500"
-                        value={syncConfig.remote_url}
-                        onChange={(e) => setSyncConfig(prev => ({ ...prev, remote_url: e.target.value }))}
-                    />
+                  <Button 
+                    variant="outline"
+                    className="h-8 text-[10px] font-black border-blue-600 text-blue-600" 
+                    onClick={async () => {
+                      const token = localStorage.getItem('token');
+                      toast.loading("Đang kiểm tra kết nối...", { id: 'sync-test' });
+                      try {
+                        const res = await fetch('/api/sync/test-push', { 
+                          method: 'POST',
+                          headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                          toast.success(data.message, { id: 'sync-test' });
+                        } else {
+                          toast.error(data.message, { id: 'sync-test' });
+                        }
+                      } catch (e) {
+                        toast.error("Lỗi kết nối đến máy chủ nội bộ", { id: 'sync-test' });
+                      }
+                    }}
+                  >
+                    KIỂM TRA KẾT NỐI ĐẾN MASTER
+                  </Button>
+                </div>
+              ) : (
+                /* MASTER MODE - Token Setup */
+                <div className="flex-1 flex flex-col space-y-4">
+                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                    <p className="text-[10px] uppercase text-green-400 font-black tracking-widest mb-1">Trạng thái</p>
+                    <p className="text-sm text-green-500">✓ PC này đang hoạt động ở chế độ Master</p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase text-muted-foreground font-black tracking-widest">
+                      Địa chỉ để Client kết nối
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input 
+                        readOnly
+                        value={pcInfo ? `http://${pcInfo.ip_address}:8000` : 'Đang tải...'}
+                        className="h-8 text-xs font-mono bg-muted flex-1"
+                      />
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="h-8 text-[10px]"
+                        onClick={() => {
+                          if (pcInfo?.ip_address) {
+                            navigator.clipboard.writeText(`http://${pcInfo.ip_address}:8000`);
+                            toast.success("Đã sao chép địa chỉ!");
+                          }
+                        }}
+                      >
+                        COPY
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 flex flex-col justify-center text-center opacity-60">
+                    <p className="text-[10px] text-muted-foreground italic">
+                      Các PC Client sẽ kết nối đến địa chỉ này để đồng bộ dữ liệu.<br/>
+                      Đảm bảo tường lửa cho phép cổng 8000.
+                    </p>
+                  </div>
                 </div>
               )}
-
-              <div className="flex gap-2 mt-auto">
-                <Button 
-                    className="flex-1 h-8 text-[10px] font-black bg-blue-600 hover:bg-blue-700 text-white" 
-                    onClick={handleUpdateSync}
-                >
-                    LƯU CẤU HÌNH ĐỒNG BỘ
-                </Button>
-                {!syncConfig.is_destination && (
-                    <Button 
-                        variant="outline"
-                        className="h-8 text-[10px] font-black border-blue-600 text-blue-600" 
-                        onClick={async () => {
-                            const token = localStorage.getItem('token');
-                            toast.loading("Đang kiểm tra kết nối...", { id: 'sync-test' });
-                            try {
-                                const res = await fetch('/api/sync/test-push', { 
-                                    method: 'POST',
-                                    headers: { 'Authorization': `Bearer ${token}` }
-                                });
-                                const data = await res.json();
-                                if (data.success) {
-                                    toast.success(data.message, { id: 'sync-test' });
-                                } else {
-                                    toast.error(data.message, { id: 'sync-test' });
-                                }
-                            } catch (e) {
-                                toast.error("Lỗi kết nối đến máy chủ nội bộ", { id: 'sync-test' });
-                            }
-                        }}
-                    >
-                        TEST
-                    </Button>
-                )}
-              </div>
             </CardContent>
           </Card>
       </div>

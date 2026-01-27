@@ -7,6 +7,7 @@ import logging
 
 from backend.api.user import get_current_user
 from backend.schemas import User as UserSchema
+from backend.data_process.sync.proxy import is_client_mode, proxy_get, proxy_post, proxy_put, proxy_delete
 from .logic import RegisteredCarLogic
 
 logger = logging.getLogger(__name__)
@@ -52,13 +53,30 @@ class CarResponse(CarBase):
 router = APIRouter(prefix="/api/registered_cars", tags=["Registered Cars"])
 logic = RegisteredCarLogic()
 
-@router.get("", response_model=List[CarResponse])
-def get_cars():
-    # Logic returns dict with car_ keys. Response model matches car_ keys.
+@router.get("")
+async def get_cars():
+    """
+    Get all registered cars. 
+    When in client mode, fetches data from master node.
+    """
+    # If in client mode, proxy the request to master
+    if is_client_mode():
+        logger.info("Client mode: Fetching registered cars from master")
+        master_data = await proxy_get("/api/registered_cars")
+        if master_data is not None:
+            return master_data
+        else:
+            logger.warning("Failed to fetch from master, falling back to local data")
+    
+    # Local data (master mode or fallback)
     return logic.get_all_cars()
 
-@router.post("", response_model=CarResponse)
-def add_car(car: CarBase, user: UserSchema = Depends(get_current_user)):
+@router.post("")
+async def add_car(car: CarBase, user: UserSchema = Depends(get_current_user)):
+    """
+    Add a new registered car.
+    When in client mode, proxies to master node.
+    """
     # If user has 'can_add_vehicles' enabled, it means they MUST provide the set code
     # Unless they are admin
     if user.role != "admin" and user.can_add_vehicles:
@@ -68,19 +86,55 @@ def add_car(car: CarBase, user: UserSchema = Depends(get_current_user)):
     try:
         data = car.dict()
         data.pop('admin_code', None) # Remove before saving to CSV
+        
+        # If in client mode, proxy to master
+        if is_client_mode():
+            logger.info("Client mode: Adding car via master")
+            result = await proxy_post("/api/registered_cars", data)
+            if result is not None:
+                return result
+            else:
+                raise HTTPException(status_code=503, detail="Cannot connect to master node")
+        
         return logic.add_car(data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.put("/{car_id}", response_model=CarResponse)
-def update_car(car_id: str, car: CarUpdate):
+@router.put("/{car_id}")
+async def update_car(car_id: str, car: CarUpdate):
+    """
+    Update a registered car.
+    When in client mode, proxies to master node.
+    """
+    # If in client mode, proxy to master
+    if is_client_mode():
+        logger.info(f"Client mode: Updating car {car_id} via master")
+        result = await proxy_put(f"/api/registered_cars/{car_id}", car.dict(exclude_unset=True))
+        if result is not None:
+            return result
+        else:
+            raise HTTPException(status_code=503, detail="Cannot connect to master node")
+        
     updated = logic.update_car(car_id, car.dict(exclude_unset=True))
     if not updated:
         raise HTTPException(status_code=404, detail="Car not found")
     return updated
 
 @router.delete("/{car_id}")
-def delete_car(car_id: str):
+async def delete_car(car_id: str):
+    """
+    Delete a registered car.
+    When in client mode, proxies to master node.
+    """
+    # If in client mode, proxy to master
+    if is_client_mode():
+        logger.info(f"Client mode: Deleting car {car_id} via master")
+        success = await proxy_delete(f"/api/registered_cars/{car_id}")
+        if success:
+            return {"message": "Deleted successfully"}
+        else:
+            raise HTTPException(status_code=503, detail="Cannot connect to master node")
+    
     success = logic.delete_car(car_id)
     if not success:
         raise HTTPException(status_code=404, detail="Car not found")
