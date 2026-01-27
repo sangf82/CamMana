@@ -1,0 +1,14 @@
+{
+  "background": {
+    "update_interval_hours": 1,
+    "scheduler_enabled": true,
+    "last_update": "2026-01-28T00:44:52.853955"
+  },
+  "data_expiry": {
+    "registered_cars_days": 2,
+    "history_days": 2,
+    "reports_days": 2,
+    "car_history_days": 2,
+    "auto_cleanup_enabled": true
+  }
+}

@@ -3,7 +3,7 @@ import uuid
 import logging
 from typing import List, Dict, Any, Optional
 from backend.config import DATA_DIR
-from backend.data_process.utils import CAMERA_HEADERS
+from backend.data_process.csv_utils import CAMERA_HEADERS
 
 logger = logging.getLogger(__name__)
 

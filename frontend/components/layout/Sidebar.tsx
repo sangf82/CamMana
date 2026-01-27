@@ -14,7 +14,8 @@ import {
   ChevronRight,
   AccountCircle,
   Construction,
-  LiveTv
+  LiveTv,
+  Tune
 } from '@mui/icons-material'
 
 interface MenuItem {
@@ -310,10 +311,24 @@ export default function Sidebar() {
         {/* Popover */}
         {userMenuOpen && (
           <div className="absolute bottom-full left-4 right-4 mb-2 bg-popover border border-border rounded-lg shadow-lg py-1 z-50 animate-in fade-in zoom-in-95 duration-200 min-w-[150px]">
-            <a href="/settings" className="flex items-center gap-2 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors">
+            {userData?.role === 'admin' && (
+              <Link 
+                href="/system-config" 
+                className="flex items-center gap-2 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors"
+                onClick={() => setUserMenuOpen(false)}
+              >
+                <Tune fontSize="small" />
+                <span>Thiết lập</span>
+              </Link>
+            )}
+            <Link 
+              href="/settings" 
+              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors"
+              onClick={() => setUserMenuOpen(false)}
+            >
               <Settings fontSize="small" />
               <span>Cài đặt</span>
-            </a>
+            </Link>
             <div className="h-px bg-border my-1" />
             <button 
                 onClick={() => {

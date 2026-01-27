@@ -24,11 +24,15 @@ class BackgroundManager:
     
     _instance: Optional["BackgroundManager"] = None
     _scheduler_running: bool = False
+    _scheduler = None
+    _current_interval_hours: int = 1
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._detector = None
+            cls._instance._scheduler = None
+            cls._instance._current_interval_hours = 1
         return cls._instance
     
     @property
@@ -43,61 +47,63 @@ class BackgroundManager:
             self._detector = TruckDetector(confidence=0.3)
         return self._detector
     
-    def get_background_path(self, camera_id: str) -> Optional[Path]:
+    def get_background_path(self, camera_name: str) -> Optional[Path]:
         """
         Get background image path for a camera.
         Returns the most recent background for that camera.
         
         Args:
-            camera_id: Camera ID
+            camera_name: Camera name (display name)
             
         Returns:
             Path to background image or None if not exists
         """
-        # Look for backgrounds with pattern: bg_{camera_id}_{timestamp}.jpg
-        pattern = f"bg_{camera_id}_*.jpg"
+        # Sanitize camera name for matching (same as in save_background)
+        safe_name = camera_name.replace(" ", "_").replace("/", "-")
+        
+        # Look for backgrounds with new pattern: background_{cam_name}_{timestamp}.jpg
+        pattern = f"background_{safe_name}_*.jpg"
         bgs = sorted(self.backgrounds_dir.glob(pattern), reverse=True)
         if bgs:
             return bgs[0]
         
-        # Fallback: try old format bg_{camera_id}.jpg
-        old_path = self.backgrounds_dir / f"bg_{camera_id}.jpg"
-        if old_path.exists():
-            return old_path
-        
-        # Fallback: try to find any background for this camera
-        bgs = sorted(self.backgrounds_dir.glob("bg_*.jpg"), reverse=True)
+        # Fallback: try any background file
+        bgs = sorted(self.backgrounds_dir.glob("background_*.jpg"), reverse=True)
         return bgs[0] if bgs else None
     
-    def save_background(self, camera_id: str, image: Any) -> bool:
+    def save_background(self, camera_name: str, image: Any) -> str:
         """
         Save background image for a camera with timestamp.
-        Format: bg_{camera_id}_{YYYY-MM-DD_HH-MM-SS}.jpg
+        Format: background_{cam_name}_{dd-mm-yyyy_hh-mm-ss}.jpg
         
         Args:
-            camera_id: Camera ID
+            camera_name: Camera name (display name)
             image: OpenCV image (numpy array)
             
         Returns:
-            True if saved successfully
+            Filename if saved successfully, empty string otherwise
         """
         try:
             self.backgrounds_dir.mkdir(parents=True, exist_ok=True)
             
-            # Generate timestamp: 2026-01-27_23-55-07
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            filename = f"bg_{camera_id}_{timestamp}.jpg"
+            # Sanitize camera name for filename (replace spaces with underscores)
+            safe_name = camera_name.replace(" ", "_").replace("/", "-")
+            
+            # Generate timestamp: dd-mm-yyyy_hh-mm-ss
+            timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
+            filename = f"background_{safe_name}_{timestamp}.jpg"
             bg_path = self.backgrounds_dir / filename
             
             success = cv2.imwrite(str(bg_path), image)
             if success:
                 logger.info(f"[BackgroundManager] Saved background: {filename}")
-            return success
+                return filename
+            return ""
         except Exception as e:
             logger.error(f"[BackgroundManager] Failed to save background: {e}")
-            return False
+            return ""
     
-    async def capture_background_from_camera(self, camera_id: str) -> bool:
+    async def capture_background_from_camera(self, camera_id: str) -> Dict[str, Any]:
         """
         Capture background from a camera if no car is detected.
         
@@ -105,10 +111,13 @@ class BackgroundManager:
             camera_id: Camera ID to capture from
             
         Returns:
-            True if background was captured and saved
+            Dict with success status and captured filename
         """
         try:
             from backend.camera.logic import CameraLogic
+            from backend.data_process.camera_type.logic import CameraTypeLogic
+            from backend.camera.connection import CameraConnection, CameraConnectionConfig
+            import asyncio
             
             # Get camera info
             camera_logic = CameraLogic()
@@ -116,47 +125,91 @@ class BackgroundManager:
             
             if not camera:
                 logger.warning(f"[BackgroundManager] Camera {camera_id} not found")
-                return False
+                return {"success": False, "error": "Camera not found"}
+            
+            cam_name = camera.get("name", f"Camera_{camera_id}")
+            
+            # Get functions from camera type
+            types_logic = CameraTypeLogic()
+            types_map = {t['name']: t.get('functions', '') for t in types_logic.get_types()}
+            cam_type = camera.get('type', '')
+            functions_str = types_map.get(cam_type, '')
             
             # Check if camera has volume_top_down function
-            functions_str = camera.get("functions", "")
-            functions = functions_str.split(",") if isinstance(functions_str, str) else functions_str
+            functions = functions_str.split(";") if isinstance(functions_str, str) else functions_str
             if "volume_top_down" not in functions:
                 logger.debug(f"[BackgroundManager] Camera {camera_id} is not volume_top_down")
-                return False
+                return {"success": False, "error": "Camera is not volume_top_down"}
             
-            # Get RTSP URL and capture frame
-            rtsp_url = camera.get("rtsp_url", "")
-            if not rtsp_url:
-                logger.warning(f"[BackgroundManager] No RTSP URL for camera {camera_id}")
-                return False
+            # Connect to camera via ONVIF to get stream URI
+            ip = camera.get('ip', '')
+            try:
+                port = int(camera.get('port', 80))
+            except:
+                port = 80
             
-            # Capture frame using OpenCV directly
-            cap = cv2.VideoCapture(rtsp_url)
+            config = CameraConnectionConfig(
+                ip=ip,
+                port=port,
+                user=camera.get('username', ''),
+                password=camera.get('password', '')
+            )
+            
+            conn = CameraConnection(config)
+            res = await asyncio.to_thread(conn.connect)
+            
+            if not res.get('success'):
+                logger.warning(f"[BackgroundManager] Failed to connect to camera {camera_id}: {res.get('error')}")
+                return {"success": False, "error": f"Connection failed: {res.get('error')}"}
+            
+            stream_uri = res.get('stream_uri', '')
+            if not stream_uri:
+                conn.disconnect()
+                logger.warning(f"[BackgroundManager] No stream URI for camera {camera_id}")
+                return {"success": False, "error": "No stream URI"}
+            
+            # Capture frame using OpenCV
+            cap = cv2.VideoCapture(stream_uri)
             if not cap.isOpened():
+                conn.disconnect()
                 logger.warning(f"[BackgroundManager] Failed to open stream for {camera_id}")
-                return False
+                return {"success": False, "error": "Failed to open stream"}
             
-            ret, frame = cap.read()
+            # Wait for camera to stabilize (10 seconds) to avoid gray frames
+            logger.info(f"[BackgroundManager] Waiting 10 seconds for camera {camera_id} to stabilize...")
+            await asyncio.sleep(10)
+            
+            # Read multiple frames to get a stable image
+            frame = None
+            for _ in range(30):  # Try more frames after waiting
+                ret, frame = cap.read()
+                if ret and frame is not None:
+                    # Check if frame is not gray/blank (has some color variation)
+                    if frame.std() > 10:  # Frame has enough variation
+                        break
+            
             cap.release()
+            conn.disconnect()
             
-            if not ret or frame is None:
+            if frame is None:
                 logger.warning(f"[BackgroundManager] Failed to capture frame from {camera_id}")
-                return False
+                return {"success": False, "error": "Failed to capture frame"}
             
-            # Check if car is detected
-            result = self.detector.detect(frame)
+            # Check if car is detected (skip detection for forced capture)
+            # result = self.detector.detect(frame)
+            # if result.get("detected"):
+            #     logger.info(f"[BackgroundManager] Car detected on {camera_id}, skipping")
+            #     return {"success": False, "error": "Car detected"}
             
-            if result.get("detected"):
-                logger.info(f"[BackgroundManager] Car detected on {camera_id}, skipping background capture")
-                return False
-            
-            # No car detected - save as background
-            return self.save_background(camera_id, frame)
+            # Save as background with camera name
+            filename = self.save_background(cam_name, frame)
+            if filename:
+                return {"success": True, "filename": filename, "camera_name": cam_name}
+            return {"success": False, "error": "Failed to save image"}
             
         except Exception as e:
             logger.error(f"[BackgroundManager] Error capturing background from {camera_id}: {e}")
-            return False
+            return {"success": False, "error": str(e)}
     
     async def update_all_backgrounds(self) -> Dict[str, Any]:
         """
@@ -166,6 +219,7 @@ class BackgroundManager:
             Result dict with success/failure counts
         """
         from backend.camera.logic import CameraLogic
+        from backend.data_process.camera_type.logic import CameraTypeLogic
         
         result = {
             "checked": 0,
@@ -176,11 +230,16 @@ class BackgroundManager:
         
         try:
             camera_logic = CameraLogic()
+            types_logic = CameraTypeLogic()
+            
             cameras = camera_logic.get_cameras()
+            types_map = {t['name']: t.get('functions', '') for t in types_logic.get_types()}
             
             for camera in cameras:
-                functions_str = camera.get("functions", "")
-                functions = functions_str.split(",") if isinstance(functions_str, str) else functions_str
+                # Get functions from camera type
+                cam_type = camera.get('type', '')
+                functions_str = types_map.get(cam_type, '')
+                functions = functions_str.split(";") if isinstance(functions_str, str) else functions_str
                 if "volume_top_down" not in functions:
                     continue
                 
@@ -192,8 +251,8 @@ class BackgroundManager:
                     continue
                 
                 try:
-                    success = await self.capture_background_from_camera(camera_id)
-                    if success:
+                    capture_result = await self.capture_background_from_camera(camera_id)
+                    if capture_result.get("success"):
                         result["updated"] += 1
                     else:
                         result["skipped"] += 1
@@ -209,29 +268,75 @@ class BackgroundManager:
             result["errors"] += 1
             return result
     
-    def start_scheduler(self):
-        """Start hourly background update scheduler."""
+    def start_scheduler(self, interval_hours: int = 1):
+        """
+        Start background update scheduler with configurable interval.
+        
+        Args:
+            interval_hours: Update interval in hours (1, 2, 4, or 24)
+        """
         if self._scheduler_running:
             return
         
         from apscheduler.schedulers.background import BackgroundScheduler
         
-        def hourly_background_job():
+        def background_update_job():
             """Synchronous wrapper for async update."""
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 result = loop.run_until_complete(self.update_all_backgrounds())
                 loop.close()
-                logger.info(f"[BackgroundManager] Hourly update: {result}")
+                logger.info(f"[BackgroundManager] Scheduled update: {result}")
             except Exception as e:
-                logger.error(f"[BackgroundManager] Hourly job error: {e}")
+                logger.error(f"[BackgroundManager] Scheduled job error: {e}")
         
-        scheduler = BackgroundScheduler()
-        scheduler.add_job(hourly_background_job, 'interval', hours=1)
-        scheduler.start()
+        self._scheduler = BackgroundScheduler()
+        self._scheduler.add_job(
+            background_update_job, 
+            'interval', 
+            hours=interval_hours,
+            id='background_update'
+        )
+        self._scheduler.start()
         self._scheduler_running = True
-        logger.info("[BackgroundManager] Hourly background scheduler started")
+        self._current_interval_hours = interval_hours
+        logger.info(f"[BackgroundManager] Background scheduler started (interval: {interval_hours}h)")
+    
+    def update_scheduler_interval(self, interval_hours: int):
+        """
+        Update the scheduler interval.
+        
+        Args:
+            interval_hours: New interval in hours (1, 2, 4, or 24)
+        """
+        if not self._scheduler or not self._scheduler_running:
+            # Start scheduler if not running
+            self.start_scheduler(interval_hours)
+            return
+        
+        if interval_hours == self._current_interval_hours:
+            return
+        
+        try:
+            # Reschedule the job with new interval
+            self._scheduler.reschedule_job(
+                'background_update',
+                trigger='interval',
+                hours=interval_hours
+            )
+            self._current_interval_hours = interval_hours
+            logger.info(f"[BackgroundManager] Scheduler interval updated to {interval_hours}h")
+        except Exception as e:
+            logger.error(f"[BackgroundManager] Failed to update interval: {e}")
+    
+    def stop_scheduler(self):
+        """Stop the background scheduler."""
+        if self._scheduler and self._scheduler_running:
+            self._scheduler.shutdown(wait=False)
+            self._scheduler_running = False
+            self._scheduler = None
+            logger.info("[BackgroundManager] Scheduler stopped")
 
 
 # Module-level instance

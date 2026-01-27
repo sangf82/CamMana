@@ -25,6 +25,8 @@ from backend.data_process.location.api import router as location_router
 from backend.data_process.camera_type.api import router as camera_type_router
 from backend.data_process.report.api import router as report_router
 from backend.camera.api import router as camera_router
+from backend.model_process.utils.background_config import router as background_config_router
+from backend.data_process.storage_config import router as storage_config_router
 
 BACKEND_DIR = Path(__file__).parent
 
@@ -83,6 +85,8 @@ def create_app() -> FastAPI:
     app.include_router(sync_router)
     app.include_router(file_sync_router)
     app.include_router(system_router)
+    app.include_router(background_config_router)
+    app.include_router(storage_config_router)
     
     # Serve captured car images from car_history folder
     @app.get("/api/images/{date_folder}/{car_folder}/{filename}")
@@ -112,9 +116,23 @@ def create_app() -> FastAPI:
         async def serve_spa(full_path: str):
             if full_path.startswith("api/"):
                 raise HTTPException(status_code=404, detail="Not found")
+            
+            # Check if exact file exists
             file_path = static_dir / full_path
             if file_path.exists() and file_path.is_file():
                 return FileResponse(file_path)
+            
+            # Check for Next.js generated HTML file (e.g., /settings -> settings.html)
+            html_file = static_dir / f"{full_path}.html"
+            if html_file.exists():
+                return FileResponse(html_file)
+            
+            # Check for nested route (e.g., /settings/ -> settings/index.html)
+            nested_index = static_dir / full_path / "index.html"
+            if nested_index.exists():
+                return FileResponse(nested_index)
+            
+            # Fallback to index.html for client-side routing
             return FileResponse(static_dir / "index.html")
     
     return app

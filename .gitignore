@@ -31,3 +31,4 @@ requirements-build.txt
 build
 dist
 *.spec
+product/*

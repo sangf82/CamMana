@@ -47,7 +47,7 @@ def run_all_checks(
     print("=" * 60)
     
     # 1. Package Check
-    print("\n[1/5] Checking packages...")
+    print("\n[1/6] Checking packages...")
     try:
         from backend.ci_cd.package_check import run_package_check
         pkg_result = run_package_check(auto_install=auto_fix)
@@ -68,7 +68,7 @@ def run_all_checks(
         print(f"  ❌ Package check error: {e}")
     
     # 2. Model Check
-    print("\n[2/5] Checking AI models...")
+    print("\n[2/6] Checking AI models...")
     try:
         from backend.ci_cd.model_check import run_model_check
         model_result = run_model_check(auto_download=auto_fix)
@@ -89,7 +89,7 @@ def run_all_checks(
         print(f"  ❌ Model check error: {e}")
     
     # 3. Data Check
-    print("\n[3/5] Checking data storage...")
+    print("\n[3/6] Checking data storage...")
     try:
         from backend.ci_cd.data_check import run_data_check
         data_result = run_data_check()
@@ -109,9 +109,35 @@ def run_all_checks(
         overall_success = False
         print(f"  ❌ Data check error: {e}")
     
-    # 4. External API Check
+    # 4. Config Check (Background + Storage Config)
+    print("\n[4/6] Checking system config...")
+    try:
+        from backend.ci_cd.config_check import run_config_check
+        config_result = run_config_check()
+        results.append(CheckResult(
+            name="config",
+            success=config_result["success"],
+            details=config_result
+        ))
+        
+        # Show test results
+        passed = sum(1 for t in config_result.get("tests", []) if t.get("success"))
+        total = len(config_result.get("tests", []))
+        
+        if config_result["success"]:
+            print(f"  ✅ Config tests passed ({passed}/{total})")
+        else:
+            print(f"  ❌ Config tests failed ({passed}/{total})")
+            for err in config_result.get("errors", []):
+                print(f"      - {err}")
+    except Exception as e:
+        logger.error(f"Config check failed: {e}")
+        results.append(CheckResult(name="config", success=False, error=str(e)))
+        print(f"  ❌ Config check error: {e}")
+    
+    # 5. External API Check
     if not skip_api:
-        print("\n[4/5] Checking external APIs...")
+        print("\n[5/6] Checking external APIs...")
         try:
             from backend.ci_cd.api_check import run_api_check
             api_result = run_api_check()
@@ -158,12 +184,12 @@ def run_all_checks(
             results.append(CheckResult(name="external_apis", success=False, error=str(e)))
             print(f"  ⚠️ API check error: {e}")
     else:
-        print("\n[4/5] Skipping external API check")
+        print("\n[5/6] Skipping external API check")
         results.append(CheckResult(name="external_apis", success=True, details={"skipped": True}))
     
-    # 5. Camera Check
+    # 6. Camera Check
     if not skip_cameras:
-        print("\n[5/5] Checking camera connectivity...")
+        print("\n[6/6] Checking camera connectivity...")
         try:
             from backend.ci_cd.camera_check import run_camera_check
             cam_result = run_camera_check()
@@ -185,7 +211,7 @@ def run_all_checks(
             results.append(CheckResult(name="cameras", success=False, error=str(e)))
             print(f"  ⚠️ Camera check error: {e}")
     else:
-        print("\n[5/5] Skipping camera check")
+        print("\n[6/6] Skipping camera check")
         results.append(CheckResult(name="cameras", success=True, details={"skipped": True}))
     
     # Summary
