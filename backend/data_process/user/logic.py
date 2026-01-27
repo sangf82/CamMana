@@ -150,3 +150,30 @@ class UserLogic:
             writer.writerows(users)
             
         return user
+
+    def save_user(self, user_data: dict) -> bool:
+        """Directly save/update user data from a synced payload."""
+        users = self.get_users()
+        username = user_data.get("username")
+        if not username:
+            return False
+            
+        found_idx = -1
+        for i, u in enumerate(users):
+            if u["username"] == username:
+                found_idx = i
+                break
+        
+        # Ensure all headers exist in the incoming data, or use defaults
+        data_to_save = {h: user_data.get(h, "") for h in self.HEADERS}
+        
+        if found_idx >= 0:
+            users[found_idx] = data_to_save
+        else:
+            users.append(data_to_save)
+            
+        with open(self.USERS_FILE, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=self.HEADERS)
+            writer.writeheader()
+            writer.writerows(users)
+        return True

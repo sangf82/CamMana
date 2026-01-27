@@ -38,6 +38,11 @@ async def configure_sync(remote_url: Optional[str] = None, is_destination: bool 
         "mode": "Destination (Master)" if is_destination else "Node (Client)"
     }
 
+@sync_router.get("/discover")
+async def discover_masters():
+    """Return list of discovered Master PCs on the local network."""
+    return [{"name": name, "url": url} for name, url in sync_logic.discovered_pcs.items()]
+
 @sync_router.post("/test-push")
 async def test_push():
     """Manually trigger a sync broadcast to test connectivity."""

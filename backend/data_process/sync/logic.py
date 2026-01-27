@@ -1,8 +1,11 @@
 import httpx
 import asyncio
 import logging
+import os
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
+import socket
+from zeroconf import IPVersion, ServiceInfo, Zeroconf, ServiceBrowser, ServiceListener
 from backend.schemas import SyncPayload
 from backend.config import DATA_DIR, PROJECT_ROOT
 from backend.data_process.history.logic import HistoryLogic
@@ -19,11 +22,63 @@ class SyncLogic:
     
     def __init__(self, remote_url: Optional[str] = None):
         self.history_logic = HistoryLogic()
+        self.discovered_pcs: Dict[str, str] = {} # name -> url
+        self.zc = Zeroconf(ip_version=IPVersion.V4Only)
         self.load_config()
         if remote_url:
             self.remote_url = remote_url
             self.is_destination = False
             self.save_config()
+            
+        # Start advertising if master
+        if self.is_destination:
+            self.start_advertising()
+        
+        # Start browsing for others (clients use this to find master)
+        self.browser = ServiceBrowser(self.zc, "_cammana-sync._tcp.local.", self)
+
+    def start_advertising(self):
+        """Advertise this PC as a CamMana Master on the network."""
+        try:
+            desc = {'version': '2.0.0'}
+            hostname = socket.gethostname()
+            # Try to get the local IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                s.connect(("8.8.8.8", 80))
+                ip = s.getsockname()[0]
+            finally:
+                s.close()
+
+            info = ServiceInfo(
+                "_cammana-sync._tcp.local.",
+                f"{hostname}._cammana-sync._tcp.local.",
+                addresses=[socket.inet_aton(ip)],
+                port=int(os.getenv("PORT", "8000")),
+                properties=desc,
+                server=f"{hostname}.local.",
+            )
+            self.zc.register_service(info)
+            logger.info(f"Registered Zeroconf service for {hostname} at {ip}")
+        except Exception as e:
+            logger.error(f"Failed to start Zeroconf advertising: {e}")
+
+    def remove_service(self, zc, type_, name):
+        if name in self.discovered_pcs:
+            del self.discovered_pcs[name]
+            logger.info(f"Service {name} removed")
+
+    def add_service(self, zc, type_, name):
+        info = zc.get_service_info(type_, name)
+        if info:
+            addresses = [socket.inet_ntoa(addr) for addr in info.addresses]
+            if addresses:
+                url = f"http://{addresses[0]}:{info.port}"
+                self.discovered_pcs[name] = url
+                logger.info(f"Discovered CamMana Master: {name} at {url}")
+
+    def update_service(self, zc, type_, name):
+        self.add_service(zc, type_, name)
 
     def load_config(self):
         """Load sync configuration from JSON file."""
@@ -54,22 +109,6 @@ class SyncLogic:
         except Exception as e:
             logger.error(f"Failed to save sync config: {e}")
 
-    async def push_to_remote(self, payload: SyncPayload):
-        """Push a local change to the remote node."""
-        if not self.remote_url:
-            return False
-            
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.post(
-                    f"{self.remote_url}/api/sync/receive",
-                    json=payload.model_dump(),
-                    headers={"Content-Type": "application/json"}
-                )
-                return response.status_code == 200
-        except Exception as e:
-            logger.error(f"Failed to push to remote {self.remote_url}: {e}")
-            return False
 
     def handle_received_sync(self, payload: SyncPayload):
         """Process a sync payload received from a remote node."""
@@ -100,6 +139,17 @@ class SyncLogic:
             if payload.action == "create" or payload.action == "update":
                 reg_logic.save_car(data)
                 return True
+        elif payload.type == "user":
+            from backend.api.user import UserLogic
+            user_logic = UserLogic()
+            if payload.action == "create" or payload.action == "update":
+                user_logic.save_user(data)
+                return True
+            elif payload.action == "delete":
+                username = data.get("username")
+                if username:
+                    user_logic.delete_user(username)
+                    return True
         
         return False
 
@@ -139,3 +189,9 @@ class SyncLogic:
         except Exception:
             # Silently fail if remote is down to not block local workflow
             return False
+
+    def __del__(self):
+        try:
+            self.zc.close()
+        except:
+            pass
