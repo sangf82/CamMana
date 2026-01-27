@@ -34,6 +34,11 @@ export default function SettingsPage() {
   const [editingUsername, setEditingUsername] = React.useState<string | null>(null)
   const [isUserDialogOpen, setIsUserDialogOpen] = React.useState(false)
   const [pcInfo, setPcInfo] = React.useState<any>(null)
+  const [syncConfig, setSyncConfig] = React.useState({
+    is_destination: true,
+    remote_url: '',
+    status: 'standalone'
+  })
 
   // Avoid hydration mismatch
   React.useEffect(() => {
@@ -68,6 +73,14 @@ export default function SettingsPage() {
     })
     .then(res => res.json())
     .then(data => setPcInfo(data))
+    .catch(() => {})
+
+    // Load Sync Config
+    fetch('/api/sync/status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => setSyncConfig(data))
     .catch(() => {})
   }, [])
 
@@ -163,6 +176,32 @@ export default function SettingsPage() {
         }
     } catch (e) {
         toast.error("Lỗi kết nối");
+    }
+  };
+
+  const handleUpdateSync = async () => {
+    try {
+        const token = localStorage.getItem('token');
+        const params = new URLSearchParams();
+        params.append('is_destination', String(syncConfig.is_destination));
+        if (syncConfig.remote_url) {
+            params.append('remote_url', syncConfig.remote_url);
+        }
+
+        const res = await fetch(`/api/sync/configure?${params.toString()}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+            toast.success("Đã cập nhật cấu hình đồng bộ");
+            const data = await res.json();
+            setSyncConfig(prev => ({ ...prev, ...data }));
+        } else {
+            toast.error("Lỗi khi cập nhật cấu hình");
+        }
+    } catch (e) {
+        toast.error("Lỗi kết nối máy chủ");
     }
   };
 
@@ -312,35 +351,67 @@ export default function SettingsPage() {
           </Card>
 
           {/* 4. Sync Panel */}
-          <Card className="shadow-md border-border h-[200px] flex flex-col">
+          <Card className="shadow-md border-border h-[280px] flex flex-col">
             <CardHeader className="pb-3 border-b border-border/50 bg-muted/20 shrink-0">
-              <CardTitle className="text-xs font-bold flex items-center gap-2 uppercase tracking-widest text-blue-500">
-                <Monitor className="h-4 w-4" />
-                Đồng bộ hạ tầng
+              <CardTitle className="text-xs font-bold flex items-center justify-between gap-2 uppercase tracking-widest text-blue-500">
+                <div className="flex items-center gap-2">
+                    <Monitor className="h-4 w-4" />
+                    Đồng bộ hạ tầng
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full ${syncConfig.is_destination ? 'bg-green-500/20 text-green-500' : 'bg-blue-500/20 text-blue-500'}`}>
+                    {syncConfig.is_destination ? 'MASTER' : 'CLIENT'}
+                </span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-6 flex-1 flex flex-col justify-center space-y-4">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase text-muted-foreground font-black tracking-widest">Địa chỉ PC đối diện (Endpoint)</Label>
-                <div className="flex gap-2">
+            <CardContent className="pt-4 flex-1 flex flex-col space-y-4">
+              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50 border border-border">
+                <div className="space-y-0.5">
+                    <Label className="text-xs font-bold">Chế độ Lưu trữ (Master)</Label>
+                    <p className="text-[9px] text-muted-foreground italic leading-tight">Bật nếu PC này là nơi lưu trữ dữ liệu tập trung.</p>
+                </div>
+                <Switch 
+                    checked={syncConfig.is_destination} 
+                    onCheckedChange={(c) => setSyncConfig(prev => ({ ...prev, is_destination: c }))} 
+                />
+              </div>
+
+              {!syncConfig.is_destination && (
+                <div className="space-y-1.5 animate-in slide-in-from-top-2">
+                    <Label className="text-[10px] uppercase text-muted-foreground font-black tracking-widest">Địa chỉ Master PC (Endpoint)</Label>
                     <Input 
-                        id="remote-ip" 
                         placeholder="http://192.168.1.50:8000" 
                         className="h-8 text-xs font-mono bg-background focus-visible:ring-blue-500"
-                        defaultValue={typeof window !== 'undefined' ? localStorage.getItem('remote_sync_url') || '' : ''}
+                        value={syncConfig.remote_url}
+                        onChange={(e) => setSyncConfig(prev => ({ ...prev, remote_url: e.target.value }))}
                     />
-                    <Button size="sm" className="h-8 px-4 text-[10px] font-black bg-blue-600 hover:bg-blue-700 text-white" onClick={() => {
-                        const url = (document.getElementById('remote-ip') as HTMLInputElement).value;
-                        localStorage.setItem('remote_sync_url', url);
-                        fetch(`http://127.0.0.1:8000/api/sync/configure?remote_url=${encodeURIComponent(url)}`, { method: 'POST' })
-                            .then(() => toast.success("Đã cấu hình đồng bộ"))
-                            .catch(() => toast.error("Lỗi cấu hình"));
-                    }}>LƯU CẤU HÌNH</Button>
                 </div>
+              )}
+
+              <div className="flex gap-2 mt-auto">
+                <Button 
+                    className="flex-1 h-8 text-[10px] font-black bg-blue-600 hover:bg-blue-700 text-white" 
+                    onClick={handleUpdateSync}
+                >
+                    LƯU CẤU HÌNH ĐỒNG BỘ
+                </Button>
+                {!syncConfig.is_destination && (
+                    <Button 
+                        variant="outline"
+                        className="h-8 text-[10px] font-black border-blue-600 text-blue-600" 
+                        onClick={async () => {
+                            const token = localStorage.getItem('token');
+                            const res = await fetch('/api/sync/test-push', { 
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            if (res.ok) toast.success("Đã gửi signal kiểm tra");
+                            else toast.error("Không thể kết nối Master");
+                        }}
+                    >
+                        TEST
+                    </Button>
+                )}
               </div>
-              <p className="text-[9px] text-muted-foreground italic bg-blue-500/5 p-2 rounded border border-blue-500/10">
-                Lưu ý: Đảm bảo máy đối diện đã bật Firewall cho Port 8000.
-              </p>
             </CardContent>
           </Card>
       </div>
