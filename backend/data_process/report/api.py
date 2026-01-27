@@ -61,6 +61,14 @@ async def generate_report(
     date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format. Defaults to today."),
     user: UserSchema = Depends(get_current_user)
 ):
+    # Proxy to master if in client mode
+    if is_client_mode():
+        query = f"?date={date}" if date else ""
+        result = await proxy_post(f"/api/report/generate{query}", {})
+        if result is not None:
+            return result
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+
     if not date:
         date = datetime.now().strftime("%d-%m-%Y")
     return logic.generate_report(date)
@@ -70,6 +78,34 @@ async def export_report_pdf(
     date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format. Defaults to today."),
     user: UserSchema = Depends(get_current_user)
 ):
+    # CLIENT MODE PROXY for PDF
+    if is_client_mode():
+        from backend.data_process.sync.proxy import get_master_url
+        import httpx
+        master_url = get_master_url()
+        if not master_url:
+             raise HTTPException(503, "Master URL not configured")
+        
+        query = f"?date={date}" if date else ""
+        url = f"{master_url.rstrip('/')}/api/report/export/pdf{query}"
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url)
+                if response.status_code == 200:
+                     return Response(
+                        content=response.content,
+                        media_type="application/pdf",
+                        headers={
+                            "Content-Disposition": response.headers.get("Content-Disposition", f"attachment; filename=report.pdf")
+                        }
+                    )
+                else:
+                     raise HTTPException(response.status_code, "Master failed to generate PDF")
+        except Exception as e:
+            logger.error(f"PDF Proxy failed: {e}")
+            raise HTTPException(503, f"Failed to fetch PDF from master: {e}")
+
     if not date:
         date = datetime.now().strftime("%d-%m-%Y")
     
