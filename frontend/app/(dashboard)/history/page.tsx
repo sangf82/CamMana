@@ -78,7 +78,19 @@ export default function HistoryPage() {
     const fetchHistory = async () => {
       try {
         setLoading(true);
-        const response = await fetch("/api/history");
+        const token = localStorage.getItem('token');
+        const response = await fetch("/api/history", {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({ detail: "Unknown error" }));
+            console.error("History API error:", err);
+            toast.error(err.detail || "Không thể tải lịch sử");
+            setData([]);
+            return;
+        }
+
         const result = await response.json();
 
         // Backend returns List[HistoryRecord] directly

@@ -1,7 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 from .logic import LocationLogic
+from backend.api.user import get_current_user
+from backend.schemas import User as UserSchema
 
 class LocationBase(BaseModel):
     name: Optional[str] = None
@@ -25,8 +27,13 @@ router = APIRouter(prefix="/api/locations", tags=["Locations"])
 logic = LocationLogic()
 
 @router.get("", response_model=List[LocationResponse])
-def get_locations():
-    return logic.get_locations()
+def get_locations(user: UserSchema = Depends(get_current_user)):
+    all_locs = logic.get_locations()
+    if user.role == "admin" or user.allowed_gates == "*":
+        return all_locs
+    
+    allowed = [g.strip() for g in user.allowed_gates.split(',')]
+    return [l for l in all_locs if l['name'] in allowed]
 
 @router.post("", response_model=LocationResponse)
 def add_location(loc: LocationBase):

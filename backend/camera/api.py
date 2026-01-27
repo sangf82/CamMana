@@ -1,10 +1,12 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any, Union
 import asyncio
 import logging
 
+from backend.api.user import get_current_user
+from backend.schemas import User as UserSchema
 from .logic import CameraLogic
 from .connection import CameraConnection, CameraConnectionConfig
 from .capture import VideoStreamer
@@ -42,22 +44,32 @@ class CameraUpdate(BaseModel):
     brand: Optional[str] = None
     tag: Optional[str] = None
 
+from backend.data_process.camera_type.logic import CameraTypeLogic
+
 class CameraResponse(CameraBase):
     id: str # Internal ID
     cam_id: Optional[str] = None # Optional external ID
     status: str = "Offline"
+    functions: List[str] = []
 
 class PTZRequest(BaseModel):
     speed: float = 0.5
     
 @router.get("", response_model=List[CameraResponse])
-def get_cameras():
-    cameras = logic.get_cameras()
+def get_cameras(user: UserSchema = Depends(get_current_user)):
+    all_cameras = logic.get_cameras()
+    
+    # Get functions mapping
+    types_logic = CameraTypeLogic()
+    types_map = {t['name']: t['functions'] for t in types_logic.get_types()}
+
+    # All authenticated users can see all cameras
+    filtered = all_cameras
+
     # Enrich with status
     enriched = []
-    for c in cameras:
+    for c in filtered:
         # Normalize fields for response 
-        # (ensure 'port' is int, etc if CSV stored as str)
         try:
             c['port'] = int(c.get('port', 80))
         except:
@@ -72,18 +84,29 @@ def get_cameras():
                 status = "Online"
         
         c['status'] = status
+        
+        # Populate functions
+        funcs = types_map.get(c.get('type'), [])
+        if isinstance(funcs, str):
+            c['functions'] = funcs.split(';')
+        elif isinstance(funcs, list):
+            c['functions'] = funcs
+        else:
+            c['functions'] = []
+            
         enriched.append(c)
     return enriched
 
+
 @router.post("", response_model=CameraResponse)
-def add_camera(cam: CameraBase):
+def add_camera(cam: CameraBase, user: UserSchema = Depends(get_current_user)):
+    if user.role != "admin" and not user.can_manage_cameras:
+        raise HTTPException(status_code=403, detail="Permission denied")
     try:
         data = cam.dict()
-        # Set default status to Idle for new cameras
         if 'status' not in data or not data['status']:
             data['status'] = 'Idle'
         new_cam = logic.add_camera(data)
-        # Ensure correct return types
         try: new_cam['port'] = int(new_cam.get('port', 80))
         except: new_cam['port'] = 80
         return {**new_cam, "status": new_cam.get('status', 'Idle')}
@@ -91,26 +114,27 @@ def add_camera(cam: CameraBase):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.put("/{cam_id}", response_model=CameraResponse)
-def update_camera(cam_id: str, cam: CameraUpdate):
+def update_camera(cam_id: str, cam: CameraUpdate, user: UserSchema = Depends(get_current_user)):
+    if user.role != "admin" and not user.can_manage_cameras:
+        raise HTTPException(status_code=403, detail="Permission denied")
     updated = logic.update_camera(cam_id, cam.dict(exclude_unset=True))
     if not updated:
         raise HTTPException(status_code=404, detail="Camera not found")
     
-    # If active, might need reconnect? For now, user must manually reconnect.
     status = "Offline"
     if cam_id in active_cameras:
-         # Check status
          if active_cameras[cam_id]['connection'].connected: status = "Connected"
          if active_cameras[cam_id]['streamer'].is_streaming: status = "Online"
             
-    # Normalize types
     try: updated['port'] = int(updated.get('port', 80))
     except: updated['port'] = 80
     
     return {**updated, "status": status}
 
 @router.delete("/{cam_id}")
-def delete_camera(cam_id: str):
+def delete_camera(cam_id: str, user: UserSchema = Depends(get_current_user)):
+    if user.role != "admin" and not user.can_manage_cameras:
+        raise HTTPException(status_code=403, detail="Permission denied")
     if cam_id in active_cameras:
         _disconnect_camera(cam_id)
     success = logic.delete_camera(cam_id)
@@ -120,7 +144,10 @@ def delete_camera(cam_id: str):
 
 # Connect/Disconnect
 @router.post("/{cam_id}/connect")
-async def connect_camera(cam_id: str):
+async def connect_camera(cam_id: str, user: UserSchema = Depends(get_current_user)):
+    if user.role != "admin" and not user.can_manage_cameras:
+        raise HTTPException(status_code=403, detail="Permission denied")
+        
     cameras = logic.get_cameras()
     cam_data = next((c for c in cameras if c.get('cam_id') == cam_id or c.get('id') == cam_id), None)
     if not cam_data:
@@ -165,7 +192,9 @@ async def connect_camera(cam_id: str):
     return {"success": True, "details": res}
 
 @router.post("/{cam_id}/disconnect")
-def disconnect_camera(cam_id: str):
+def disconnect_camera(cam_id: str, user: UserSchema = Depends(get_current_user)):
+    if user.role != "admin" and not user.can_manage_cameras:
+        raise HTTPException(status_code=403, detail="Permission denied")
     _disconnect_camera(cam_id)
     return {"success": True}
 
@@ -182,12 +211,10 @@ def _disconnect_camera(cam_id: str):
 @router.get("/{cam_id}/stream")
 async def video_feed(cam_id: str):
     if cam_id not in active_cameras:
-        # Try auto-connect?
-        await connect_camera(cam_id)
+        # Try auto-connect? (requires careful consideration without user object)
+        # For now, just raise if not connected
+        raise HTTPException(404, "Camera not connected. Please connect from dashboard first.")
     
-    if cam_id not in active_cameras:
-        raise HTTPException(404, "Camera not available")
-
     streamer = active_cameras[cam_id]['streamer']
     if not streamer.is_streaming:
          streamer.start()
@@ -202,7 +229,7 @@ async def video_feed(cam_id: str):
 
 # PTZ
 @router.post("/{cam_id}/ptz/{action}")
-def ptz_action(cam_id: str, action: str, req: PTZRequest):
+def ptz_action(cam_id: str, action: str, req: PTZRequest, user: UserSchema = Depends(get_current_user)):
     if cam_id not in active_cameras:
         raise HTTPException(404, "Camera not connected")
     
@@ -220,14 +247,14 @@ def ptz_action(cam_id: str, action: str, req: PTZRequest):
 
 # Capture
 @router.post("/{cam_id}/capture")
-def capture_image(cam_id: str):
+def capture_image(cam_id: str, user: UserSchema = Depends(get_current_user)):
     if cam_id not in active_cameras:
          raise HTTPException(404, "Camera not connected")
     return active_cameras[cam_id]['streamer'].capture_image()
 
 # Stream Info
 @router.get("/{cam_id}/stream-info")
-def get_stream_info(cam_id: str):
+def get_stream_info(cam_id: str, user: UserSchema = Depends(get_current_user)):
     """Get stream resolution and FPS for a connected camera."""
     if cam_id not in active_cameras:
         raise HTTPException(404, "Camera not connected")

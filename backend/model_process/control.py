@@ -59,7 +59,7 @@ class ModelOrchestrator:
         for func in functions:
             func_lower = func.lower().strip()
             
-            if func_lower in ["truck", "box", "truck_detect", "box_detect"]:
+            if func_lower in ["truck", "box", "truck_detect", "box_detect", "car", "car_detect"]:
                 tasks.append(run_sync_detect("truck", self.truck_detector))
                 
             elif func_lower in ["plate", "alpr", "plate_detect"]:

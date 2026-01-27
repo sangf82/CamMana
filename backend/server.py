@@ -16,12 +16,15 @@ from backend.api import (
     config_router, schedule_router,
     checkin_router, checkout_router
 )
+from backend.api.user import user_router
+from backend.api.sync import sync_router
 from backend.data_process.history.api import router as history_router
 from backend.data_process.register_car.api import router as registered_car_router
 from backend.data_process.location.api import router as location_router
 from backend.data_process.camera_type.api import router as camera_type_router
 from backend.data_process.report.api import router as report_router
 from backend.camera.api import router as camera_router
+from backend.api.system import router as system_router
 
 BACKEND_DIR = Path(__file__).parent
 
@@ -64,6 +67,9 @@ def create_app() -> FastAPI:
     app.include_router(location_router)
     app.include_router(camera_type_router)
     app.include_router(report_router)
+    app.include_router(user_router)
+    app.include_router(sync_router)
+    app.include_router(system_router)
     
     # Serve captured car images from car_history folder
     @app.get("/api/images/{date_folder}/{car_folder}/{filename}")

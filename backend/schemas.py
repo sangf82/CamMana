@@ -137,3 +137,60 @@ class CapturedCar(BaseModel):
 
 class ExecuteDetectionRequest(BaseModel):
     force: bool = False
+
+# User Models
+class User(BaseModel):
+    id: str
+    username: str
+    full_name: Optional[str] = None
+    role: str = "operator"  # admin, operator
+    allowed_gates: Optional[str] = "*"  # comma-separated list or "*"
+    can_manage_cameras: bool = False
+    can_add_vehicles: bool = False
+    vehicle_add_code: Optional[str] = ""
+    created_at: str = ""
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    full_name: Optional[str] = None
+    role: str = "operator"
+    allowed_gates: Optional[str] = "*"
+    can_manage_cameras: bool = False
+    can_add_vehicles: bool = False
+    vehicle_add_code: Optional[str] = ""
+
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    allowed_gates: Optional[str] = None
+    can_manage_cameras: Optional[bool] = None
+    can_add_vehicles: Optional[bool] = None
+    vehicle_add_code: Optional[str] = None
+    password: Optional[str] = None
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: Optional[User] = None
+
+class TokenData(BaseModel):
+    username: Optional[str] = None
+
+# Sync Models
+class SyncNode(BaseModel):
+    id: str
+    ip: str
+    name: str
+    status: str = "offline"
+    last_sync: str = ""
+
+class SyncPayload(BaseModel):
+    type: str  # history, camera, registered_car
+    action: str  # create, update, delete
+    data: Dict[str, Any]
+    timestamp: str

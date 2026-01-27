@@ -35,7 +35,10 @@ export default function VehiclesPage() {
   // --- 1. Load Data from API ---
   const fetchInitialData = async () => {
       try {
-          const res = await fetch('/api/registered_cars')
+          const token = localStorage.getItem('token');
+          const res = await fetch('/api/registered_cars', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
           if (res.ok) {
               const rawData = await res.json()
               // Map Backend -> Frontend
@@ -77,9 +80,13 @@ export default function VehiclesPage() {
       }))
 
       const promise = (async () => {
+        const token = localStorage.getItem('token');
         const res = await fetch('/api/registered_cars', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
             body: JSON.stringify(payload)
         })
         if (!res.ok) throw new Error('Failed to save data')
@@ -123,10 +130,11 @@ export default function VehiclesPage() {
       }
   }
 
-  const handleSave = async (e: React.FormEvent, updatedItem: Vehicle) => {
+  const handleSave = async (e: React.FormEvent, updatedItem: Vehicle, adminCode?: string) => {
     e.preventDefault();
     
     const isNew = !editingItem?.id || editingItem.id === 0;
+    const token = localStorage.getItem('token');
     
     // Map Frontend -> Backend
     const payload = {
@@ -139,17 +147,24 @@ export default function VehiclesPage() {
       car_owner: updatedItem.contractor,
       car_note: updatedItem.axles,
       car_register_date: updatedItem.registrationDate,
+      admin_code: adminCode || '',
     };
 
     const promise = isNew
       ? fetch('/api/registered_cars', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify(payload),
         })
       : fetch(`/api/registered_cars/${updatedItem.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify(payload),
         });
 

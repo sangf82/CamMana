@@ -73,11 +73,11 @@ export default function EditModal({
                 onChange={(e) => setEditStatus(e.target.value)}
                 className="w-full mt-1 px-2 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-[#f59e0b]"
               >
-                <option value="vào cổng">Vào cổng</option>
-                <option value="đã vào">Đã vào</option>
-                <option value="đang cân">Đang cân</option>
-                <option value="ra cổng">Ra cổng</option>
-                <option value="đã ra">Đã ra</option>
+                <option value="Vào cổng">Vào cổng</option>
+                <option value="Đã vào">Đã vào</option>
+                <option value="Đang cân">Đang cân</option>
+                <option value="Ra cổng">Ra cổng</option>
+                <option value="Đã ra">Đã ra</option>
               </select>
             </div>
 
@@ -103,13 +103,14 @@ export default function EditModal({
             <select
               value={editVerify}
               onChange={(e) => setEditVerify(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-[#f59e0b]"
+              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-[#f59e0b] text-sm"
             >
-              <option value="đã xác minh">Đã xác minh</option>
-              <option value="chưa xác minh">Chưa xác minh</option>
-              <option value="cần kt">Cần KT</option>
-              <option value="xe lạ">Xe lạ</option>
-              <option value="xe chưa đk">Xe chưa ĐK</option>
+              <option value="Đã xác minh">Đã xác minh</option>
+              <option value="Chưa xác minh">Chưa xác minh</option>
+              <option value="Cần KT">Cần KT</option>
+              <option value="Xe lạ">Xe lạ</option>
+              <option value="Xe chưa ĐK">Xe chưa ĐK</option>
+              <option value="Từ chối">Từ chối</option>
             </select>
           </div>
 

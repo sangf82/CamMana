@@ -231,9 +231,13 @@ export default function CameraGrid({
                       const activeId = getActiveId(mainCamera);
                       if (!activeId) return;
                       try {
+                        const token = localStorage.getItem('token');
                         const res = await fetch(
                           `/api/cameras/${activeId}/capture`,
-                          { method: "POST" }
+                          { 
+                            method: "POST",
+                            headers: { 'Authorization': `Bearer ${token}` }
+                          }
                         );
                         if (res.ok) {
                           const data = await res.json();

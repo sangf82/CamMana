@@ -59,13 +59,29 @@ export default function Sidebar() {
   
   // Dynamic Locations State
   const [monitorSubItems, setMonitorSubItems] = useState<{ title: string; href: string; tag?: string }[]>([])
+  const [userData, setUserData] = useState<{username: string, role: string, full_name?: string} | null>(null)
+
+  // Load user data
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+        try {
+            setUserData(JSON.parse(savedUser));
+        } catch (e) {}
+    }
+  }, []);
 
   // Load Locations for Sidebar
   useEffect(() => {
     // 1. Initial Load
     const loadLocations = async () => {
         try {
-            const res = await fetch('/api/cameras/locations')
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            const res = await fetch('/api/cameras/locations', {
+              headers: { 'Authorization': `Bearer ${token}` }
+            })
             if (res.ok) {
                 const locs: Array<{id: string | number, name: string, tag?: string}> = await res.json()
                 const items = locs.map(loc => ({
@@ -102,7 +118,12 @@ export default function Sidebar() {
         subItems: monitorSubItems,
         href: '/monitor'
     },
-    ...STATIC_MENU_ITEMS
+    ...STATIC_MENU_ITEMS.filter(item => {
+        // High-level filtering
+        if (item.title === 'Danh sách Camera') return true; // Everyone can view the list
+        if (item.title === 'Danh sách xe đăng ký' && userData?.role !== 'admin' && !(userData as any)?.can_add_vehicles) return false;
+        return true;
+    })
   ]
 
   const handleMainClick = (item: MenuItem) => {
@@ -280,8 +301,8 @@ export default function Sidebar() {
           </div>
           {!isCollapsed && (
             <div className="flex-1 text-left overflow-hidden">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">Người dùng</p>
-                <p className="text-xs text-muted-foreground truncate">Vận hành viên</p>
+                <p className="text-sm font-medium text-sidebar-foreground truncate">{userData?.full_name || userData?.username || 'Người dùng'}</p>
+                <p className="text-xs text-muted-foreground truncate">{userData?.role === 'admin' ? 'Quản trị viên' : 'Vận hành viên'}</p>
             </div>
           )}
         </button>
@@ -294,7 +315,13 @@ export default function Sidebar() {
               <span>Cài đặt</span>
             </a>
             <div className="h-px bg-border my-1" />
-            <button className="flex items-center gap-2 w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors">
+            <button 
+                onClick={() => {
+                    localStorage.clear();
+                    window.location.href = "/login";
+                }}
+                className="flex items-center gap-2 w-full px-4 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+            >
               <Logout fontSize="small" />
               <span>Đăng xuất</span>
             </button>

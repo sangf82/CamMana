@@ -1,7 +1,10 @@
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Dict, Optional, Any
 from pydantic import BaseModel
+
+from backend.api.user import get_current_user
+from backend.schemas import User as UserSchema
 
 from backend.data_process.history.logic import HistoryLogic
 from backend.schemas import HistoryRecord
@@ -27,11 +30,16 @@ def get_available_dates():
     return logic.get_available_dates()
 
 @router.get("", response_model=List[Dict[str, Any]])
-def get_history(date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format")):
+def get_history(
+    date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format"),
+    user: UserSchema = Depends(get_current_user)
+):
     """
     Get history records. If date is None, returns today's records.
+    Accessible to all authenticated users.
     """
-    return logic.get_records(date)
+    all_records = logic.get_records(date)
+    return all_records
 
 @router.post("", response_model=Dict[str, str])
 def add_history_record(record: Dict[str, Any]):

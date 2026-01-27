@@ -71,8 +71,18 @@ class CheckInService:
             for res_dict in all_results_list:
                 results.update(res_dict)
             
+            # Extract Data
+            plate_res = results.get("plate", {})
+            plate_number = plate_res.get("plate", "Unknown")
+            
+            color_res = results.get("color", {})
+            primary_color = color_res.get("primary_color", "Unknown")
+            
+            wheel_res = results.get("wheel", {})
+            wheel_count = wheel_res.get("wheel_count_total", 0)
+
             # 2. Create Folder and Save Model Outputs
-            folder_path = self.history_logic.create_car_folder(session_id)
+            folder_path = self.history_logic.create_car_folder(session_id, plate=plate_number, direction="in")
             
             # Save individual model outputs as JSON
             for func_name, res in results.items():

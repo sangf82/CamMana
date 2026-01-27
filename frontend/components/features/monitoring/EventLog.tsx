@@ -50,9 +50,13 @@ export default function EventLog({
       return;
     }
     try {
+      const token = localStorage.getItem('token');
       const res = await fetch(`/api/cameras/${activeMainCameraId}/ptz/${action}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify({ speed: 0.5 }),
       });
       if (res.ok) {
@@ -72,9 +76,13 @@ export default function EventLog({
   const stopPtz = useCallback(async () => {
     if (!activeMainCameraId) return;
     try {
+      const token = localStorage.getItem('token');
       await fetch(`/api/cameras/${activeMainCameraId}/ptz/stop`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify({ speed: 0 }),
       });
     } catch (e) {

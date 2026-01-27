@@ -32,7 +32,12 @@ export default function VideoPlayer({
 
     const fetchStreamInfo = async () => {
       try {
-        const res = await fetch(`/api/cameras`)
+        const token = localStorage.getItem('token')
+        if (!token) return
+        
+        const res = await fetch(`/api/cameras`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
         if (res.ok) {
           const cameras = await res.json()
           const cam = cameras.find((c: { id: string }) => c.id === activeId)
@@ -52,6 +57,7 @@ export default function VideoPlayer({
     const interval = setInterval(fetchStreamInfo, 2000) // Update every 2s
     return () => clearInterval(interval)
   }, [activeId, src])
+
 
   const handleRetry = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()

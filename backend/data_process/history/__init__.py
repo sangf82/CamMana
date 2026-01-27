@@ -1,3 +1,3 @@
 
 from .logic import HistoryLogic
-from .api import router
+# Note: router is accessed via backend.data_process.history.api.router to avoid circular imports

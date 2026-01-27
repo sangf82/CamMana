@@ -4,6 +4,8 @@ import time
 import asyncio
 import threading
 import queue
+import sys
+import contextlib
 from typing import Optional, AsyncGenerator, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -11,10 +13,63 @@ from PIL import Image
 import numpy as np
 from backend.config import DATA_DIR, PROJECT_ROOT
 
+# Suppress FFmpeg/OpenCV HEVC decoder warnings
+# These appear when stream joins mid-GOP (normal for RTSP)
 os.environ["OPENCV_LOG_LEVEL"] = "SILENT"
-os.environ["OPENCV_FFMPEG_LOGLEVEL"] = "-8"
-# Force TCP for RTSP (more stable for HEVC/H.265)
-os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|allowed_media_types;video"
+os.environ["OPENCV_FFMPEG_LOGLEVEL"] = "-8"  # AV_LOG_QUIET
+
+# Force TCP and add options for better HEVC stream handling
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+    "rtsp_transport;tcp|"
+    "allowed_media_types;video|"
+    "fflags;discardcorrupt|"
+    "err_detect;ignore_err|"
+    "analyzeduration;1000000|"
+    "probesize;1000000"
+)
+
+# Additional FFmpeg log suppression (affects libavcodec)
+os.environ["AV_LOG_FORCE_NOCOLOR"] = "1"
+os.environ["FFREPORT"] = ""
+
+# Flag to control HEVC warning suppression (set to False for debugging)
+SUPPRESS_FFMPEG_STDERR = True
+
+@contextlib.contextmanager
+def suppress_ffmpeg_stderr():
+    """
+    Context manager to suppress FFmpeg stderr output during video capture.
+    Works at the OS/C level by redirecting file descriptor 2.
+    """
+    if not SUPPRESS_FFMPEG_STDERR:
+        yield
+        return
+    
+    saved_stderr_fd = None
+    null_fd = None
+    try:
+        saved_stderr_fd = os.dup(2)  # Save original stderr fd
+        if sys.platform == 'win32':
+            null_fd = os.open('NUL', os.O_WRONLY)
+        else:
+            null_fd = os.open('/dev/null', os.O_WRONLY)
+        os.dup2(null_fd, 2)  # Redirect stderr to null
+        yield
+    except Exception:
+        yield
+    finally:
+        # Restore stderr
+        if saved_stderr_fd is not None:
+            try:
+                os.dup2(saved_stderr_fd, 2)
+                os.close(saved_stderr_fd)
+            except:
+                pass
+        if null_fd is not None:
+            try:
+                os.close(null_fd)
+            except:
+                pass
 
 class VideoStreamer:
     def __init__(self, rtsp_uri: str):
@@ -57,7 +112,8 @@ class VideoStreamer:
                     self._stop_event.wait(1.0)
                 continue
             try:
-                ret, frame = self.cap.read()
+                with suppress_ffmpeg_stderr():
+                    ret, frame = self.cap.read()
                 if ret and frame is not None:
                     self.last_frame = frame
                     self.frame_count += 1
@@ -92,7 +148,8 @@ class VideoStreamer:
         if self.cap: self.cap.release()
         time.sleep(self._reconnect_delay)
         try:
-            self.cap = cv2.VideoCapture(self.rtsp_uri, cv2.CAP_FFMPEG)
+            with suppress_ffmpeg_stderr():
+                self.cap = cv2.VideoCapture(self.rtsp_uri, cv2.CAP_FFMPEG)
             if self.cap.isOpened():
                 self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 self.cap.set(cv2.CAP_PROP_FPS, 30)
@@ -109,15 +166,22 @@ class VideoStreamer:
         
         self._stop_event.clear()
         try:
-            self.cap = cv2.VideoCapture(self.rtsp_uri, cv2.CAP_FFMPEG)
+            with suppress_ffmpeg_stderr():
+                self.cap = cv2.VideoCapture(self.rtsp_uri, cv2.CAP_FFMPEG)
             if not self.cap.isOpened(): return False
             
             # Setup
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            # Warmup
-            for _ in range(5):
-                ret, frame = self.cap.read()
-                if ret: self.last_frame = frame
+            # Warmup - skip initial garbage/gray frames
+            for _ in range(20):
+                with suppress_ffmpeg_stderr():
+                    ret, frame = self.cap.read()
+                if ret and frame is not None:
+                    self.last_frame = frame
+                    # Check if frame is alive (not solid gray/black)
+                    _, stddev = cv2.meanStdDev(frame)
+                    if stddev[0][0] > 5.0: # Good frame found
+                        break
             
             self.is_streaming = self.cap.isOpened()
             if self.is_streaming:

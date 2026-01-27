@@ -135,14 +135,16 @@ class HistoryLogic:
         date_objs.sort(reverse=True)
         return [d.strftime(self.DATE_FORMAT) for d in date_objs]
 
-    def create_car_folder(self, record_id: str) -> Path:
+    def create_car_folder(self, record_id: str, plate: Optional[str] = None, direction: str = "in") -> Path:
         """
-        Create a folder for the car interaction: car_history/dd-mm-yyyy/uuid_hh-mm-ss
+        Create a folder for the car interaction: car_history/dd-mm-yyyy/uuid_[in|out]_hh-mm-ss
         """
         date_folder_name = datetime.now().strftime(self.DATE_FORMAT)
-        time_suffix = datetime.now().strftime("%H-%M-%S") # Use - for safety in paths
+        time_suffix = datetime.now().strftime("%H-%M-%S")
         
-        folder_name = f"{record_id}_{time_suffix}"
+        # New format: {uuid}_{in/out}_{hh-mm-ss}
+        folder_name = f"{record_id}_{direction}_{time_suffix}"
+
         
         date_folder_path = self.CAR_HISTORY_DIR / date_folder_name
         date_folder_path.mkdir(parents=True, exist_ok=True)
@@ -185,6 +187,14 @@ class HistoryLogic:
         
         current_data.append(clean_record)
         self._write_csv(self.current_file, current_data)
+        
+        # Sync Hook
+        try:
+            from backend.api.sync import sync_logic
+            import asyncio
+            asyncio.create_task(sync_logic.broadcast_change("history", "create", clean_record))
+        except: pass
+            
         return clean_record
 
     def update_record(self, record_id: str, update_data: Dict[str, Any], date_str: Optional[str] = None) -> Optional[Dict[str, str]]:
@@ -213,6 +223,14 @@ class HistoryLogic:
             
             if updated_rec:
                 self._write_csv(target_file, current_data)
+                
+                # Sync Hook
+                try:
+                    from backend.api.sync import sync_logic
+                    import asyncio
+                    asyncio.create_task(sync_logic.broadcast_change("history", "update", updated_rec))
+                except: pass
+                    
                 return updated_rec
                 
         return None
@@ -263,6 +281,52 @@ class HistoryLogic:
             
             if len(current_data) < initial_len:
                 self._write_csv(target_file, current_data)
+                
+                # Sync Hook
+                try:
+                    from backend.api.sync import sync_logic
+                    import asyncio
+                    asyncio.create_task(sync_logic.broadcast_change("history", "delete", {"id": record_id}))
+                except: pass
+                
                 return True
         return False
+
+    def update_record_by_plate_time(self, plate: str, time_in: str, update_data: Dict[str, Any], date_str: Optional[str] = None) -> Optional[Dict[str, str]]:
+        """
+        Update a record matching plate and time_in.
+        """
+        if date_str:
+            dates_to_check = [date_str]
+        else:
+            dates_to_check = self.get_available_dates()
+            
+        for d in dates_to_check:
+            target_file = DATA_DIR / f"{self.FILE_PREFIX}{d}.csv"
+            if not target_file.exists():
+                continue
+                
+            current_data = self._read_csv(target_file)
+            updated_rec = None
+            for rec in current_data:
+                if rec["plate"] == plate and rec["time_in"] == time_in:
+                    for k, v in update_data.items():
+                        if k in self.HEADERS:
+                            rec[k] = str(v)
+                    updated_rec = rec
+                    break
+            
+            if updated_rec:
+                self._write_csv(target_file, current_data)
+                return updated_rec
+        return None
+
+    def save_record(self, record_data: Dict[str, Any], date_str: Optional[str] = None):
+        """
+        Save/Overwrite a record. If ID exists, update it. Otherwise add it.
+        """
+        rec_id = record_data.get("id")
+        if rec_id and self.update_record(rec_id, record_data, date_str):
+            return True
+        return self.add_record(record_data)
 

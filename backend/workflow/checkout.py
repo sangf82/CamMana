@@ -1,5 +1,6 @@
 
 import logging
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict
@@ -10,6 +11,7 @@ from backend.data_process.register_car.logic import RegisteredCarLogic
 
 logger = logging.getLogger(__name__)
 
+
 class CheckOutService:
     def __init__(self):
         self.history_logic = HistoryLogic()
@@ -18,130 +20,199 @@ class CheckOutService:
 
     async def process_checkout(
         self,
-        front_image_path: Path,
+        images: list, # List of dicts with 'path', 'cam_name', 'functions'
         location_id: str,
         date_str: Optional[str] = None
     ) -> Dict:
         """
         Process a check-out event.
-        - Detect Plate.
-        - Find Open Session.
-        - Close Session.
+        - Run AI on relevant images.
+        - Match Plate with Open Session.
+        - Handle Volume if applicable.
+        - Save evidence to history folder.
         """
         import cv2
         import shutil
+        import json
         
         try:
-            # 1. AI Detection (Plate only usually suffices for checkout)
-            front_frame = cv2.imread(str(front_image_path))
-            results = await self.orchestrator.process_image(front_frame, ["plate"])
+            # 1. Process ALL images with their functions
+            all_results = {}
+            plate_number = "Unknown"
+            primary_color = "Unknown"
+            wheel_count = 0
             
-            plate_res = results.get("plate", {})
-            plate_number = plate_res.get("plate", "Unknown")
+            tasks = []
+            for img_info in images:
+                frame = cv2.imread(str(img_info["path"]))
+                if frame is not None:
+                    funcs = img_info.get("functions", [])
+                    if funcs:
+                        tasks.append((img_info, self.orchestrator.process_image(frame, funcs)))
             
-            # Normalize
-            if plate_number != "Unknown":
-                clean_plate = self.registered_logic.normalize_plate(plate_number)
-            else:
-                clean_plate = "Unknown"
+            # Run all detection tasks
+            for img_info, task in tasks:
+                result = await task
+                all_results.update(result)
+                
+                # Extract plate
+                if "plate" in result and result["plate"].get("detected"):
+                    plate_number = result["plate"].get("plate", "Unknown")
+                
+                # Extract color
+                if "color" in result and result["color"].get("detected"):
+                    primary_color = result["color"].get("primary_color", "Unknown")
+                    
+                # Extract wheel count
+                if "wheel" in result and result["wheel"].get("detected"):
+                    wheel_count = result["wheel"].get("wheel_count_total", 0)
+            
+            clean_plate = self.registered_logic.normalize_plate(plate_number) if plate_number != "Unknown" else "Unknown"
 
             # 2. Find Open Session
-            # Look for records with no time_out across all available history dates
             target_record = self.history_logic.find_open_session(clean_plate)
             
-            # If not found today, search yesterday? (TODO: Enhancement)
-            
-            # 3. Update Record
+            uuid_val = None
+            folder_path = None
+            status = "Unknown Check-In"
+
             if target_record:
-                # Update Time Out
-                time_out = datetime.now().strftime("%H:%M:%S")
-                self.history_logic.update_record(target_record["id"], {
-                    "time_out": time_out,
-                    "status": "Check-Out Pending" # or Completed
-                })
-                status = "Matched"
                 uuid_val = target_record["id"]
+                folder_path = Path(target_record["folder_path"]) if target_record.get("folder_path") else None
+                status = "Matched"
             else:
-                # Create "Checkout without Checkin" record so user can edit later
+                # Create NEW record for unknown checkout
                 import uuid
-                new_id = str(uuid.uuid4())
-                time_out = datetime.now().strftime("%H:%M:%S")
+                uuid_val = str(uuid.uuid4())
+                folder_path = self.history_logic.create_car_folder(uuid_val, plate=clean_plate, direction="out")
                 
                 record_data = {
-                    "id": new_id,
+                    "id": uuid_val,
                     "plate": clean_plate,
                     "location": location_id,
-                    "time_in": "Unknown", # Flag as unknown entry
-                    "time_out": time_out,
-                    "status": "Unknown Check-In",
+                    "time_in": "---",
+                    "status": "Xe ra lạ",
                     "verify": "Cần KT",
-                    "folder_path": "", # No folder yet
+                    "folder_path": str(folder_path),
                     "note": "Xe ra không có dữ liệu vào"
                 }
-                
-                # Create folder for evidence if possible
-                try:
-                    # We can use checkin service folder creation logic if we duplicate it,
-                    # or just create a simple folder manually.
-                    # reusing logic is better but we are in CheckOutService.
-                    # Just create a basic folder.
-                    date_folder = datetime.now().strftime("%d-%m-%Y")
-                    folder_name = f"{new_id}_{datetime.now().strftime('%H-%M-%S')}"
-                    folder_path = HistoryLogic().CAR_HISTORY_DIR / date_folder / folder_name
-                    folder_path.mkdir(parents=True, exist_ok=True)
-                    record_data["folder_path"] = str(folder_path)
-                    
-                    if folder_path.exists():
-                        shutil.copy2(front_image_path, folder_path / "checkout_front.jpg")
-                except Exception as e:
-                    logger.error(f"Failed to create evidence folder for unknown checkout: {e}")
+                self.history_logic.add_record(record_data)
 
-                new_rec = self.history_logic.add_record(record_data)
-                
-                status = "Unknown Check-In"
-                uuid_val = new_id
-                target_record = new_rec # Assign so below logic works if needed?
-                
-            # 4. Save Image (Evidence) - Already handled above for new record
-            # For existing record:
-            if target_record and target_record.get("folder_path") and uuid_val != target_record.get("id"): # differentiate?
-                # Actually, if we just created it, we copied content.
-                # If it's matched, we copy content.
-                pass
+            # --- VOLUME DETECTION LOGIC ---
+            volume_val = None
             
-            # Refined Step 4 for Matched Case
-            if target_record and target_record.get("id") != uuid_val: 
-                # This condition is tricky. Let's simplify.
-                # If we found target_record (matched), we want to save image to ITS folder.
-                pass 
+            # Identify Side and Top images for volume
+            side_img_info = next((img for img in images if "volume_left_right" in img.get("functions", []) 
+                                  or "wheel_detect" in img.get("functions", []) 
+                                  or "color_detect" in img.get("functions", [])), None)
             
-            # Simpler replacement logic for lines 86-93 to cover both cases cleanly
-            if target_record and target_record.get("folder_path"):
-                 folder = Path(target_record["folder_path"])
-                 if folder.exists():
-                     # Check if we already copied it (for new record)
-                     if not (folder / "checkout_front.jpg").exists():
-                         shutil.copy2(front_image_path, folder / "checkout_front.jpg")
+            top_img_info = next((img for img in images if "volume_top_down" in img.get("functions", [])), None)
+            
+            print(f"[Checkout] Volume Check: Side={bool(side_img_info)}, Top={bool(top_img_info)}, Path={folder_path}")
+
+            if side_img_info and top_img_info and folder_path:
+                side_cam_id = side_img_info.get("cam_id", "default")
+                top_cam_id = top_img_info.get("cam_id", "default")
                 
-            # Try to get history volume (vol_measured from entry)
+                # Resolve Calibration Paths
+                calib_dir = Path("database/calibration")
+                bg_dir = Path("database/backgrounds")
+                
+                calib_side = calib_dir / f"calib_side_{side_cam_id}.json"
+                if not calib_side.exists(): calib_side = calib_dir / "calib_side.json"
+                    
+                calib_top = calib_dir / f"calib_top_{top_cam_id}.json"
+                if not calib_top.exists(): calib_top = calib_dir / "calib_topdown.json"
+                
+                # Resolve Background
+                bg_image = bg_dir / f"bg_{top_cam_id}.jpg"
+                if not bg_image.exists():
+                     bgs = list(bg_dir.glob("*.jpg"))
+                     bg_image = bgs[0] if bgs else None
+                
+                if not bg_image:
+                    logger.warning(f"[Checkout] Skipped Volume: No background image found in {bg_dir}")
+
+                if calib_side.exists() and calib_top.exists() and bg_image:
+                     logger.info(f"[Checkout] Starting volume estimation for session {uuid_val}...")
+                     try:
+                         # Ensure paths are absolute or correct relative paths
+                         vol_res = await self.orchestrator.process_volume(
+                             side_image_path=Path(side_img_info["path"]),
+                             top_fg_image_path=Path(top_img_info["path"]),
+                             top_bg_image_path=bg_image,
+                             side_calib_path=calib_side,
+                             top_calib_path=calib_top
+                         )
+                         if vol_res and vol_res.get("success"):
+                             volume_val = vol_res.get("volume")
+                             all_results["volume"] = vol_res
+                             logger.info(f"[Checkout] Volume detected: {volume_val} m3")
+                         else:
+                             logger.error(f"[Checkout] Volume failed: {vol_res.get('error') if vol_res else 'Unknown'}")
+                     except Exception as ve:
+                         logger.error(f"[Checkout] Volume exception: {ve}")
+            else:
+                 if not side_img_info: logger.warning("[Checkout] Missing Side Cam for Volume")
+                 if not top_img_info: logger.warning("[Checkout] Missing Top Cam for Volume")
+
+            # 3. Save results to folder
+            if folder_path and folder_path.exists():
+                # Save model outputs
+                for func_name, res in all_results.items():
+                    if func_name != "raw":
+                        with open(folder_path / f"checkout_model_{func_name}.json", "w", encoding="utf-8") as f:
+                            json.dump(res, f, indent=4)
+                
+                # Save images - use unified naming: {cam_name}_{functions}.jpg
+                for img_info in images:
+                    path = img_info["path"]
+                    cam_name = img_info.get("cam_name", "UnknownCam").replace(" ", "_")
+                    funcs_str = "_".join(img_info.get("functions", []))
+                    ext = path.suffix or ".jpg"
+                    new_name = f"{cam_name}_{funcs_str}{ext}"
+                    if path.exists():
+                        shutil.copy2(path, folder_path / new_name)
+
+
+            # 4. Update History Record
+            time_out = datetime.now().strftime("%H:%M:%S")
+            # Prefer calculated volume_val, fallback to result dict
+            final_volume = volume_val if volume_val is not None else (
+                all_results.get("truck_bed", {}).get("volume_m3") or all_results.get("volume", {}).get("volume_m3")
+            )
+            
+            update_data = {
+                "time_out": time_out,
+                "status": "Đã ra" if status == "Matched" else "Xe ra lạ"
+            }
+            if final_volume is not None:
+                update_data["vol_measured"] = str(round(final_volume, 2))
+                
+            self.history_logic.update_record(uuid_val, update_data)
+            
+            # Get history volume (vol_measured from entry)
             history_vol = None
             if target_record and target_record.get("vol_measured"):
-                try:
-                    history_vol = float(target_record["vol_measured"])
-                except:
-                    pass
+                try: history_vol = float(target_record["vol_measured"])
+                except: pass
 
             return {
                 "success": True,
                 "plate": clean_plate,
+                "color": primary_color,
+                "wheel_count": wheel_count,
                 "status": status,
                 "uuid": uuid_val,
-                "folder_path": target_record.get("folder_path") if target_record else None,
-                "history_volume": history_vol
+                "folder_path": str(folder_path) if folder_path else None,
+                "history_volume": history_vol,
+                "volume": final_volume,
+                "is_checkout": True
             }
+
             
         except Exception as e:
-            logger.error(f"Checkout error: {e}")
+            logger.error(f"Checkout error: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
 
     async def close(self):
@@ -149,3 +220,4 @@ class CheckOutService:
 
 def get_checkout_service():
     return CheckOutService()
+

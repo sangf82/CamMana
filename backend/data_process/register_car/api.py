@@ -1,10 +1,12 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import pandas as pd
 import io
 import logging
 
+from backend.api.user import get_current_user
+from backend.schemas import User as UserSchema
 from .logic import RegisteredCarLogic
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,7 @@ class CarBase(BaseModel):
     car_note: str = ""
     car_wheel: str = ""
     car_volume: Optional[str] = ""
+    admin_code: Optional[str] = ""
     
     # Alias for frontend? 
     # If the frontend sends 'plate_number', we can use aliases or just fix the frontend.
@@ -55,15 +58,17 @@ def get_cars():
     return logic.get_all_cars()
 
 @router.post("", response_model=CarResponse)
-def add_car(car: CarBase):
+def add_car(car: CarBase, user: UserSchema = Depends(get_current_user)):
+    # If user has 'can_add_vehicles' enabled, it means they MUST provide the set code
+    # Unless they are admin
+    if user.role != "admin" and user.can_add_vehicles:
+        if not car.admin_code or car.admin_code != user.vehicle_add_code:
+             raise HTTPException(status_code=403, detail="Mã xác nhận Admin không chính xác")
+             
     try:
-        # Frontend likely sends 'plate_number' etc if I don't change it.
-        # But this is "Refactoring".
-        # If I change the model here, I force frontend to update or fail validation.
-        # BUT: The previous API code had `plate_number` but `logic` expected `car_plate`.
-        # So it was ALREADY failing to save the plate correctly (or saving empty).
-        # Fix: I'll accept `CarBase` here.
-        return logic.add_car(car.dict())
+        data = car.dict()
+        data.pop('admin_code', None) # Remove before saving to CSV
+        return logic.add_car(data)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

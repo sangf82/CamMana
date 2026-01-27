@@ -19,10 +19,12 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from backend.api.user import get_current_user
+from backend.schemas import User as UserSchema
 from backend.workflow.checkin import get_checkin_service, CheckInResult
 from backend.api._shared import cameras as active_cameras
 from backend.data_process import get_registered_cars
@@ -68,9 +70,10 @@ async def check_api_health():
 
 
 class CaptureAndProcessRequest(BaseModel):
-    front_camera_id: str
+    front_camera_id: Optional[str] = None
     side_camera_id: Optional[str] = None
     top_camera_id: Optional[str] = None
+    cameras: Optional[List[str]] = []
     location_id: str
     location_name: Optional[str] = None
 
@@ -103,7 +106,7 @@ class CaptureResponse(BaseModel):
 
 
 @checkin_router.post("/capture-and-process", response_model=CaptureResponse)
-async def capture_and_process(request: CaptureAndProcessRequest):
+async def capture_and_process(request: CaptureAndProcessRequest, user: UserSchema = Depends(get_current_user)):
     """
     Capture images from live cameras and process check-in
     """
@@ -113,60 +116,34 @@ async def capture_and_process(request: CaptureAndProcessRequest):
     try:
         checkin_service = get_checkin_service()
         
-        # Helper to get frame
-        def get_frame(cam_id):
+        # Helper to get frame with retry for gray/empty frames
+        async def get_frame(cam_id):
             if not cam_id: return None
-            # Get from active cameras
-            cam_state = active_cameras.get(cam_id)
-            if cam_state:
-                streamer = cam_state.get("streamer")
-                if streamer:
-                    return streamer.get_capture_frame() if hasattr(streamer, 'get_capture_frame') else streamer.last_frame
-            return None
-
-        # Capture frames
-        front_frame = get_frame(request.front_camera_id)
-        side_frame = get_frame(request.side_camera_id) if request.side_camera_id else None
-        top_frame = get_frame(request.top_camera_id) if request.top_camera_id else None
-
-        if front_frame is None:
-            if side_frame is not None:
-                # Use side as fallback for front (plate detection)
-                print(f"[API] Front camera failed ({request.front_camera_id}), using side camera as fallback")
-                front_frame = side_frame
-            elif top_frame is not None:
-                 print(f"[API] Both front and side failed, using top as fallback")
-                 front_frame = top_frame
-            else:
-                return CaptureResponse(
-                    success=False, 
-                    error=f"Không thể chụp hình từ bất kỳ camera nào. Kiểm tra kết nối Camera: {request.front_camera_id}",
-                    reason="capture_failed"
-                )
-
-        # Fallback if side camera fails or not provided (use front as dummy)
-        if side_frame is None:
-            side_frame = front_frame
             
-        # Save frames to temp files
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as front_temp:
-            await asyncio.to_thread(cv2.imwrite, front_temp.name, front_frame)
-            front_path = Path(front_temp.name)
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as side_temp:
-            await asyncio.to_thread(cv2.imwrite, side_temp.name, side_frame)
-            side_path = Path(side_temp.name)
-            
-        top_path = None
-        if top_frame is not None:
-             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as top_temp:
-                await asyncio.to_thread(cv2.imwrite, top_temp.name, top_frame)
-                top_path = Path(top_temp.name)
+            # Helper to check if frame is "empty" (all pixels roughly same or very low variance)
+            def is_suspicious(f):
+                if f is None: return True
+                # Check mean and variance. Solid gray/black has very low variance.
+                # Solid gray is often mean ~128, variance ~0
+                _, stddev = cv2.meanStdDev(f)
+                return stddev[0][0] < 5.0 # Very low variance is suspicious
 
-        from backend.data_process.config import get_locations
-        locations = get_locations()
-        location_obj = next((l for l in locations if l.id == request.location_id or l.name == request.location_id), None)
-        location_tag = location_obj.tag if location_obj else "Cơ bản"
+            for attempt in range(3):
+                # Get from active cameras
+                cam_state = active_cameras.get(cam_id)
+                frame = None
+                if cam_state:
+                    streamer = cam_state.get("streamer")
+                    if streamer:
+                        frame = streamer.get_capture_frame() if hasattr(streamer, 'get_capture_frame') else streamer.last_frame
+                
+                if not is_suspicious(frame):
+                    return frame
+                
+                print(f"[API] Frame from {cam_id} is suspicious (attempt {attempt+1}), waiting...")
+                await asyncio.sleep(0.5) # Wait for stream to stabilize
+                
+            return frame # Return anyway if all retries fail
 
         # Helper to get cam info and functions
         def get_cam_info(cam_id):
@@ -194,35 +171,58 @@ async def capture_and_process(request: CaptureAndProcessRequest):
                 "functions": [f for f in functions if f]
             }
 
-        # 1. Front Camera
-        front_info = get_cam_info(request.front_camera_id)
+        # 1. Resolve Camera IDs (Support both new 'cameras' list and legacy fields)
+        cam_ids = request.cameras or []
+        if request.front_camera_id and request.front_camera_id not in cam_ids: cam_ids.append(request.front_camera_id)
+        if request.side_camera_id and request.side_camera_id not in cam_ids: cam_ids.append(request.side_camera_id)
+        if request.top_camera_id and request.top_camera_id not in cam_ids: cam_ids.append(request.top_camera_id)
+        cam_ids = [c for c in cam_ids if c] # Filter empty
         
-        # Prepare images list for workflow
-        images_to_process = [
-            {
-                "path": front_path, 
-                "cam_name": front_info["name"] if front_info else "FrontCam", 
-                "functions": front_info["functions"] if front_info else ["plate", "truck", "color"]
-            }
-        ]
-        
-        # 2. Side Camera
-        if side_path:
-            side_info = get_cam_info(request.side_camera_id)
-            images_to_process.append({
-                "path": side_path, 
-                "cam_name": side_info["name"] if side_info else "SideCam", 
-                "functions": side_info["functions"] if side_info else ["wheel"]
-            })
-            
-        # 3. Top Camera
-        if top_path:
-            top_info = get_cam_info(request.top_camera_id)
-            images_to_process.append({
-                "path": top_path, 
-                "cam_name": top_info["name"] if top_info else "TopCam", 
-                "functions": top_info["functions"] if top_info else ["volume_top_down"]
-            })
+        print(f"[API] Processing {len(cam_ids)} cameras: {cam_ids}")
+
+        # 2. Capture and Build Image List
+        images_to_process = []
+        captured_paths = {} # id -> path
+
+        for cid in cam_ids:
+             print(f"[API] Capturing frame for {cid}...")
+             frame = await get_frame(cid)
+             if frame is None: 
+                 print(f"[API] Failed to capture frame for {cid}")
+                 continue
+             
+             # Save to temp
+             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                 await asyncio.to_thread(cv2.imwrite, tmp.name, frame)
+                 path = Path(tmp.name)
+                 captured_paths[cid] = path
+                 
+             # Get Info
+             print(f"[API] Getting info for {cid}...")
+             info = get_cam_info(cid)
+             if info:
+                 print(f"[API] Camera {cid} functions: {info['functions']}")
+                 images_to_process.append({
+                     "path": path,
+                     "cam_name": info["name"],
+                     "functions": info["functions"],
+                     "cam_id": cid
+                 })
+
+        print(f"[API] Prepared {len(images_to_process)} images for processing")
+        if not images_to_process:
+             print("[API] No images to process, returning error")
+             return CaptureResponse(
+                success=False, 
+                error="Không thể chụp hình từ bất kỳ camera nào. Kiểm tra kết nối Camera.",
+                reason="capture_failed"
+             )
+
+        # 3. Determine Location Strategy
+        from backend.data_process.config import get_locations
+        locations = get_locations()
+        location_obj = next((l for l in locations if l.id == request.location_id or l.name == request.location_id), None)
+        location_tag = location_obj.tag if location_obj else "Cơ bản"
 
         # Determine if Check-In or Check-Out
         if location_tag == "Cổng ra":
@@ -230,32 +230,56 @@ async def capture_and_process(request: CaptureAndProcessRequest):
              from backend.workflow.checkout import get_checkout_service
              checkout_service = get_checkout_service()
              result_dict = await checkout_service.process_checkout(
-                 front_image_path=front_path,
+                 images=images_to_process,
                  location_id=request.location_id
              )
              # Wrap in CaptureResponse format
              folder_path = result_dict.get("folder_path")
              front_url = None
+             side_url = None
+             top_url = None
              if folder_path:
                  folder = Path(folder_path)
                  if folder.exists():
-                     imgs = list(folder.glob("*.jpg"))
-                     if imgs:
-                         parent_name = folder.parent.name
-                         folder_name = folder.name
-                         front_url = f"/api/images/{parent_name}/{folder_name}/{imgs[0].name}"
+                     parent_name = folder.parent.name
+                     folder_name = folder.name
+                     
+                     # Look for images based on camera functions in filename
+                     all_imgs = []
+                     for img in folder.glob("*.jpg"):
+                         iname = img.name.lower()
+                         url = f"/api/images/{parent_name}/{folder_name}/{img.name}"
+                         all_imgs.append((iname, url))
+                         
+                         # Match by function names in filename (using unified naming)
+                         if "plate_detect" in iname:
+                             if not front_url: front_url = url
+                         elif "volume_top_down" in iname:
+                             if not top_url: top_url = url
+                         elif "volume_left_right" in iname or "wheel_detect" in iname or "color_detect" in iname:
+                             if not side_url: side_url = url
+                         
+                     # Fallback: use first image as front if no match
+                     if not front_url and all_imgs:
+                         front_url = all_imgs[0][1]
 
              return CaptureResponse(
                  success=True,
                  uuid=result_dict.get("uuid"),
                  plate=result_dict.get("plate"),
+                 color=result_dict.get("color"),
+                 wheel_count=result_dict.get("wheel_count", 0),
                  status=result_dict.get("status"),
                  folder_path=folder_path,
                  front_image_url=front_url,
+                 side_image_url=side_url,
+                 top_image_url=top_url,
                  history_volume=result_dict.get("history_volume"),
+                 volume=result_dict.get("volume"),
                  duration=time.time() - start_total,
                  is_checkout=True
              )
+
 
         # Default to Check-In
         date_str = datetime.now().strftime("%d-%m-%Y")
@@ -264,6 +288,13 @@ async def capture_and_process(request: CaptureAndProcessRequest):
             location_id=request.location_id,
             date_str=date_str
         )
+        
+        # Shim for backward compatibility with Volume Estimation logic below
+        # Find 'top' by function for volume logic usage
+        top_img = next((img for img in images_to_process if "volume_top_down" in img["functions"]), None)
+        top_path = top_img["path"] if top_img else None
+        top_info = {"name": top_img["cam_name"]} if top_img else None
+
         
         # --- Volume Estimation ---
         volume_val = None
@@ -393,18 +424,21 @@ async def capture_and_process(request: CaptureAndProcessRequest):
                 for img in images:
                     img_name = img.name.lower()
                     url = f"/api/images/{parent_name}/{folder_name}/{img.name}"
-                    if "front" in img_name or "plate" in img_name:
-                        front_image_url = url
-                    elif "side" in img_name or "row-crop" in img_name: # row-crop is usually side
-                         if not side_image_url: side_image_url = url # prioritization
-                    elif "top" in img_name:
-                        top_image_url = url
+                    
+                    # Match by function names in filename (unified naming)
+                    if "plate_detect" in img_name:
+                        if not front_image_url: front_image_url = url
+                    elif "volume_top_down" in img_name:
+                        if not top_image_url: top_image_url = url
+                    elif "volume_left_right" in img_name or "wheel_detect" in img_name or "color_detect" in img_name:
+                        if not side_image_url: side_image_url = url
                 
                 # Fallback Logic
                 if not front_image_url and images:
                     front_image_url = f"/api/images/{parent_name}/{folder_name}/{images[0].name}"
                 if not side_image_url and len(images) > 1:
                      side_image_url = f"/api/images/{parent_name}/{folder_name}/{images[1].name}"
+
 
         total_duration = time.time() - start_total
         print(f"[API] capture-and-process completed in {total_duration:.2f}s")

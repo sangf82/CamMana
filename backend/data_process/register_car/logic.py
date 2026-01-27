@@ -121,6 +121,14 @@ class RegisteredCarLogic:
         
         current_data.append(new_car)
         self._write_csv(self.current_file, current_data)
+        
+        # Sync Hook
+        try:
+            from backend.api.sync import sync_logic
+            import asyncio
+            asyncio.create_task(sync_logic.broadcast_change("registered_car", "create", new_car))
+        except: pass
+            
         return new_car
 
     def update_car(self, car_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str, str]]:
@@ -140,6 +148,14 @@ class RegisteredCarLogic:
         
         if updated_car:
             self._write_csv(self.current_file, current_data)
+            
+            # Sync Hook
+            try:
+                from backend.api.sync import sync_logic
+                import asyncio
+                asyncio.create_task(sync_logic.broadcast_change("registered_car", "update", updated_car))
+            except: pass
+                
             return updated_car
         return None
 
@@ -150,6 +166,14 @@ class RegisteredCarLogic:
         
         if len(current_data) < initial_len:
             self._write_csv(self.current_file, current_data)
+            
+            # Sync Hook
+            try:
+                from backend.api.sync import sync_logic
+                import asyncio
+                asyncio.create_task(sync_logic.broadcast_change("registered_car", "delete", {"car_id": car_id}))
+            except: pass
+                
             return True
         return False
 

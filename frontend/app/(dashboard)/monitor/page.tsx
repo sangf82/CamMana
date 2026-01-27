@@ -34,7 +34,9 @@ interface Camera {
   port?: number;
   cam_id?: string;
   brand?: string;
+  functions?: string[];
 }
+
 
 interface DetectionResult {
   plate_number: string | null;
@@ -101,14 +103,9 @@ function MonitorPageContent() {
   const [currentDetection, setCurrentDetection] =
     useState<DetectionResult | null>(null);
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
-  const [capturedImages, setCapturedImages] = useState<{
-    front?: string;
-    side?: string;
-  }>({});
+  // Dynamic camera images map: { [cameraId]: imageUrl }
+  const [capturedImages, setCapturedImages] = useState<Record<string, string | null>>({});
   const [showEvidenceModal, setShowEvidenceModal] = useState(false);
-  const [evidenceActiveTab, setEvidenceActiveTab] = useState<"front" | "side">(
-    "front",
-  );
   const [currentTimeIn, setCurrentTimeIn] = useState<string | null>(null);
 
   // Edit Modal State
@@ -179,10 +176,15 @@ function MonitorPageContent() {
   useEffect(() => {
     const loadCameras = async () => {
       try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        
+        const headers = { 'Authorization': `Bearer ${token}` };
+        
         const [resCam, resLoc, resTypes] = await Promise.all([
-          fetch("/api/cameras"),
-          fetch("/api/locations"),
-          fetch("/api/camera_types")
+          fetch("/api/cameras", { headers }),
+          fetch("/api/locations", { headers }),
+          fetch("/api/camera_types", { headers })
         ]);
         
         if (resCam.ok) {
@@ -225,35 +227,31 @@ function MonitorPageContent() {
     return Array.isArray(functions) && functions.includes(func);
   }, [camTypes]);
 
+  // Camera role assignment - based ONLY on functions
   const frontCamera = React.useMemo(() => {
-    return filteredCameras.find(
-      (c) => 
-        c.tag === "front_cam" || 
-        hasFunction(c, "plate_detect") || 
-        (c.type || "").toLowerCase().includes("plate") // Fallback
-    );
+    return filteredCameras.find((c) => hasFunction(c, "plate_detect"));
   }, [filteredCameras, hasFunction]);
+
+  // TopCamera selected before sideCamera to prioritize volume_top_down
+  const topCamera = React.useMemo(() => {
+    return filteredCameras.find(
+      (c) =>
+        c.id !== frontCamera?.id &&
+        hasFunction(c, "volume_top_down")
+    );
+  }, [filteredCameras, hasFunction, frontCamera]);
 
   const sideCamera = React.useMemo(() => {
     return filteredCameras.find(
       (c) =>
-        c.tag === "side_cam" ||
-        hasFunction(c, "color_detect") ||
-        hasFunction(c, "wheel_detect") ||
-        hasFunction(c, "volume_left_right") || // Added for volume detection
-         (c.type || "").toLowerCase().includes("side") // Fallback
+        c.id !== frontCamera?.id &&
+        c.id !== topCamera?.id &&
+        (hasFunction(c, "color_detect") ||
+         hasFunction(c, "wheel_detect") ||
+         hasFunction(c, "volume_left_right"))
     );
-  }, [filteredCameras, hasFunction]);
+  }, [filteredCameras, hasFunction, frontCamera, topCamera]);
 
-  const topCamera = React.useMemo(() => {
-    return filteredCameras.find(
-      (c) =>
-        c.tag === "top_cam" ||
-        hasFunction(c, "volume_top_down") || // Added for volume detection
-        hasFunction(c, "box_detect") || // Top usually does box/tracking
-        ((c.type || "").toLowerCase().includes("top")) // Fallback
-    );
-  }, [filteredCameras, hasFunction]);
 
   useEffect(() => {
     if (!currentGate || filteredCameras.length === 0) return;
@@ -270,8 +268,10 @@ function MonitorPageContent() {
 
       try {
         addLog(`Đang kết nối ${cam.name}...`, "info");
+        const token = localStorage.getItem('token');
         const connectRes = await fetch(`/api/cameras/${cam.id}/connect`, {
           method: "POST",
+          headers: { 'Authorization': `Bearer ${token}` }
         });
 
         if (connectRes.ok) {
@@ -332,7 +332,10 @@ function MonitorPageContent() {
 
     const fetchStreamInfo = async () => {
       try {
-        const res = await fetch(`/api/cameras/${activeId}/stream-info`);
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/cameras/${activeId}/stream-info`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         if (res.ok) {
           const data = await res.json();
           setStreamInfo({
@@ -351,62 +354,46 @@ function MonitorPageContent() {
   }, [mainCamera?.id, activeCameras]);
 
     // Detection Request
+    // Detection Request
     const handleManualDetection = async () => {
-      // Determine Location Type
-      const location = locations.find((l) => l.name === currentGate);
-      const isVolumeGate =
-        location?.tag === "Đo thể tích" ||
-        location?.tag === "Tính thể tích vật liệu (Trên dưới)" ||
-        location?.tag === "Tính thể tích vật liệu (Trái phải)";
-      const isCheckoutGate = location?.tag === "Cổng ra";
+      // Collect all cameras at current gate that have capabilities
+      // We send ALL of them, backend will capture and use functions assigned in CSV
+      const targetCameras = filteredCameras.filter(c => c.functions && c.functions.length > 0);
 
-      // Camera Selection Logic
-      // If Volume/Checkout Gate, we can accept Side Camera as the Identity Camera (Front)
-      // if a dedicated Front Camera is missing.
-      let identityCamId = frontCamera ? getActiveId(frontCamera) : undefined;
-
-      if (!identityCamId && (isVolumeGate || isCheckoutGate) && sideCamera) {
-        identityCamId = getActiveId(sideCamera);
-      }
-
-      if (!identityCamId && isCheckoutGate && topCamera) {
-        identityCamId = getActiveId(topCamera);
-      }
-
-      if (!identityCamId) {
-        if (isVolumeGate)
-          toast.error("Cần ít nhất Camera Trước hoặc Hông (để nhận diện)");
-        else if (isCheckoutGate)
-          toast.error("Không tìm thấy camera hoạt động nào để nhận diện");
-        else toast.error("Không tìm thấy camera trước (biển số)");
+      if (targetCameras.length === 0) {
+        toast.error("Không tìm thấy camera khả dụng (kiểm tra cấu hình chức năng)");
         return;
       }
 
-      const sideActiveId = sideCamera ? getActiveId(sideCamera) : undefined;
-      const topActiveId = topCamera ? getActiveId(topCamera) : undefined;
-
-      // For Volume Gate, check Top Camera
-      if (isVolumeGate && !topActiveId) {
-        toast.warning("Thiếu Camera Trên - Không thể đo thể tích");
+      // Check for volume capability for feedback
+      const hasTop = targetCameras.some(c => c.functions!.includes('volume_top_down'));
+      const hasSide = targetCameras.some(c => c.functions!.some(f => ['volume_left_right','wheel_detect'].includes(f)));
+      
+      if (hasTop && hasSide) {
+          addLog("Đủ điều kiện đo thể tích (Trên + Hông)", "info");
       }
 
-      const frontActiveId = identityCamId; // Primary camera for plate/identity
+      setIsProcessing(true);
+      addLog("Đang chụp và phân tích...", "info");
 
-    setIsProcessing(true);
-    addLog("Đang chụp và phân tích...", "info");
+      try {
+        const token = localStorage.getItem('token');
+        const currentLocation = locations.find(l => l.name === currentGate);
 
-    try {
-      const res = await fetch("/api/checkin/capture-and-process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          front_camera_id: frontActiveId,
-          side_camera_id: sideActiveId || null,
-          top_camera_id: topActiveId || null,
-          location_id: frontCamera?.location_id || currentGate,
-          location_name: currentGate,
-        }),
-      });
+        const bodyObj = {
+          cameras: targetCameras.map(c => getActiveId(c)),
+          location_id: currentLocation?.id || "",
+          location_name: currentGate
+        };
+
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/checkin/capture-and-process`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify(bodyObj),
+        });
 
       if (res.ok) {
         const data = await res.json();
@@ -430,10 +417,20 @@ function MonitorPageContent() {
 
           setCurrentDetection(result);
           setSnapshotUrl(data.snapshot_url || null);
-          setCapturedImages({
-            front: data.front_image_url || null,
-            side: data.side_image_url || null,
-          });
+          
+          // Build camera images map using camera IDs
+          const newCameraImages: Record<string, string | null> = {};
+          if (frontCamera && data.front_image_url) {
+            newCameraImages[frontCamera.id] = data.front_image_url;
+          }
+          if (sideCamera && data.side_image_url) {
+            newCameraImages[sideCamera.id] = data.side_image_url;
+          }
+          if (topCamera && data.top_image_url) {
+            newCameraImages[topCamera.id] = data.top_image_url;
+          }
+          setCapturedImages(newCameraImages);
+
 
           if (result.plate_number)
             addLog(`✓ Biển số: ${result.plate_number}`, "success");
@@ -494,23 +491,32 @@ function MonitorPageContent() {
       const bodyObj: any = {
         plate: currentDetection?.plate_number || "Không nhận diện",
         time_in: currentTimeIn,
-        verify: "đã xác minh",
+        verify: "Đã xác minh",
         note: "Bình thường",
       };
 
       if (currentDetection?.is_checkout) {
-        bodyObj.status = "đã ra";
+        bodyObj.status = "Đã ra";
+        bodyObj.verify = "Đã xác minh";
         bodyObj.time_out = new Date().toLocaleTimeString("en-GB");
+        bodyObj.vol_measured = currentDetection.volume || "";
       } else {
-        bodyObj.status = "đã vào";
+        bodyObj.status = "Đã vào";
+        bodyObj.verify = "Đã xác minh";
       }
 
       let res;
+      const token = localStorage.getItem('token');
+      const headers = { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      };
+
       if (currentDetection?.is_checkout) {
         // Use manual-confirm for checkout
         res = await fetch(`/api/checkout/manual-confirm`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({
             uuid: currentDetection?.uuid,
             plate: currentDetection?.plate_number || "Không nhận diện",
@@ -524,7 +530,7 @@ function MonitorPageContent() {
         // Standard Update
         res = await fetch(`/api/history/${currentDetection?.uuid}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify(bodyObj),
         });
       }
@@ -557,18 +563,25 @@ function MonitorPageContent() {
       };
 
       if (currentDetection?.is_checkout) {
-        // Rejecting checkout means they are NOT allowed to leave or something is wrong
-        bodyObj.status = "cần kt";
-        bodyObj.verify = "từ chối ra";
+        // Rejecting checkout: no change status (still moved in)
+        bodyObj.status = "Đã vào";
+        bodyObj.verify = "Từ chối";
+        bodyObj.note = "Về lại mỏ - Khối lượng không khớp hoặc lỗi khác";
       } else {
-        // Rejecting checkin means they are not allowed in.
-        bodyObj.status = "đã ra";
-        bodyObj.verify = "xe chưa đk";
+        // Rejecting checkin: move in and move out time are the same
+        bodyObj.status = "Đã ra";
+        bodyObj.time_out = currentTimeIn;
+        bodyObj.verify = "Từ chối";
+        bodyObj.note = "Từ chối vào cổng";
       }
       
+      const token = localStorage.getItem('token');
       const res = await fetch(`/api/history/${currentDetection?.uuid}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify(bodyObj),
       });
 
@@ -589,9 +602,9 @@ function MonitorPageContent() {
 
   const openEditModal = () => {
     setEditPlate(currentDetection?.plate_number || "");
-    setEditStatus(currentDetection?.is_checkout ? "ra cổng" : "vào cổng");
-    setEditVerify(currentDetection?.matched ? "chưa xác minh" : "xe lạ");
-    setEditNote("");
+    setEditStatus(currentDetection?.is_checkout ? "Đã ra" : "Đã vào");
+    setEditVerify(currentDetection?.matched ? "Đã xác minh" : "Xe lạ");
+    setEditNote(currentDetection?.matched ? "Thông tin khớp" : "Xe lạ cần xác minh");
     setEditVolume(currentDetection?.volume?.toString() || "");
     setShowEditModal(true);
   };
@@ -618,16 +631,27 @@ function MonitorPageContent() {
       };
 
       // If status implies exit, or if we are at check-out gate and just saving, ensure time_out
-      if (editStatus === "đã ra" || editStatus === "ra cổng") {
-          bodyObj.time_out = new Date().toLocaleTimeString("en-GB");
+      if (editStatus === "Đã ra" || editStatus === "Ra cổng") {
+          // If rejecting from checkin: time_in and time_out are same
+          if (!currentDetection?.is_checkout && editVerify === "Từ chối") {
+              bodyObj.time_out = currentTimeIn;
+          } else {
+              bodyObj.time_out = new Date().toLocaleTimeString("en-GB");
+          }
       }
       
       let res;
+      const token = localStorage.getItem('token');
+      const headers = { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      };
+
       if (currentDetection?.is_checkout) {
           // Use manual-confirm for checkout to handle merging
           res = await fetch(`/api/checkout/manual-confirm`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers,
             body: JSON.stringify({
                 uuid: uuid,
                 plate: editPlate || "Không nhận diện",
@@ -642,7 +666,7 @@ function MonitorPageContent() {
           // Standard Update
           res = await fetch(`/api/history/${uuid}`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers,
             body: JSON.stringify(bodyObj),
           });
       }
@@ -734,33 +758,38 @@ function MonitorPageContent() {
           className={`w-64 bg-black rounded border border-border/50 relative overflow-hidden group ${currentDetection ? "cursor-pointer hover:border-primary/50" : ""}`}
           onClick={() => {
             if (currentDetection) {
-              setEvidenceActiveTab("front");
               setShowEvidenceModal(true);
             }
           }}
         >
-          {snapshotUrl || capturedImages.front ? (
-            <>
-              <img
-                src={snapshotUrl || capturedImages.front}
-                alt="Snapshot"
-                className="w-full h-full object-cover"
-              />
-              {/* Hover overlay */}
-              {currentDetection && (
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <span className="text-white text-xs font-medium">
-                    Nhấn để xem ảnh
-                  </span>
+          {(() => {
+            const frontImg = frontCamera ? capturedImages[frontCamera.id] : null;
+            const displayUrl = snapshotUrl || frontImg;
+            
+            return displayUrl ? (
+              <>
+                <img
+                  src={displayUrl}
+                  alt="Snapshot"
+                  className="w-full h-full object-cover"
+                />
+                {/* Hover overlay */}
+                {currentDetection && (
+                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                     <span className="text-white text-xs font-medium">
+                       Nhấn để xem ảnh
+                     </span>
+                   </div>
+                )}
+              </>
+            ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
+                  <PhotoCamera className="mr-2" /> Bằng chứng
                 </div>
-              )}
-            </>
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
-              <PhotoCamera className="mr-2" /> Bằng chứng
-            </div>
-          )}
+            );
+          })()}
         </div>
+
 
         {/* 2. Comparison */}
         <div className="flex-1 flex gap-8">
@@ -988,11 +1017,11 @@ function MonitorPageContent() {
         isOpen={showEvidenceModal}
         onClose={() => setShowEvidenceModal(false)}
         currentDetection={currentDetection}
-        capturedImages={capturedImages}
+        cameras={filteredCameras}
+        cameraImages={capturedImages}
         snapshotUrl={snapshotUrl}
-        activeTab={evidenceActiveTab}
-        setActiveTab={setEvidenceActiveTab}
       />
+
     </div>
   );
 }

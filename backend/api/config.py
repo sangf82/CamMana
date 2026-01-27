@@ -1,14 +1,16 @@
 """Configuration API endpoints (Detection Configs)"""
-from fastapi import APIRouter
-from fastapi.responses import JSONResponse
 from backend import data_process
 from backend.data_process.location.logic import LocationLogic
+from backend.api.user import get_current_user
+from backend.schemas import User as UserSchema
+from fastapi import APIRouter, Depends, Response
+from fastapi.responses import JSONResponse
 
 config_router = APIRouter(prefix="/api/cameras", tags=["configuration"])
 
 # Location Tags and Detection Config
 @config_router.get("/locations/grouped")
-async def get_cameras_grouped_by_tag():
+async def get_cameras_grouped_by_tag(user: UserSchema = Depends(get_current_user)):
     """Get cameras grouped by their location tags"""
     try:
         from backend.workflow.config import group_cameras_by_tag
@@ -31,7 +33,7 @@ async def get_cameras_grouped_by_tag():
         return JSONResponse(status_code=500, content={"detail": str(e)})
 
 @config_router.get("/locations/tags/{tag}/config")
-async def get_tag_detection_config(tag: str):
+async def get_tag_detection_config(tag: str, user: UserSchema = Depends(get_current_user)):
     """Get detection configuration for a specific location tag"""
     try:
         from backend.workflow.config import get_location_strategy
@@ -48,17 +50,25 @@ async def get_tag_detection_config(tag: str):
         return JSONResponse(status_code=500, content={"detail": str(e)})
 
 @config_router.get("/locations")
-async def get_locations_alias():
+async def get_locations_alias(user: UserSchema = Depends(get_current_user)):
     """Alias for locations list to match frontend expectations"""
     try:
         from backend.data_process.location.logic import LocationLogic
-        return LocationLogic().get_locations()
+        all_locs = LocationLogic().get_locations()
+        
+        if user.role == "admin" or user.allowed_gates == "*":
+            return all_locs
+            
+        allowed = [g.strip() for g in user.allowed_gates.split(',')]
+        return [l for l in all_locs if l['name'] in allowed]
     except Exception as e:
         return JSONResponse(status_code=500, content={"detail": str(e)})
 
 @config_router.post("/locations")
-async def add_location_alias(loc: dict):
+async def add_location_alias(loc: dict, user: UserSchema = Depends(get_current_user)):
     """Alias for adding location to match frontend expectations"""
+    if user.role != 'admin':
+        return JSONResponse(status_code=403, content={"detail": "Permission denied"})
     try:
         from backend.data_process.location.logic import LocationLogic
         # Use logic directly
@@ -67,7 +77,7 @@ async def add_location_alias(loc: dict):
         return JSONResponse(status_code=400, content={"detail": str(e)})
 
 @config_router.get("/types")
-async def get_types_alias():
+async def get_types_alias(user: UserSchema = Depends(get_current_user)):
     """Alias for camera types list to match frontend expectations"""
     try:
         from backend.data_process.camera_type.logic import CameraTypeLogic
@@ -76,7 +86,7 @@ async def get_types_alias():
         return JSONResponse(status_code=500, content={"detail": str(e)})
 
 @config_router.get("/saved")
-async def get_saved_cameras_alias():
+async def get_saved_cameras_alias(user: UserSchema = Depends(get_current_user)):
     """Alias for saved cameras list to match frontend expectations"""
     try:
         from backend.camera.logic import CameraLogic
@@ -85,7 +95,7 @@ async def get_saved_cameras_alias():
         return JSONResponse(status_code=500, content={"detail": str(e)})
 
 @config_router.get("/locations/tags/all/configs")
-async def get_all_tag_configs():
+async def get_all_tag_configs(user: UserSchema = Depends(get_current_user)):
     """Get detection configurations for all location tags"""
     try:
         from backend.workflow.config import LOCATION_STRATEGIES, LocationTag

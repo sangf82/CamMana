@@ -120,14 +120,27 @@ export default function CamerasPage() {
   >(null);
   const [isCamLocOpen, setIsCamLocOpen] = useState(false);
   const [isCamTypeOpen, setIsCamTypeOpen] = useState(false);
+  const [userData, setUserData] = useState<{role: string, can_manage_cameras?: boolean} | null>(null);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+        try {
+            setUserData(JSON.parse(savedUser));
+        } catch (e) {}
+    }
+  }, []);
 
   // --- 1. Load Data from API ---
   const fetchInitialData = async () => {
     try {
+      const token = localStorage.getItem('token');
+      const headers = { 'Authorization': `Bearer ${token}` };
+      
       const [locRes, typeRes, camRes] = await Promise.all([
-        fetch('/api/locations'),  // Use correct endpoint
-        fetch('/api/camera_types'),  // Use correct endpoint
-        fetch('/api/cameras/saved'),
+        fetch('/api/locations', { headers }),
+        fetch('/api/camera_types', { headers }),
+        fetch('/api/cameras/saved', { headers }),
       ]);
 
       if (locRes.ok) setLocations(await locRes.json());
@@ -152,7 +165,10 @@ export default function CamerasPage() {
     
     // Auto-refresh camera status every 5 seconds
     const intervalId = setInterval(() => {
-      fetch('/api/cameras/saved')
+      const token = localStorage.getItem('token');
+      fetch('/api/cameras/saved', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
         .then(res => res.ok ? res.json() : [])
         .then(cameras => setData(cameras))
         .catch(err => console.error('Failed to refresh camera status:', err));
@@ -180,7 +196,10 @@ export default function CamerasPage() {
   // --- 3. Camera CRUD ---
   const handleEdit = async (item: Camera) => {
     // Refresh dependencies
-    const res = await fetch('/api/locations');
+    const token = localStorage.getItem('token');
+    const res = await fetch('/api/locations', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
     if (res.ok) setLocations(await res.json());
 
     setEditingItem(item);
@@ -188,7 +207,10 @@ export default function CamerasPage() {
   };
 
   const openAddDialog = async () => {
-    const res = await fetch('/api/locations');
+    const token = localStorage.getItem('token');
+    const res = await fetch('/api/locations', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
     if (res.ok) setLocations(await res.json());
 
     setEditingItem({
@@ -211,7 +233,11 @@ export default function CamerasPage() {
     if (deleteCamId !== null) {
       const id = deleteCamId;
       setData((prev) => prev.filter((item) => item.id !== id));
-      const promise = fetch(`/api/cameras/${id}`, { method: "DELETE" });
+      const token = localStorage.getItem('token');
+      const promise = fetch(`/api/cameras/${id}`, { 
+        method: "DELETE",
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       toast.promise(promise, {
         loading: "Đang xóa camera...",
         success: "Đã xóa camera thành công",
@@ -241,15 +267,22 @@ export default function CamerasPage() {
     setEditingItem(null);
 
     // Use PUT for updates, POST for new cameras
+    const token = localStorage.getItem('token');
     const promise = isNew
       ? fetch("/api/cameras", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
           body: JSON.stringify(camToSave),
         })
       : fetch(`/api/cameras/${camToSave.id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
           body: JSON.stringify(camToSave),
         });
 
@@ -270,9 +303,13 @@ export default function CamerasPage() {
         tag: newLocationTag,
       };
       
+      const token = localStorage.getItem('token');
       const promise = fetch('/api/locations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(newLoc)
       });
       
@@ -308,9 +345,13 @@ export default function CamerasPage() {
         tag: tempLocTag,
       };
       
+      const token = localStorage.getItem('token');
       const promise = fetch(`/api/locations/${locationToUpdate.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(updateData)
       });
       
@@ -335,8 +376,10 @@ export default function CamerasPage() {
 
   const executeDeleteLocation = async () => {
     if (deleteLocId !== null) {
+      const token = localStorage.getItem('token');
       const promise = fetch(`/api/locations/${deleteLocId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
       });
       
       toast.promise(promise, {
@@ -366,9 +409,13 @@ export default function CamerasPage() {
         functions: newTypeFunctions,
       };
       
+      const token = localStorage.getItem('token');
       const promise = fetch('/api/camera_types', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(newType)
       });
       
@@ -417,9 +464,13 @@ export default function CamerasPage() {
         functions: tempTypeFunctions,
       };
       
+      const token = localStorage.getItem('token');
       const promise = fetch(`/api/camera_types/${typeToUpdate.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(updateData)
       });
       
@@ -449,8 +500,10 @@ export default function CamerasPage() {
   };
 
   const handleDeleteType = async (id: string | number) => {
+    const token = localStorage.getItem('token');
     const promise = fetch(`/api/camera_types/${id}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
     });
     
     toast.promise(promise, {
@@ -486,7 +539,7 @@ export default function CamerasPage() {
   });
 
   // --- 7. Table Columns ---
-  const columns = [
+  const allColumns = [
     {
       header: "Trạng thái",
       width: "120px",
@@ -560,6 +613,11 @@ export default function CamerasPage() {
     },
   ];
 
+  const columns = allColumns.filter(col => {
+    if (col.header === "Thao tác") return userData?.role === 'admin';
+    return true;
+  });
+
   return (
     <div className="h-full flex flex-col p-6 gap-4 overflow-hidden bg-background">
       {/* Header */}
@@ -580,18 +638,22 @@ export default function CamerasPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <button
-            onClick={() => setIsConfigDialogOpen(true)}
-            className="px-4 py-2 bg-card border border-border rounded-md text-sm font-bold flex items-center gap-2 hover:bg-muted transition-all hover:text-[#f59e0b]"
-          >
-            <Settings fontSize="small" className="text-[#f59e0b]" /> Cấu hình
-          </button>
-          <button
-            onClick={openAddDialog}
-            className="px-4 py-2 bg-[#f59e0b] text-black rounded-md text-sm font-bold flex items-center gap-2 hover:bg-[#f59e0b]/90 transition-all shadow-lg shadow-[#f59e0b]/20"
-          >
-            <Add fontSize="small" className="text-black" /> Thêm camera
-          </button>
+          {userData?.role === 'admin' && (
+            <button
+              onClick={() => setIsConfigDialogOpen(true)}
+              className="px-4 py-2 bg-card border border-border rounded-md text-sm font-bold flex items-center gap-2 hover:bg-muted transition-all hover:text-[#f59e0b]"
+            >
+              <Settings fontSize="small" className="text-[#f59e0b]" /> Cấu hình
+            </button>
+          )}
+          {userData?.role === 'admin' && (
+            <button
+              onClick={openAddDialog}
+              className="px-4 py-2 bg-[#f59e0b] text-black rounded-md text-sm font-bold flex items-center gap-2 hover:bg-[#f59e0b]/90 transition-all shadow-lg shadow-[#f59e0b]/20"
+            >
+              <Add fontSize="small" className="text-black" /> Thêm camera
+            </button>
+          )}
         </div>
       </div>
 

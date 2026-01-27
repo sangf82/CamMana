@@ -1,15 +1,15 @@
-from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import Response
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-
+from fastapi import APIRouter, HTTPException, Query, Depends, Response
 from .logic import ReportLogic
+from backend.api.user import get_current_user
+from backend.schemas import User as UserSchema
 
 router = APIRouter(prefix="/api/report", tags=["report"])
 logic = ReportLogic()
 
 @router.get("/today")
-async def get_today_report():
+async def get_today_report(user: UserSchema = Depends(get_current_user)):
     today = datetime.now().strftime("%d-%m-%Y")
     report = logic.get_report(today)
     if not report:
@@ -17,24 +17,33 @@ async def get_today_report():
     return report
 
 @router.get("/history")
-async def get_report_history():
+async def get_report_history(user: UserSchema = Depends(get_current_user)):
     return logic.list_reports()
 
 @router.get("/detail")
-async def get_report_detail(date: str = Query(..., description="Date in dd-mm-yyyy format")):
+async def get_report_detail(
+    date: str = Query(..., description="Date in dd-mm-yyyy format"),
+    user: UserSchema = Depends(get_current_user)
+):
     report = logic.get_report(date)
     if not report:
         report = logic.generate_report(date)
     return report
 
 @router.post("/generate")
-async def generate_report(date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format. Defaults to today.")):
+async def generate_report(
+    date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format. Defaults to today."),
+    user: UserSchema = Depends(get_current_user)
+):
     if not date:
         date = datetime.now().strftime("%d-%m-%Y")
     return logic.generate_report(date)
 
 @router.get("/export/pdf")
-async def export_report_pdf(date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format. Defaults to today.")):
+async def export_report_pdf(
+    date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format. Defaults to today."),
+    user: UserSchema = Depends(get_current_user)
+):
     if not date:
         date = datetime.now().strftime("%d-%m-%Y")
     

@@ -27,6 +27,7 @@ interface ReportData {
   charts: {
     wheel_distribution: Record<string, number>;
     contractor_volume_distribution: Record<string, number>;
+    hourly_distribution: Record<string, number>;
   };
   generated_at: string;
 }
@@ -49,17 +50,30 @@ export default function ReportsPage() {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const historyRes = await fetch('/api/report/history');
-      const dates = await historyRes.json();
-      setAvailableDates(dates);
+      const token = localStorage.getItem('token');
+      
+      const historyRes = await fetch('/api/report/history', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (historyRes.ok) {
+        const dates = await historyRes.json();
+        setAvailableDates(dates);
+      }
 
-      const reportRes = await fetch('/api/report/today');
-      const report = await reportRes.json();
-      setData(report);
-      setSelectedDate(report.date);
+      const reportRes = await fetch('/api/report/today', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (reportRes.ok) {
+        const report = await reportRes.json();
+        setData(report);
+        setSelectedDate(report.date);
+      } else {
+        const err = await reportRes.json();
+        toast.error(err.detail || "Không thể tải báo cáo hôm nay");
+      }
     } catch (error) {
       console.error('Error fetching reports:', error);
-      toast.error('Lỗi khi tải dữ liệu báo cáo');
+      toast.error('Lỗi kết nối máy chủ');
     } finally {
       setLoading(false);
     }
@@ -69,11 +83,18 @@ export default function ReportsPage() {
     try {
       setLoading(true);
       setSelectedDate(date);
-      const res = await fetch(`/api/report/detail?date=${date}`);
-      const report = await res.json();
-      setData(report);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/report/detail?date=${date}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const report = await res.json();
+        setData(report);
+      } else {
+        toast.error('Không tìm thấy dữ liệu cho ngày này');
+      }
     } catch (error) {
-      toast.error('Lỗi khi tải chi tiết báo cáo');
+      toast.error('Lỗi kết nối');
     } finally {
       setLoading(false);
     }
@@ -82,10 +103,18 @@ export default function ReportsPage() {
   const handleManualGenerate = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/report/generate', { method: 'POST' });
-      const report = await res.json();
-      setData(report);
-      toast.success('Đã làm mới dữ liệu báo cáo');
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/report/generate', { 
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+          const report = await res.json();
+          setData(report);
+          toast.success('Đã làm mới dữ liệu báo cáo');
+      } else {
+          toast.error("Lỗi khi tạo lại báo cáo");
+      }
     } catch (error) {
       toast.error('Lỗi khi tạo báo cáo');
     } finally {
@@ -93,9 +122,31 @@ export default function ReportsPage() {
     }
   };
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!selectedDate) return;
-    window.open(`/api/report/export/pdf?date=${selectedDate}`, '_blank');
+    
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/report/export/pdf?date=${selectedDate}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `report_${selectedDate}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Đã tải xuống báo cáo PDF');
+    } catch (e) {
+      console.error('PDF Export Error:', e);
+      toast.error('Lỗi khi tải xuống PDF');
+    }
   };
 
   if (loading && !data) {
@@ -106,15 +157,26 @@ export default function ReportsPage() {
     );
   }
 
-  const wheelChartData = data ? Object.entries(data.charts.wheel_distribution).map(([name, value]) => ({
-    name: `${name} bánh`,
-    value
-  })) : [];
+  const wheelChartData = data?.charts?.wheel_distribution 
+    ? Object.entries(data.charts.wheel_distribution).map(([name, value]) => ({
+        name: `${name} bánh`,
+        value
+      })) 
+    : [];
 
-  const contractorChartData = data ? Object.entries(data.charts.contractor_volume_distribution).map(([name, value]) => ({
-    name,
-    value
-  })) : [];
+  const contractorChartData = data?.charts?.contractor_volume_distribution 
+    ? Object.entries(data.charts.contractor_volume_distribution).map(([name, value]) => ({
+        name,
+        value
+      })) 
+    : [];
+
+  const hourlyChartData = data?.charts?.hourly_distribution
+    ? Object.entries(data.charts.hourly_distribution).map(([hour, count]) => ({
+        name: `${hour}h`,
+        value: count
+      }))
+    : [];
 
   return (
     <div className="p-6 space-y-6 overflow-y-auto">
@@ -244,6 +306,7 @@ export default function ReportsPage() {
                     }}
                     itemStyle={{ color: '#ffffff' }}
                     labelStyle={{ color: '#f59e0b', fontWeight: 'bold' }}
+                    formatter={(value: number) => [`${value} xe`, 'Số lượng']}
                   />
                   <Bar dataKey="value" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -273,6 +336,7 @@ export default function ReportsPage() {
                     }}
                     itemStyle={{ color: '#ffffff' }}
                     labelStyle={{ color: '#f59e0b', fontWeight: 'bold' }}
+                    formatter={(value: number) => [`${value} m³`, 'Khối lượng']}
                   />
                   <Bar dataKey="value" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -281,6 +345,34 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
       </div>
+      
+      <Card>
+        <CardHeader>
+          <CardTitle>Mật độ xe theo giờ trong ngày (số lượt)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[250px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={hourlyChartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="name" stroke="var(--border)" fontSize={11} tickLine={false} axisLine={false} tick={{ fill: 'var(--foreground)', fontSize: 10 }} />
+                <YAxis stroke="var(--border)" fontSize={11} tickLine={false} axisLine={false} tick={{ fill: 'var(--foreground)', fontSize: 10 }} />
+                <Tooltip 
+                  cursor={{ fill: 'rgba(245, 158, 11, 0.1)' }}
+                  contentStyle={{ 
+                      backgroundColor: '#18181b', 
+                      border: '1px solid #f59e0b', 
+                      borderRadius: '8px'
+                  }}
+                  itemStyle={{ color: '#ffffff' }}
+                  labelStyle={{ color: '#f59e0b', fontWeight: 'bold' }}
+                />
+                <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Metadata */}
       <div className="text-right">

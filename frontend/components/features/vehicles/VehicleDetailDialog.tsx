@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { LocalShipping, Description, UploadFile } from '@mui/icons-material'
+import { ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import Dialog from '../../../components/ui/dialog'
 import { Vehicle } from './VehicleTable'
@@ -11,7 +12,7 @@ interface VehicleDetailDialogProps {
   onClose: () => void
   editingItem: Vehicle | null
   setEditingItem: React.Dispatch<React.SetStateAction<Vehicle | null>>
-  onSave: (e: React.FormEvent, updatedItem: Vehicle) => void
+  onSave: (e: React.FormEvent, updatedItem: Vehicle, adminCode?: string) => void
   onImport: (data: any[]) => void
 }
 
@@ -23,8 +24,18 @@ export default function VehicleDetailDialog({
   onSave,
   onImport
 }: VehicleDetailDialogProps) {
+  const [adminCode, setAdminCode] = useState('')
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const minVolRef = useRef<HTMLInputElement>(null)
   const maxVolRef = useRef<HTMLInputElement>(null)
+
+  // Sync user data
+  useEffect(() => {
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+        setCurrentUser(JSON.parse(userStr))
+    }
+  }, [isOpen])
 
   // Use local state for immediate feedback, synced with editingItem
   const [vMin, vMax] = (editingItem?.standardVolume || '').split(' - ').concat(['', ''])
@@ -67,7 +78,7 @@ export default function VehicleDetailDialog({
       e.preventDefault()
       
       if (editingItem) {
-          onSave(e, editingItem)
+          onSave(e, editingItem, adminCode)
       }
   }
 
@@ -270,6 +281,25 @@ export default function VehicleDetailDialog({
                     />
                 </div>
              </div>
+
+             {/* Admin Verification Code Section (Conditional) */}
+             {(!editingItem?.id || editingItem.id === 0) && currentUser?.can_add_vehicles && (
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="space-y-2">
+                        <label className="text-xs font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
+                            <ShieldCheck size={14} /> Xác nhận từ Admin
+                        </label>
+                        <input 
+                            className="w-full p-2.5 bg-zinc-950/50 border border-amber-500/30 rounded focus:border-amber-500 focus:ring-0 outline-none font-sans text-md placeholder:text-zinc-700"
+                            value={adminCode}
+                            onChange={e => setAdminCode(e.target.value)}
+                            required
+                            placeholder="Nhập mã xác nhận do Admin cấp để thêm xe"
+                        />
+                        <p className="text-[10px] text-amber-500/60 italic">Bạn cần mã này để hoàn tất đăng ký phương tiện mới.</p>
+                    </div>
+                </div>
+             )}
           </div>
 
           <div className="pt-4 flex items-center justify-end gap-3 border-t border-border mt-6">

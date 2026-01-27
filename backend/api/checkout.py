@@ -4,10 +4,13 @@ import shutil
 import cv2
 import asyncio
 from pathlib import Path
-from fastapi import APIRouter, File, UploadFile, Form, HTTPException
+from fastapi import APIRouter, File, UploadFile, Form, HTTPException, Depends
 from typing import Optional
 
 from backend.workflow.checkout import get_checkout_service
+
+from backend.api.user import get_current_user
+from backend.schemas import User as UserSchema
 
 checkout_router = APIRouter(prefix="/api/checkout", tags=["check-out"])
 
@@ -15,6 +18,7 @@ checkout_router = APIRouter(prefix="/api/checkout", tags=["check-out"])
 async def process_checkout(
     front_image: UploadFile = File(...),
     location_id: str = Form(...),
+    user: UserSchema = Depends(get_current_user)
 ):
     """
     Process vehicle check-out. Matches plate with open sessions.
@@ -53,7 +57,7 @@ class ManualConfirmRequest(BaseModel):
     time_out: Optional[str] = None
 
 @checkout_router.post("/manual-confirm")
-async def manual_confirm(req: ManualConfirmRequest):
+async def manual_confirm(req: ManualConfirmRequest, user: UserSchema = Depends(get_current_user)):
     """
     Manually confirm a checkout. Merges with open session if found.
     """
