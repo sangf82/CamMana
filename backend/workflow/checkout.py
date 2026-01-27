@@ -10,8 +10,8 @@ from backend.model_process.control import orchestrator
 from backend.data_process.history.logic import HistoryLogic
 from backend.data_process.register_car.logic import RegisteredCarLogic
 from backend.data_process.sync.proxy import is_client_mode, upload_folder_to_master
-
 from backend.data_process.location.logic import LocationLogic
+from backend.config import DATA_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,15 @@ class CheckOutService:
                 if "wheel" in result and result["wheel"].get("detected"):
                     wheel_count = result["wheel"].get("wheel_count_total", 0)
             
-            clean_plate = self.registered_logic.normalize_plate(plate_number) if plate_number != "Unknown" else "Unknown"
+            # Normalize plate with error handling
+            if plate_number and plate_number != "Unknown":
+                try:
+                    clean_plate = self.registered_logic.normalize_plate(plate_number)
+                except Exception as e:
+                    logger.warning(f"Plate normalization failed: {e}")
+                    clean_plate = plate_number
+            else:
+                clean_plate = "Unknown"
 
             # 2. Find Open Session
             target_record = self.history_logic.find_open_session(clean_plate)
@@ -91,7 +99,12 @@ class CheckOutService:
                 # Create NEW record for unknown checkout
                 import uuid
                 uuid_val = str(uuid.uuid4())
-                folder_path = self.history_logic.create_car_folder(uuid_val, plate=clean_plate, direction="out")
+                folder_path = self.history_logic.create_car_folder(
+                    uuid_val, 
+                    plate=clean_plate, 
+                    direction="out",
+                    location=location_name
+                )
                 
                 record_data = {
                     "id": uuid_val,
@@ -123,8 +136,8 @@ class CheckOutService:
                 top_cam_id = top_img_info.get("cam_id", "default")
                 
                 # Resolve Calibration Paths
-                calib_dir = Path("database/calibration")
-                bg_dir = Path("database/backgrounds")
+                calib_dir = DATA_ROOT / "calibration"
+                bg_dir = DATA_ROOT / "backgrounds"
                 
                 calib_side = calib_dir / f"calib_side_{side_cam_id}.json"
                 if not calib_side.exists(): calib_side = calib_dir / "calib_side.json"
@@ -132,17 +145,21 @@ class CheckOutService:
                 calib_top = calib_dir / f"calib_top_{top_cam_id}.json"
                 if not calib_top.exists(): calib_top = calib_dir / "calib_topdown.json"
                 
-                # Resolve Background - Use Inpainting for "Cleaned" Background
+                # Try to generate cleaned background using inpainting and save in car folder
                 from backend.utils.inpainting import generate_seamless_background
                 from backend.model_process.functions.truck import TruckDetector
                 
-                bg_image = None
-                cleaned_bg_path = Path("cleaned_output") / f"cleaned_{uuid_val}.jpg"
+                cleaned_bg_path = folder_path / f"background_cleaned_{top_cam_id}.jpg"
                 
                 try:
                     logger.info(f"[Checkout] Detecting truck on top image for inpainting mask...")
                     td = TruckDetector(confidence=0.3) # Lower confidence for topdown
                     top_img_cv = await asyncio.to_thread(cv2.imread, str(top_img_info["path"]))
+                    
+                    if top_img_cv is None:
+                        logger.warning("[Checkout] Failed to read top image for truck detection")
+                        raise ValueError("Could not read top image")
+                    
                     det = td.detect(top_img_cv)
                     
                     bbox = None
@@ -150,21 +167,34 @@ class CheckOutService:
                         x1, y1, x2, y2 = det["bbox"]
                         bbox = {"x": x1, "y": y1, "w": x2-x1, "h": y2-y1}
                         logger.info(f"[Checkout] Truck detected on top image at {bbox}")
+                    else:
+                        logger.info(f"[Checkout] No truck detected in top image, proceeding with full image inpainting")
 
                     success = await generate_seamless_background(Path(top_img_info["path"]), cleaned_bg_path, truck_bbox=bbox)
-                    if success:
+                    if success and cleaned_bg_path.exists():
                         bg_image = cleaned_bg_path
-                        logger.info(f"[Checkout] Cleaned background generated: {bg_image}")
+                        logger.info(f"[Checkout] Cleaned background saved to car folder: {bg_image}")
+                    else:
+                        logger.warning(f"[Checkout] Inpainting completed but file not created at {cleaned_bg_path}")
                 except Exception as ie:
-                    logger.warning(f"[Checkout] Inpainting failed, falling back to static background: {ie}")
+                    logger.warning(f"[Checkout] Inpainting failed, falling back to static background: {ie}", exc_info=True)
 
                 if not bg_image:
+                    # Fallback to static background
+                    logger.info(f"[Checkout] Using static background fallback")
                     bg_image_candidate = bg_dir / f"bg_{top_cam_id}.jpg"
                     if bg_image_candidate.exists():
                          bg_image = bg_image_candidate
+                         logger.info(f"[Checkout] Found camera-specific background: {bg_image_candidate}")
                     else:
+                         # Try any static background
                          bgs = list(bg_dir.glob("*.jpg"))
-                         bg_image = bgs[0] if bgs else None
+                         if bgs:
+                             bg_image = bgs[0]
+                             logger.info(f"[Checkout] Using generic background: {bg_image}")
+                         else:
+                             logger.warning(f"[Checkout] No background images found in {bg_dir}")
+                             bg_image = None
                 
                 if not bg_image:
                     logger.warning(f"[Checkout] Skipped Volume: No background image found or generated.")
@@ -188,12 +218,14 @@ class CheckOutService:
                              # Save error to JSON for visibility
                              err = vol_res.get('error') if vol_res else 'Unknown'
                              logger.error(f"[Checkout] Volume failed: {err}")
-                             with open(folder_path / "checkout_model_volume_error.json", "w", encoding="utf-8") as f:
-                                 json.dump({"error": err, "details": vol_res}, f, indent=4)
+                             if folder_path and folder_path.exists():
+                                 with open(folder_path / "checkout_model_volume_error.json", "w", encoding="utf-8") as f:
+                                     json.dump({"error": err, "details": vol_res}, f, indent=4)
                      except Exception as ve:
-                         logger.error(f"[Checkout] Volume exception: {ve}")
-                         with open(folder_path / "checkout_model_volume_error.json", "w", encoding="utf-8") as f:
-                             json.dump({"error": str(ve)}, f, indent=4)
+                         logger.error(f"[Checkout] Volume exception: {ve}", exc_info=True)
+                         if folder_path and folder_path.exists():
+                             with open(folder_path / "checkout_model_volume_error.json", "w", encoding="utf-8") as f:
+                                 json.dump({"error": str(ve)}, f, indent=4)
             else:
                  msg = []
                  if not side_img_info: msg.append("Missing Side Cam")
@@ -236,9 +268,16 @@ class CheckOutService:
                 "status": "Đã ra" if status == "Matched" else "Xe ra lạ"
             }
             if final_volume is not None:
-                update_data["vol_measured"] = str(round(final_volume, 2))
-                
-            self.history_logic.update_record(uuid_val, update_data)
+                try:
+                    update_data["vol_measured"] = str(round(float(final_volume), 2))
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid volume value: {final_volume}, error: {e}")
+            
+            if uuid_val:
+                try:
+                    self.history_logic.update_record(uuid_val, update_data)
+                except Exception as e:
+                    logger.error(f"Failed to update history record: {e}", exc_info=True)
             
             # --- SYNC FOLDER TO MASTER (if in Client mode) ---
             if is_client_mode() and folder_path:

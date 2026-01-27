@@ -25,3 +25,9 @@ database/report/*
 database/sync_config.json
 
 .github
+
+CamMana.spec
+requirements-build.txt
+build
+dist
+*.spec

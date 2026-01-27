@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 
@@ -20,7 +20,9 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen w-full">
-      <Sidebar />
+      <Suspense fallback={<div className="w-64 bg-sidebar" />}>
+        <Sidebar />
+      </Suspense>
       <main className="flex-1 flex flex-col overflow-hidden bg-muted/30 relative">
         {children}
       </main>

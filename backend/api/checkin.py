@@ -30,6 +30,7 @@ from backend.workflow.checkin import get_checkin_service, CheckInResult
 from backend.api._shared import cameras as active_cameras
 from backend.data_process import get_registered_cars
 from backend.workflow.config import LocationTag
+from backend.config import DATA_ROOT
 
 
 checkin_router = APIRouter(prefix="/api/checkin", tags=["check-in"])
@@ -396,8 +397,8 @@ async def capture_and_process(
                 folder = Path(result.folder_path)
 
                 # Paths for calibration and backgrounds
-                calib_dir = Path("database/calibration")
-                bg_dir = Path("database/backgrounds")
+                calib_dir = DATA_ROOT / "calibration"
+                bg_dir = DATA_ROOT / "backgrounds"
 
                 side_cam_id = side_img.get("cam_id", "default")
                 top_cam_id = top_img.get("cam_id", "default")
@@ -713,7 +714,7 @@ async def get_pending_verifications():
     import json
 
     pending = []
-    car_history_dir = Path("database/car_history")
+    car_history_dir = DATA_ROOT / "car_history"
 
     if not car_history_dir.exists():
         return {"pending": []}

@@ -9,9 +9,10 @@ from backend.data_process._common import (
     CAR_HEADERS, LOG_HEADERS, DATA_DIR, LOGS_DIR, _generate_id, _read_csv, 
     _get_today_date, _ensure_dirs, _write_lock, _init_csv_if_needed
 )
+from backend.config import DATA_ROOT
 import shutil
 
-CAR_HISTORY_DIR = Path("database/car_history")
+CAR_HISTORY_DIR = DATA_ROOT / "car_history"
 EXPIRATION_HOURS = 48
 
 

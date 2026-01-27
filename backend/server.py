@@ -27,6 +27,7 @@ from backend.data_process.camera_type.api import router as camera_type_router
 from backend.data_process.report.api import router as report_router
 from backend.camera.api import router as camera_router
 from backend.api.system import router as system_router
+from backend.config import DATA_ROOT
 
 BACKEND_DIR = Path(__file__).parent
 
@@ -78,7 +79,7 @@ def create_app() -> FastAPI:
     @app.get("/api/images/{date_folder}/{car_folder}/{filename}")
     async def serve_car_image(date_folder: str, car_folder: str, filename: str):
         """Serve captured car images for evidence display"""
-        image_path = Path("database/car_history") / date_folder / car_folder / filename
+        image_path = DATA_ROOT / "car_history" / date_folder / car_folder / filename
         if image_path.exists() and image_path.is_file():
             return FileResponse(image_path, media_type="image/jpeg")
         raise HTTPException(status_code=404, detail="Image not found")

@@ -599,12 +599,16 @@ export default function CamerasPage() {
           <button
             onClick={() => handleEdit(row)}
             className="p-1 text-[#f59e0b] hover:bg-[#f59e0b]/10 rounded"
+            title="Chỉnh sửa camera"
+            aria-label="Chỉnh sửa camera"
           >
             <Edit fontSize="small" />
           </button>
           <button
             onClick={() => setDeleteCamId(row.id)}
             className="p-1 text-red-500 hover:bg-red-500/10 rounded"
+            title="Xóa camera"
+            aria-label="Xóa camera"
           >
             <Delete fontSize="small" />
           </button>
@@ -634,6 +638,8 @@ export default function CamerasPage() {
             <input
               className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-md text-sm outline-none focus:border-[#f59e0b] focus:ring-1 focus:ring-[#f59e0b]"
               placeholder="Tìm kiếm camera..."
+              title="Tìm kiếm camera theo tên, IP hoặc vị trí"
+              aria-label="Tìm kiếm camera"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -663,15 +669,18 @@ export default function CamerasPage() {
           <table className="text-sm text-left border-collapse w-full min-w-max">
             <thead className="text-[10px] uppercase text-muted-foreground font-bold sticky top-0 bg-muted/95 backdrop-blur-sm z-20 border-b border-border">
               <tr>
-                {columns.map((c, i) => (
-                  <th
-                    key={i}
-                    className="px-4 py-3"
-                    style={{ width: (c as any).width }}
-                  >
-                    {c.header}
-                  </th>
-                ))}
+                {columns.map((c, i) => {
+                  const colWidth = (c as any).width;
+                  const widthClass = colWidth === "120px" ? "w-[120px]" : colWidth === "100px" ? "w-[100px]" : "";
+                  return (
+                    <th
+                      key={i}
+                      className={`px-4 py-3 ${widthClass}`}
+                    >
+                      {c.header}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -714,6 +723,8 @@ export default function CamerasPage() {
               </label>
               <input
                 className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b] outline-none transition-all"
+                placeholder="Nhập tên camera"
+                title="Tên camera"
                 value={editingItem?.name || ""}
                 onChange={(e) =>
                   setEditingItem((p) => ({ ...p!, name: e.target.value }))
@@ -727,6 +738,8 @@ export default function CamerasPage() {
               </label>
               <input
                 className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b] outline-none transition-all"
+                placeholder="Nhập thương hiệu"
+                title="Thương hiệu"
                 value={editingItem?.brand || ""}
                 onChange={(e) =>
                   setEditingItem((p) => ({ ...p!, brand: e.target.value }))
@@ -741,6 +754,8 @@ export default function CamerasPage() {
             </label>
             <input
               className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b] outline-none transition-all"
+              placeholder="Nhập địa chỉ IP"
+              title="Địa chỉ IP camera"
               value={editingItem?.ip || ""}
               onChange={(e) =>
                 setEditingItem((p) => ({ ...p!, ip: e.target.value }))
@@ -755,6 +770,8 @@ export default function CamerasPage() {
               </label>
               <input
                 className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b] outline-none transition-all"
+                placeholder="Nhập tài khoản"
+                title="Tài khoản camera"
                 value={editingItem?.username || ""}
                 onChange={(e) =>
                   setEditingItem((p) => ({ ...p!, username: e.target.value }))
@@ -770,6 +787,8 @@ export default function CamerasPage() {
                 <input
                   type={showPassword ? "text" : "password"}
                   className="w-full p-2 pr-10 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b] outline-none transition-all"
+                  placeholder="Nhập mật khẩu"
+                  title="Mật khẩu camera"
                   value={editingItem?.password || ""}
                   onChange={(e) =>
                     setEditingItem((p) => ({ ...p!, password: e.target.value }))
@@ -780,6 +799,8 @@ export default function CamerasPage() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute inset-y-0 right-0 px-3 text-muted-foreground hover:text-foreground"
+                  title={showPassword ? "Ẩn mật khẩu" : "Hiển thị mật khẩu"}
+                  aria-label={showPassword ? "Ẩn mật khẩu" : "Hiển thị mật khẩu"}
                 >
                   {showPassword ? (
                     <VisibilityOff fontSize="small" />
@@ -945,6 +966,8 @@ export default function CamerasPage() {
               <input
                 className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs outline-none focus:border-[#f59e0b] transition-all placeholder:italic"
                 placeholder="Tên vị trí (vd: Cổng Chính)..."
+                title="Nhập tên vị trí mới"
+                aria-label="Tên vị trí mới"
                 value={newLocation}
                 onChange={(e) => setNewLocation(e.target.value)}
               />
@@ -985,6 +1008,8 @@ export default function CamerasPage() {
                 <button
                   onClick={handleAddLocation}
                   className="w-[42px] h-[42px] shrink-0 bg-[#f59e0b] text-black rounded-lg flex items-center justify-center shadow-lg shadow-[#f59e0b]/20 hover:scale-105 active:scale-95 transition-all"
+                  title="Thêm vị trí"
+                  aria-label="Thêm vị trí mới"
                 >
                   <Add fontSize="small" />
                 </button>
@@ -1000,6 +1025,9 @@ export default function CamerasPage() {
                     <div className="flex-1 flex flex-col gap-2">
                       <input
                         className="w-full h-8 px-2 bg-background border border-[#f59e0b] rounded text-xs outline-none"
+                        placeholder="Tên vị trí"
+                        title="Chỉnh sửa tên vị trí"
+                        aria-label="Chỉnh sửa tên vị trí"
                         value={tempLocName}
                         onChange={(e) => setTempLocName(e.target.value)}
                         autoFocus
@@ -1049,6 +1077,8 @@ export default function CamerasPage() {
                               setEditLocDropdownIndex(null);
                             }}
                             className="w-8 h-8 flex items-center justify-center bg-green-500/10 text-green-500 rounded-md hover:bg-green-500/20 transition-all"
+                            title="Lưu vị trí"
+                            aria-label="Lưu vị trí"
                           >
                             <Check sx={{ fontSize: 16 }} />
                           </button>
@@ -1058,6 +1088,8 @@ export default function CamerasPage() {
                               setEditLocDropdownIndex(null);
                             }}
                             className="w-8 h-8 flex items-center justify-center bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 transition-all"
+                            title="Hủy"
+                            aria-label="Hủy chỉnh sửa"
                           >
                             <Close sx={{ fontSize: 16 }} />
                           </button>
@@ -1082,12 +1114,16 @@ export default function CamerasPage() {
                             setTempLocTag(loc.tag || "Cơ bản");
                           }}
                           className="w-8 h-8 flex items-center justify-center bg-background border border-border rounded-md hover:text-blue-500 transition-colors"
+                          title="Chỉnh sửa vị trí"
+                          aria-label="Chỉnh sửa vị trí"
                         >
                           <Edit sx={{ fontSize: 16 }} />
                         </button>
                         <button
                           onClick={() => setDeleteLocId(loc.id)}
                           className="w-8 h-8 flex items-center justify-center bg-background border border-border rounded-md hover:text-red-500 transition-colors"
+                          title="Xóa vị trí"
+                          aria-label="Xóa vị trí"
                         >
                           <Delete sx={{ fontSize: 16 }} />
                         </button>
@@ -1108,6 +1144,8 @@ export default function CamerasPage() {
               <input
                 className="w-full h-10 px-3 bg-background/50 border border-border rounded-lg text-xs outline-none focus:border-primary transition-all placeholder:italic"
                 placeholder="Tên loại (vd: Phân tích xe)..."
+                title="Nhập tên loại camera mới"
+                aria-label="Tên loại camera mới"
                 value={newTypeName}
                 onChange={(e) => setNewTypeName(e.target.value)}
               />
@@ -1159,6 +1197,8 @@ export default function CamerasPage() {
                 <button
                   onClick={handleAddType}
                   className="w-[42px] h-[42px] shrink-0 bg-[#f59e0b] text-black rounded-lg flex items-center justify-center shadow-lg shadow-[#f59e0b]/20 hover:scale-105 active:scale-95 transition-all"
+                  title="Thêm loại camera"
+                  aria-label="Thêm loại camera mới"
                 >
                   <Add fontSize="small" />
                 </button>
@@ -1175,6 +1215,9 @@ export default function CamerasPage() {
                     <div className="flex-1 space-y-2">
                       <input
                         className="w-full h-8 px-2 bg-background border border-primary rounded text-xs"
+                        placeholder="Tên loại camera"
+                        title="Chỉnh sửa tên loại camera"
+                        aria-label="Chỉnh sửa tên loại camera"
                         value={tempTypeName}
                         onChange={(e) => setTempTypeName(e.target.value)}
                       />
@@ -1237,6 +1280,8 @@ export default function CamerasPage() {
                               setEditTypeDropdownIndex(null);
                             }}
                             className="w-8 h-8 flex items-center justify-center bg-green-500/10 text-green-500 rounded-md hover:bg-green-500/20 transition-all"
+                            title="Lưu loại camera"
+                            aria-label="Lưu loại camera"
                           >
                             <Check sx={{ fontSize: 16 }} />
                           </button>
@@ -1246,6 +1291,8 @@ export default function CamerasPage() {
                               setEditTypeDropdownIndex(null);
                             }}
                             className="w-8 h-8 flex items-center justify-center bg-red-500/10 text-red-500 rounded-md hover:bg-red-500/20 transition-all"
+                            title="Hủy"
+                            aria-label="Hủy chỉnh sửa"
                           >
                             <Close sx={{ fontSize: 16 }} />
                           </button>
@@ -1281,12 +1328,16 @@ export default function CamerasPage() {
                             );
                           }}
                           className="w-8 h-8 flex items-center justify-center bg-background border border-border rounded-md hover:text-blue-500 transition-colors"
+                          title="Chỉnh sửa loại camera"
+                          aria-label="Chỉnh sửa loại camera"
                         >
                           <Edit sx={{ fontSize: 16 }} />
                         </button>
                         <button
                           onClick={() => handleDeleteType(type.id)}
                           className="w-8 h-8 flex items-center justify-center bg-background border border-border rounded-md hover:text-red-500 transition-colors"
+                          title="Xóa loại camera"
+                          aria-label="Xóa loại camera"
                         >
                           <Delete sx={{ fontSize: 16 }} />
                         </button>

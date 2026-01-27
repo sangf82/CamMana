@@ -13,6 +13,7 @@ from backend.model_process.control import orchestrator
 from backend.data_process.history.logic import HistoryLogic
 from backend.data_process.location.logic import LocationLogic
 from backend.data_process.register_car.logic import RegisteredCarLogic
+from backend.data_process.register_car.logic import RegisteredCarLogic
 from backend.data_process.sync.proxy import is_client_mode, upload_folder_to_master
 
 logger = logging.getLogger(__name__)

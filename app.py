@@ -1,17 +1,20 @@
 """
 CamMana Desktop Application
-Uses PyWebView to create a native window with React frontend
+Uses PySide6 (Qt) to create a native Windows application
 """
 
-import webview
-import threading
-import time
 import sys
 import os
+import threading
+import time
 from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from PySide6.QtCore import QUrl, Qt
+from PySide6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtWebEngineWidgets import QWebEngineView
 
 
 def get_base_path():
@@ -40,23 +43,24 @@ def start_backend_server():
     server.run()
 
 
-class API:
-    """JavaScript API exposed to the webview"""
+class MainWindow(QMainWindow):
+    """Main application window"""
     
-    def get_platform(self):
-        return sys.platform
-    
-    def minimize(self):
-        for window in webview.windows:
-            window.minimize()
-    
-    def toggle_fullscreen(self):
-        for window in webview.windows:
-            window.toggle_fullscreen()
-    
-    def close(self):
-        for window in webview.windows:
-            window.destroy()
+    def __init__(self, url):
+        super().__init__()
+        
+        # Set window properties
+        self.setWindowTitle("CamMana - Camera Manager")
+        self.setMinimumSize(1024, 768)
+        self.resize(1400, 900)
+        
+        # Create web view
+        self.browser = QWebEngineView()
+        self.browser.setUrl(QUrl(url))
+        self.setCentralWidget(self.browser)
+        
+        # Set window flags for better native feel
+        self.setWindowFlags(Qt.Window)
 
 
 def main():
@@ -66,7 +70,7 @@ def main():
     
     # Wait for server to start
     print("Starting CamMana...")
-    time.sleep(2)
+    time.sleep(3)
     
     # Determine frontend URL
     base_path = get_base_path()
@@ -75,7 +79,8 @@ def main():
     if static_dir.exists():
         # Production mode - serve from FastAPI
         from backend import config
-        frontend_url = f"http://{config.HOST}:{config.PORT}"
+        # Use localhost for connection (0.0.0.0 is bind address only)
+        frontend_url = f"http://127.0.0.1:{config.PORT}"
         print(f"Running in production mode")
     else:
         # Development mode - use Next.js dev server
@@ -83,27 +88,19 @@ def main():
         print(f"Running in development mode")
         print("Make sure to run 'npm run dev' in the frontend folder!")
     
-    print(f"Opening {frontend_url}")
+    print(f"Loading {frontend_url}")
     
-    # Create API instance
-    api = API()
+    # Create Qt application
+    app = QApplication(sys.argv)
+    app.setApplicationName("CamMana")
+    app.setOrganizationName("CamMana")
     
     # Create main window
-    window = webview.create_window(
-        title="CamMana - Camera Manager",
-        url=frontend_url,
-        width=1400,
-        height=900,
-        min_size=(1024, 768),
-        resizable=True,
-        frameless=False,
-        easy_drag=False,
-        js_api=api,
-        background_color='#0f1419'
-    )
+    window = MainWindow(frontend_url)
+    window.show()
     
-    # Start webview
-    webview.start(debug=False)
+    # Start event loop
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

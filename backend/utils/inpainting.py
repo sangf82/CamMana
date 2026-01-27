@@ -154,9 +154,15 @@ async def generate_seamless_background(image_path: Path, output_path: Path, truc
     Automated background generator.
     truck_bbox: optional bounding box from a detector.
     """
-    img = cv2.imread(str(image_path))
-    if img is None: return False
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    try:
+        # Ensure output directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        img = cv2.imread(str(image_path))
+        if img is None:
+            logger.error(f"Failed to read image from {image_path}")
+            return False
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     mg = MaskGenerator()
     await mg.init_session()
@@ -166,11 +172,20 @@ async def generate_seamless_background(image_path: Path, output_path: Path, truc
     kernel = np.ones((7, 7), np.uint8)
     mask = cv2.dilate(mask, kernel, iterations=3)
 
-    inp = Inpainter()
-    await inp.init_session()
-    result_rgb = inp.inpaint(img_rgb, mask)
+        inp = Inpainter()
+        await inp.init_session()
+        result_rgb = inp.inpaint(img_rgb, mask)
 
-    result_bgr = cv2.cvtColor(result_rgb, cv2.COLOR_RGB2BGR)
-    cv2.imwrite(str(output_path), result_bgr)
-    return True
+        result_bgr = cv2.cvtColor(result_rgb, cv2.COLOR_RGB2BGR)
+        success = cv2.imwrite(str(output_path), result_bgr)
+        
+        if success:
+            logger.info(f"Background image saved successfully to {output_path}")
+        else:
+            logger.error(f"Failed to save background image to {output_path}")
+        
+        return success
+    except Exception as e:
+        logger.error(f"Error in generate_seamless_background: {e}", exc_info=True)
+        return False
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Any
 import uuid
 
-from backend.config import DATA_DIR, PROJECT_ROOT
+from backend.config import DATA_DIR, DATA_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class HistoryLogic:
     FILE_PREFIX = "history_"
     
     # Folder for storing images/logs per car interaction
-    CAR_HISTORY_DIR = PROJECT_ROOT / "database" / "car_history"
+    CAR_HISTORY_DIR = DATA_ROOT / "car_history"
 
     def __init__(self):
         self._ensure_dirs()
@@ -135,16 +135,21 @@ class HistoryLogic:
         date_objs.sort(reverse=True)
         return [d.strftime(self.DATE_FORMAT) for d in date_objs]
 
-    def create_car_folder(self, record_id: str, plate: Optional[str] = None, direction: str = "in") -> Path:
+    def create_car_folder(self, record_id: str, plate: Optional[str] = None, direction: str = "in", location: Optional[str] = None) -> Path:
         """
-        Create a folder for the car interaction: car_history/dd-mm-yyyy/uuid_[in|out]_hh-mm-ss
+        Create a folder for the car interaction.
+        Format: car_history/dd-mm-yyyy/{uuid}_{location}_{hh-mm-ss}_{in|out}
         """
         date_folder_name = datetime.now().strftime(self.DATE_FORMAT)
         time_suffix = datetime.now().strftime("%H-%M-%S")
         
-        # New format: {uuid}_{in/out}_{hh-mm-ss}
-        folder_name = f"{record_id}_{direction}_{time_suffix}"
-
+        # Build folder name parts
+        location_part = location if location else "unknown"
+        # Sanitize location name for filesystem
+        location_part = location_part.replace(" ", "_").replace("/", "-")
+        
+        # Format: {uuid}_{location}_{hh-mm-ss}_{in|out}
+        folder_name = f"{record_id}_{location_part}_{time_suffix}_{direction}"
         
         date_folder_path = self.CAR_HISTORY_DIR / date_folder_name
         date_folder_path.mkdir(parents=True, exist_ok=True)
