@@ -330,6 +330,38 @@ class ReportLogic:
             logger.error(traceback.format_exc())
             return None
 
+    def save_pdf_to_downloads(self, date_str: str) -> Optional[str]:
+        """
+        Generate PDF and save directly to user's Downloads folder.
+        Returns the file path if successful, None otherwise.
+        """
+        pdf_content = self.export_pdf(date_str)
+        if not pdf_content:
+            return None
+        
+        try:
+            # Get user's Downloads folder
+            downloads_folder = Path.home() / "Downloads"
+            if not downloads_folder.exists():
+                # Fallback for non-standard systems
+                downloads_folder = Path.home() / "Desktop"
+            
+            # Create filename with timestamp to avoid overwriting
+            timestamp = datetime.now().strftime("%H-%M-%S")
+            filename = f"CamMana_Report_{date_str}_{timestamp}.pdf"
+            file_path = downloads_folder / filename
+            
+            # Write PDF to file
+            with open(file_path, 'wb') as f:
+                f.write(pdf_content)
+            
+            logger.info(f"PDF saved to: {file_path}")
+            return str(file_path)
+        except Exception as e:
+            logger.error(f"Error saving PDF to downloads: {e}")
+            return None
+
+
 if __name__ == "__main__":
     logic = ReportLogic()
     today = datetime.now().strftime("%d-%m-%Y")

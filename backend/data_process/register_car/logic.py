@@ -124,7 +124,7 @@ class RegisteredCarLogic:
         
         # Sync Hook
         try:
-            from backend.api.sync import sync_logic
+            from backend.sync_process.sync.logic import sync_logic
             import asyncio
             asyncio.create_task(sync_logic.broadcast_change("registered_car", "create", new_car))
         except: pass
@@ -151,7 +151,7 @@ class RegisteredCarLogic:
             
             # Sync Hook
             try:
-                from backend.api.sync import sync_logic
+                from backend.sync_process.sync.logic import sync_logic
                 import asyncio
                 asyncio.create_task(sync_logic.broadcast_change("registered_car", "update", updated_car))
             except: pass
@@ -169,7 +169,7 @@ class RegisteredCarLogic:
             
             # Sync Hook
             try:
-                from backend.api.sync import sync_logic
+                from backend.sync_process.sync.logic import sync_logic
                 import asyncio
                 asyncio.create_task(sync_logic.broadcast_change("registered_car", "delete", {"car_id": car_id}))
             except: pass

@@ -14,6 +14,7 @@ node_modules/
 .idea
 .vscode
 .agent
+.github
 
 # Database
 *.jpg
@@ -24,8 +25,7 @@ database/csv_data/*
 database/report/*
 database/sync_config.json
 
-.github
-
+# Production files
 CamMana.spec
 requirements-build.txt
 build

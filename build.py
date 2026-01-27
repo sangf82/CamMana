@@ -17,7 +17,7 @@ def build():
     frontend_dir = project_dir / "frontend"
     out_dir = frontend_dir / "out"
     dist_dir = project_dir / "dist"
-    models_dir = project_dir / "models"
+    models_dir = project_dir / "backend" / "model_process" / "models"
     
     print("=" * 60)
     print("🔨 Building CamMana Windows Application")
@@ -83,9 +83,9 @@ def build():
         f"--add-data={out_dir};frontend/out",
     ]
     
-    # Include models directory if exists
+    # Include models directory if exists (new location: backend/model_process/models)
     if models_dir.exists():
-        add_data_args.append(f"--add-data={models_dir};models")
+        add_data_args.append(f"--add-data={models_dir};backend/model_process/models")
     
     # Build with PyInstaller
     pyinstaller_args = [

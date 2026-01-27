@@ -1,4 +1,5 @@
 """FastAPI Backend Server for CamMana"""
+import os
 import sys
 import shutil
 from datetime import datetime
@@ -7,27 +8,23 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import uvicorn
 
-load_dotenv()
+# Import settings first
+from backend.settings import settings
 
-# Import from new modular API structure
-from backend.api import (
-    config_router, schedule_router,
-    checkin_router, checkout_router
-)
-from backend.api.user import user_router
-from backend.api.sync import sync_router
-from backend.api.file_sync import file_sync_router
+# Import routers from new modular structure
+from backend.camera.config_api import config_router
+from backend.workflow.checkin.api import checkin_router
+from backend.workflow.checkout.api import checkout_router
+from backend.data_process.user.api import user_router
+from backend.sync_process import sync_router, system_router, file_sync_router
 from backend.data_process.history.api import router as history_router
 from backend.data_process.register_car.api import router as registered_car_router
 from backend.data_process.location.api import router as location_router
 from backend.data_process.camera_type.api import router as camera_type_router
 from backend.data_process.report.api import router as report_router
 from backend.camera.api import router as camera_router
-from backend.api.system import router as system_router
-from backend.config import DATA_ROOT
 
 BACKEND_DIR = Path(__file__).parent
 
@@ -37,8 +34,11 @@ def clean_pycache():
     count = 0
     for pycache_dir in BACKEND_DIR.rglob("__pycache__"):
         if pycache_dir.is_dir():
-            shutil.rmtree(pycache_dir)
-            count += 1
+            try:
+                shutil.rmtree(pycache_dir)
+                count += 1
+            except Exception:
+                pass
     if count:
         print(f"[cam_mana] Cleaned {count} __pycache__ directories")
 
@@ -52,17 +52,26 @@ def get_static_dir():
     return static_path if static_path.exists() else None
 
 
-from backend import config
-
 def create_app() -> FastAPI:
-    # Removed: db.init_db() - Now using CSV-only storage
+    """Create and configure the FastAPI application."""
+    app = FastAPI(
+        title=settings.api_title,
+        description=settings.api_description,
+        version=settings.api_version
+    )
     
-    app = FastAPI(title=config.API_TITLE, description=config.API_DESCRIPTION, version=config.API_VERSION)
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+    # CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"]
+    )
     
+    # Include routers
     app.include_router(camera_router)
     app.include_router(config_router)
-    app.include_router(schedule_router)
     app.include_router(history_router)
     app.include_router(checkin_router)
     app.include_router(checkout_router)
@@ -72,18 +81,25 @@ def create_app() -> FastAPI:
     app.include_router(report_router)
     app.include_router(user_router)
     app.include_router(sync_router)
-    app.include_router(file_sync_router)  # File sync for Client -> Master uploads
+    app.include_router(file_sync_router)
     app.include_router(system_router)
     
     # Serve captured car images from car_history folder
     @app.get("/api/images/{date_folder}/{car_folder}/{filename}")
     async def serve_car_image(date_folder: str, car_folder: str, filename: str):
         """Serve captured car images for evidence display"""
-        image_path = DATA_ROOT / "car_history" / date_folder / car_folder / filename
+        image_path = settings.car_history_dir / date_folder / car_folder / filename
         if image_path.exists() and image_path.is_file():
             return FileResponse(image_path, media_type="image/jpeg")
         raise HTTPException(status_code=404, detail="Image not found")
     
+    # CI/CD health check endpoint
+    @app.get("/api/health")
+    async def health_check():
+        """Basic health check endpoint"""
+        return {"status": "ok", "version": settings.api_version}
+    
+    # Serve static frontend files
     static_dir = get_static_dir()
     if static_dir:
         app.mount("/_next", StaticFiles(directory=static_dir / "_next"), name="next_static")
@@ -107,22 +123,10 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-def run_server(host: str = config.HOST, port: int = config.PORT):
-    import signal
-    from backend import data_process
-    
-    def signal_handler(sig, frame):
-        raise SystemExit(0)
-    
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    
-    # Clean pycache on start
-    clean_pycache()
-    
-    # Initialize today's CSV files (auto-migration and cleanup)
+def initialize_backend():
+    """Initialize backend services (schedulers, data sync, etc.)"""
     try:
-        # Start Daily Report Scheduler (10 PM GMT+7)
+        # Start Daily Report Scheduler (10 PM)
         from apscheduler.schedulers.background import BackgroundScheduler
         from backend.data_process.report.logic import ReportLogic
         
@@ -132,18 +136,14 @@ def run_server(host: str = config.HOST, port: int = config.PORT):
             ReportLogic().generate_report(today)
             
         scheduler = BackgroundScheduler()
-        # Schedule at 22:00 (10 PM)
         scheduler.add_job(daily_report_job, 'cron', hour=22, minute=0)
         scheduler.start()
         print("[cam_mana] Daily report scheduler started (at 22:00)")
         
-        # Registered Cars initialization is now handled by RegisteredCarLogic on import
-        # if data_process.initialize_registered_cars_today():
-        #     print("[cam_mana] Created today's registered cars file")
-        # History initialization & cleanup handled by HistoryLogic instantiation
+        # Initialize History logic (daily rotation & cleanup)
         from backend.data_process.history.logic import HistoryLogic
         HistoryLogic()
-        print("[cam_mana] History logic initialized (daily rotation & cleanup)")
+        print("[cam_mana] History logic initialized")
         
         # Sync camera data with locations and camera types
         from backend.data_process._sync import CameraDataSync
@@ -157,15 +157,56 @@ def run_server(host: str = config.HOST, port: int = config.PORT):
             print(f"[cam_mana] Synced cameras: {result['locations']} locations, {result['types']} types")
         
     except Exception as e:
-        print(f"[cam_mana] Warning: Failed to initialize daily files: {e}")
+        print(f"[cam_mana] Warning: Failed to initialize backend services: {e}")
+
+
+def run_server(host: str = None, port: int = None, reload: bool = None):
+    """Run the FastAPI server.
+    
+    Args:
+        host: Server host (default from settings)
+        port: Server port (default from settings)
+        reload: Enable hot-reload (default from DEBUG setting)
+    """
+    import signal
+    
+    host = host or settings.host
+    port = port or settings.port
+    reload = reload if reload is not None else settings.debug
+    
+    def signal_handler(sig, frame):
+        raise SystemExit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # Clean pycache on start
+    clean_pycache()
+    
+    # Initialize backend services
+    initialize_backend()
     
     try:
         print(f"[cam_mana] Starting backend on {host}:{port}...")
-        uvicorn.run(app, host=host, port=port, log_level="info")
+        if reload:
+            print("[cam_mana] Hot-reload enabled (DEBUG mode)")
+        
+        if reload:
+            # Use string reference for reload mode
+            uvicorn.run(
+                "backend.server:app",
+                host=host,
+                port=port,
+                reload=True,
+                reload_dirs=[str(BACKEND_DIR)],
+                log_level="info"
+            )
+        else:
+            uvicorn.run(app, host=host, port=port, log_level="info")
+            
     except SystemExit:
         pass
     finally:
-        # Clean pycache on stop
         clean_pycache()
         print("[cam_mana] Shutdown complete.")
 

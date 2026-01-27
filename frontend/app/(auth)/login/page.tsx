@@ -166,12 +166,18 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#09090b] relative overflow-hidden font-sans">
-      {/* Background blobs for premium look - Amber tint matching dashboard */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-amber-500/10 blur-[120px] rounded-full" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-zinc-500/5 blur-[120px] rounded-full" />
+      {/* Yellow/Orange gradient highlight in top left */}
+      <div className="absolute top-0 left-0 w-[60%] h-[60%] bg-gradient-to-br from-amber-500/30 via-orange-500/20 to-transparent blur-[60px] rounded-full" />
+      <div className="absolute top-[-20%] left-[-20%] w-[50%] h-[50%] bg-amber-400/25 blur-[80px] rounded-full" />
       
-      {/* Grid Pattern Background */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_100%)]" />
+      {/* Subtle secondary glow */}
+      <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-zinc-500/5 blur-[100px] rounded-full" />
+      
+      {/* Grid Pattern Background - Clear and visible */}
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff15_1px,transparent_1px),linear-gradient(to_bottom,#ffffff15_1px,transparent_1px)] bg-[size:48px_48px]" />
+      
+      {/* Radial fade overlay for grid - softer fade */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,transparent_30%,#09090b_80%)]" />
 
       <Card className="w-full max-w-md border-white/5 bg-zinc-900/50 backdrop-blur-xl shadow-2xl relative z-10 transition-all duration-300 hover:border-amber-500/20">
         <CardHeader className="space-y-1 pb-6 text-center">

@@ -138,18 +138,18 @@ class HistoryLogic:
     def create_car_folder(self, record_id: str, plate: Optional[str] = None, direction: str = "in", location: Optional[str] = None) -> Path:
         """
         Create a folder for the car interaction.
-        Format: car_history/dd-mm-yyyy/{uuid}_{location}_{hh-mm-ss}_{in|out}
+        Format: car_history/dd-mm-yyyy/{hh-mm-ss}_{in|out}_{uuid}
+        
+        This format ensures:
+        - Folders sort chronologically by time
+        - Direction (in/out) is visible early in the name
+        - Plate is stored in JSON, not folder name (avoids renaming if AI detection is wrong)
         """
         date_folder_name = datetime.now().strftime(self.DATE_FORMAT)
         time_suffix = datetime.now().strftime("%H-%M-%S")
         
-        # Build folder name parts
-        location_part = location if location else "unknown"
-        # Sanitize location name for filesystem
-        location_part = location_part.replace(" ", "_").replace("/", "-")
-        
-        # Format: {uuid}_{location}_{hh-mm-ss}_{in|out}
-        folder_name = f"{record_id}_{location_part}_{time_suffix}_{direction}"
+        # Format: {hh-mm-ss}_{in|out}_{uuid}
+        folder_name = f"{time_suffix}_{direction}_{record_id}"
         
         date_folder_path = self.CAR_HISTORY_DIR / date_folder_name
         date_folder_path.mkdir(parents=True, exist_ok=True)
@@ -195,7 +195,7 @@ class HistoryLogic:
         
         # Sync Hook
         try:
-            from backend.api.sync import sync_logic
+            from backend.sync_process.sync.logic import sync_logic
             import asyncio
             asyncio.create_task(sync_logic.broadcast_change("history", "create", clean_record))
         except: pass
@@ -231,7 +231,7 @@ class HistoryLogic:
                 
                 # Sync Hook
                 try:
-                    from backend.api.sync import sync_logic
+                    from backend.sync_process.sync.logic import sync_logic
                     import asyncio
                     asyncio.create_task(sync_logic.broadcast_change("history", "update", updated_rec))
                 except: pass
@@ -289,7 +289,7 @@ class HistoryLogic:
                 
                 # Sync Hook
                 try:
-                    from backend.api.sync import sync_logic
+                    from backend.sync_process.sync.logic import sync_logic
                     import asyncio
                     asyncio.create_task(sync_logic.broadcast_change("history", "delete", {"id": record_id}))
                 except: pass

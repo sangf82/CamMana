@@ -5,9 +5,9 @@ import pandas as pd
 import io
 import logging
 
-from backend.api.user import get_current_user
+from backend.data_process.user.api import get_current_user
 from backend.schemas import User as UserSchema
-from backend.data_process.sync.proxy import is_client_mode, proxy_get, proxy_post, proxy_put, proxy_delete
+from backend.sync_process.sync.proxy import is_client_mode, proxy_get, proxy_post, proxy_put, proxy_delete
 from .logic import RegisteredCarLogic
 
 logger = logging.getLogger(__name__)

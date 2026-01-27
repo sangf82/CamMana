@@ -4,9 +4,9 @@ from fastapi import APIRouter, HTTPException, Query, Depends, Response, Request
 import logging
 
 from .logic import ReportLogic
-from backend.api.user import get_current_user
+from backend.data_process.user.api import get_current_user
 from backend.schemas import User as UserSchema
-from backend.data_process.sync.proxy import is_client_mode, proxy_get, proxy_post
+from backend.sync_process.sync.proxy import is_client_mode, proxy_get, proxy_post
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ async def export_report_pdf(
 ):
     # CLIENT MODE PROXY for PDF
     if is_client_mode():
-        from backend.data_process.sync.proxy import get_master_url
+        from backend.sync_process.sync.proxy import get_master_url
         import httpx
         master_url = get_master_url()
         if not master_url:
@@ -130,4 +130,29 @@ async def export_report_pdf(
             "Content-Disposition": f"attachment; filename=report_{date}.pdf"
         }
     )
+
+
+@router.post("/export/pdf/save")
+async def save_report_pdf_to_downloads(
+    request: Request,
+    date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format. Defaults to today."),
+    user: UserSchema = Depends(get_current_user)
+):
+    """
+    Generate PDF report and save directly to user's Downloads folder.
+    This endpoint is for desktop app usage where we can access local filesystem.
+    """
+    if not date:
+        date = datetime.now().strftime("%d-%m-%Y")
+    
+    file_path = logic.save_pdf_to_downloads(date)
+    if not file_path:
+        raise HTTPException(status_code=500, detail="Failed to generate and save PDF")
+    
+    return {
+        "success": True,
+        "message": f"PDF saved successfully",
+        "file_path": file_path,
+        "date": date
+    }
 

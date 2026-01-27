@@ -126,23 +126,50 @@ def initialize_registered_cars_today():
     return True
 
 
+# Configuration - Use modular logic classes
+from backend.data_process.location.logic import LocationLogic
+from backend.data_process.camera_type.logic import CameraTypeLogic
 
-# Configuration
-from backend.data_process.config import (
-    get_locations, save_locations, get_cam_types, save_cam_types
-)
+_location_logic = LocationLogic()
+_camtype_logic = CameraTypeLogic()
 
-# Report (placeholder)
-from backend.data_process import report
+def get_locations():
+    """Get all locations (backward compatibility)"""
+    return _location_logic.get_locations()
+
+def save_locations(locations):
+    """Save locations (backward compatibility)"""
+    for loc in locations:
+        if hasattr(loc, 'model_dump'):
+            loc = loc.model_dump()
+        if loc.get('id'):
+            _location_logic.update_location(loc['id'], loc)
+        else:
+            _location_logic.add_location(loc)
+
+def get_cam_types():
+    """Get all camera types (backward compatibility)"""
+    return _camtype_logic.get_types()
+
+def save_cam_types(types):
+    """Save camera types (backward compatibility)"""
+    for t in types:
+        if hasattr(t, 'model_dump'):
+            t = t.model_dump()
+        if t.get('id'):
+            _camtype_logic.update_type(t['id'], t)
+        else:
+            _camtype_logic.add_type(t)
+
 
 __all__ = [
     # Cameras
-    'get_cameras_config', 'save_cameras_config', 'save_camera',
-    'get_camera', 'get_all_cameras', 'get_cameras_by_tag', 'delete_camera',
+    'get_cameras_config', 'save_camera',
+    'get_all_cameras', 'get_cameras_by_tag', 'delete_camera',
+    
+    # Registered Cars
+    'get_registered_cars', 'find_registered_car', 'initialize_registered_cars_today',
     
     # Configuration
     'get_locations', 'save_locations', 'get_cam_types', 'save_cam_types',
-    
-    # Report module
-    'report'
 ]

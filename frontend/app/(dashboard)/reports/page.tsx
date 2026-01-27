@@ -127,6 +127,20 @@ export default function ReportsPage() {
     
     try {
       const token = localStorage.getItem('token');
+      
+      // Try to save directly to Downloads folder (desktop app mode)
+      const saveResponse = await fetch(`/api/report/export/pdf/save?date=${selectedDate}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (saveResponse.ok) {
+        const result = await saveResponse.json();
+        toast.success(`Đã lưu PDF vào: ${result.file_path}`);
+        return;
+      }
+      
+      // Fallback to browser download if save fails
       const response = await fetch(`/api/report/export/pdf?date=${selectedDate}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -137,7 +151,7 @@ export default function ReportsPage() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `report_${selectedDate}.pdf`;
+      a.download = `CamMana_Report_${selectedDate}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);

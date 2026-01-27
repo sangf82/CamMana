@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PySide6.QtCore import QUrl, Qt
 from PySide6.QtWidgets import QApplication, QMainWindow
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtGui import QIcon
 
 
 def get_base_path():
@@ -53,6 +54,11 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("CamMana - Camera Manager")
         self.setMinimumSize(1024, 768)
         self.resize(1400, 900)
+        
+        # Set application icon
+        icon_path = get_base_path() / "assets" / "icon.ico"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
         
         # Create web view
         self.browser = QWebEngineView()

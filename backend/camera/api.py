@@ -5,14 +5,14 @@ from typing import List, Optional, Dict, Any, Union
 import asyncio
 import logging
 
-from backend.api.user import get_current_user
+from backend.data_process.user.api import get_current_user
 from backend.schemas import User as UserSchema
 from .logic import CameraLogic
 from .connection import CameraConnection, CameraConnectionConfig
 from .capture import VideoStreamer
 from .control import PTZController
-from backend.api._shared import cameras as active_cameras
-from backend.data_process.sync.proxy import is_client_mode, proxy_get, proxy_post, proxy_put, proxy_delete
+from backend.camera.state import cameras as active_cameras
+from backend.sync_process.sync.proxy import is_client_mode, proxy_get, proxy_post, proxy_put, proxy_delete
 
 logger = logging.getLogger(__name__)
 
@@ -274,7 +274,7 @@ def _disconnect_camera(cam_id: str):
 async def video_feed(request: Request, cam_id: str):
     # CLIENT MODE PROXY
     if is_client_mode():
-        from backend.data_process.sync.proxy import get_master_url
+        from backend.sync_process.sync.proxy import get_master_url
         import httpx
         master_url = get_master_url()
         if not master_url:

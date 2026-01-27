@@ -3,6 +3,8 @@ import numpy as np
 import logging
 from pathlib import Path
 
+from backend.settings import settings
+
 logger = logging.getLogger(__name__)
 
 class TruckDetector:
@@ -17,9 +19,9 @@ class TruckDetector:
 
         try:
             from ultralytics import YOLO
-            # Configurable model path
-            # Using yolo11n.pt for better performance
-            self.model = YOLO('models/car_detect/yolo11n.pt')
+            # Use model path from settings
+            model_path = settings.models_dir / "car_detect" / "yolo11n.pt"
+            self.model = YOLO(str(model_path))
             self.class_names = self.model.names
         except ImportError:
             logger.error("Ultralytics not installed. Truck detection unavailable.")

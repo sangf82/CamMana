@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 from backend.config import DATA_DIR
-from backend.data_process._common import LOCATION_HEADERS
+from backend.data_process.utils import LOCATION_HEADERS
 from backend.data_process._sync import CameraDataSync
 
 logger = logging.getLogger(__name__)
