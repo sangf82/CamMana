@@ -150,12 +150,25 @@ class CheckOutService:
                              all_results["volume"] = vol_res
                              logger.info(f"[Checkout] Volume detected: {volume_val} m3")
                          else:
-                             logger.error(f"[Checkout] Volume failed: {vol_res.get('error') if vol_res else 'Unknown'}")
+                             # Save error to JSON for visibility
+                             err = vol_res.get('error') if vol_res else 'Unknown'
+                             logger.error(f"[Checkout] Volume failed: {err}")
+                             with open(folder_path / "checkout_model_volume_error.json", "w", encoding="utf-8") as f:
+                                 json.dump({"error": err, "details": vol_res}, f, indent=4)
                      except Exception as ve:
                          logger.error(f"[Checkout] Volume exception: {ve}")
+                         with open(folder_path / "checkout_model_volume_error.json", "w", encoding="utf-8") as f:
+                             json.dump({"error": str(ve)}, f, indent=4)
             else:
-                 if not side_img_info: logger.warning("[Checkout] Missing Side Cam for Volume")
-                 if not top_img_info: logger.warning("[Checkout] Missing Top Cam for Volume")
+                 msg = []
+                 if not side_img_info: msg.append("Missing Side Cam")
+                 if not top_img_info: msg.append("Missing Top Cam")
+                 if not bg_image: msg.append("Missing Background Image")
+                 
+                 logger.warning(f"[Checkout] Volume Skipped: {', '.join(msg)}")
+                 if folder_path:
+                     with open(folder_path / "checkout_model_volume_error.json", "w", encoding="utf-8") as f:
+                         json.dump({"error": "Volume Skipped", "reasons": msg}, f, indent=4)
 
             # 3. Save results to folder
             if folder_path and folder_path.exists():
@@ -242,8 +255,8 @@ class CheckOutService:
                 "status": status,
                 "uuid": uuid_val,
                 "folder_path": str(folder_path) if folder_path else None,
-                "history_volume": history_vol,
-                "volume": final_volume,
+                "history_volume": float(history_vol) if history_vol is not None else None,
+                "volume": float(final_volume) if final_volume is not None else None,
                 "is_checkout": True
             }
 
