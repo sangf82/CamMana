@@ -1,4 +1,4 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import pandas as pd
@@ -54,15 +54,16 @@ router = APIRouter(prefix="/api/registered_cars", tags=["Registered Cars"])
 logic = RegisteredCarLogic()
 
 @router.get("")
-async def get_cars():
+async def get_cars(request: Request):
     """
     Get all registered cars. 
     When in client mode, fetches data from master node.
     """
     # If in client mode, proxy the request to master
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info("Client mode: Fetching registered cars from master")
-        master_data = await proxy_get("/api/registered_cars")
+        master_data = await proxy_get("/api/registered_cars", token=token)
         if master_data is not None:
             return master_data
         else:
@@ -72,7 +73,7 @@ async def get_cars():
     return logic.get_all_cars()
 
 @router.post("")
-async def add_car(car: CarBase, user: UserSchema = Depends(get_current_user)):
+async def add_car(request: Request, car: CarBase, user: UserSchema = Depends(get_current_user)):
     """
     Add a new registered car.
     When in client mode, proxies to master node.
@@ -89,8 +90,9 @@ async def add_car(car: CarBase, user: UserSchema = Depends(get_current_user)):
         
         # If in client mode, proxy to master
         if is_client_mode():
+            token = request.headers.get("authorization", "").replace("Bearer ", "")
             logger.info("Client mode: Adding car via master")
-            result = await proxy_post("/api/registered_cars", data)
+            result = await proxy_post("/api/registered_cars", data, token=token)
             if result is not None:
                 return result
             else:
@@ -101,15 +103,16 @@ async def add_car(car: CarBase, user: UserSchema = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.put("/{car_id}")
-async def update_car(car_id: str, car: CarUpdate):
+async def update_car(request: Request, car_id: str, car: CarUpdate):
     """
     Update a registered car.
     When in client mode, proxies to master node.
     """
     # If in client mode, proxy to master
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info(f"Client mode: Updating car {car_id} via master")
-        result = await proxy_put(f"/api/registered_cars/{car_id}", car.dict(exclude_unset=True))
+        result = await proxy_put(f"/api/registered_cars/{car_id}", car.dict(exclude_unset=True), token=token)
         if result is not None:
             return result
         else:
@@ -121,15 +124,16 @@ async def update_car(car_id: str, car: CarUpdate):
     return updated
 
 @router.delete("/{car_id}")
-async def delete_car(car_id: str):
+async def delete_car(request: Request, car_id: str):
     """
     Delete a registered car.
     When in client mode, proxies to master node.
     """
     # If in client mode, proxy to master
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info(f"Client mode: Deleting car {car_id} via master")
-        success = await proxy_delete(f"/api/registered_cars/{car_id}")
+        success = await proxy_delete(f"/api/registered_cars/{car_id}", token=token)
         if success:
             return {"message": "Deleted successfully"}
         else:

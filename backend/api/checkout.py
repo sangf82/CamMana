@@ -31,8 +31,19 @@ async def process_checkout(
             shutil.copyfileobj(front_image.file, tmp)
             tmp_path = Path(tmp.name)
             
+        # Prepare images list for workflow
+        # Assuming single image upload is treated as front/default camera input for now
+        # We need to know which camera it came from to assign functions?
+        # For now, we assume it's a general check-out image (e.g. for plate/car detection)
+        # If the FE sends cam_id, we should use it. But for now we default properties.
+        image_info = {
+            "path": tmp_path,
+            "cam_name": "Front Cam", 
+            "functions": ["plate", "truck", "color", "wheel"] # Default functions to run
+        }
+        
         result = await service.process_checkout(
-            front_image_path=tmp_path,
+            images=[image_info],
             location_id=location_id
         )
         
@@ -42,6 +53,8 @@ async def process_checkout(
         return result
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 from pydantic import BaseModel

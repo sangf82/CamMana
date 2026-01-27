@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Request
 from typing import List, Dict, Optional, Any
 from pydantic import BaseModel
 import logging
@@ -30,14 +30,15 @@ class HistoryResponse(BaseModel):
     folder_path: str
 
 @router.get("/dates")
-async def get_available_dates():
+async def get_available_dates(request: Request):
     """
     Get available history dates.
     When in client mode, fetches from master node.
     """
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info("Client mode: Fetching history dates from master")
-        result = await proxy_get("/api/history/dates")
+        result = await proxy_get("/api/history/dates", token=token)
         if result is not None:
             return result
         logger.warning("Failed to fetch dates from master, falling back to local")
@@ -46,6 +47,7 @@ async def get_available_dates():
 
 @router.get("")
 async def get_history(
+    request: Request,
     date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format"),
     user: UserSchema = Depends(get_current_user)
 ):
@@ -54,9 +56,10 @@ async def get_history(
     When in client mode, fetches from master node.
     """
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info(f"Client mode: Fetching history for date {date} from master")
         endpoint = "/api/history" if not date else f"/api/history?date={date}"
-        result = await proxy_get(endpoint)
+        result = await proxy_get(endpoint, token=token)
         if result is not None:
             return result
         logger.warning("Failed to fetch history from master, falling back to local")
@@ -65,14 +68,15 @@ async def get_history(
     return all_records
 
 @router.post("")
-async def add_history_record(record: Dict[str, Any]):
+async def add_history_record(request: Request, record: Dict[str, Any]):
     """
     Add a new history record.
     When in client mode, proxies to master node.
     """
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info("Client mode: Adding history record via master")
-        result = await proxy_post("/api/history", record)
+        result = await proxy_post("/api/history", record, token=token)
         if result is not None:
             return result
         raise HTTPException(status_code=503, detail="Cannot connect to master node")
@@ -84,14 +88,15 @@ async def add_history_record(record: Dict[str, Any]):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{record_id}")
-async def update_history_record(record_id: str, update_data: Dict[str, Any]):
+async def update_history_record(request: Request, record_id: str, update_data: Dict[str, Any]):
     """
     Update a history record.
     When in client mode, proxies to master node.
     """
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info(f"Client mode: Updating history record {record_id} via master")
-        result = await proxy_put(f"/api/history/{record_id}", update_data)
+        result = await proxy_put(f"/api/history/{record_id}", update_data, token=token)
         if result is not None:
             return result
         raise HTTPException(status_code=503, detail="Cannot connect to master node")

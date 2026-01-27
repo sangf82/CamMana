@@ -103,7 +103,7 @@ export default function Sidebar() {
     window.addEventListener('cammana_locations_updated', handleSync)
     
     // 3. Fallback interval for other changes
-    const interval = setInterval(loadLocations, 5000)
+    const interval = setInterval(loadLocations, 30000)
     
     return () => {
       clearInterval(interval)

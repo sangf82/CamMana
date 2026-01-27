@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from typing import List, Optional
 import logging
@@ -32,11 +32,12 @@ router = APIRouter(prefix="/api/locations", tags=["Locations"])
 logic = LocationLogic()
 
 @router.get("")
-async def get_locations(user: UserSchema = Depends(get_current_user)):
+async def get_locations(request: Request, user: UserSchema = Depends(get_current_user)):
     """Get all locations. Proxies to Master when in Client mode."""
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info("Client mode: Fetching locations from master")
-        result = await proxy_get("/api/locations")
+        result = await proxy_get("/api/locations", token=token)
         if result is not None:
             # Filter by user permissions
             if user.role == "admin" or user.allowed_gates == "*":
@@ -52,11 +53,12 @@ async def get_locations(user: UserSchema = Depends(get_current_user)):
     return [l for l in all_locs if l['name'] in allowed]
 
 @router.post("")
-async def add_location(loc: LocationBase):
+async def add_location(request: Request, loc: LocationBase):
     """Add a new location. Proxies to Master when in Client mode."""
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info("Client mode: Adding location via master")
-        result = await proxy_post("/api/locations", loc.dict())
+        result = await proxy_post("/api/locations", loc.dict(), token=token)
         if result is not None:
             return result
         raise HTTPException(status_code=503, detail="Cannot connect to master node")
@@ -67,11 +69,12 @@ async def add_location(loc: LocationBase):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.put("/{loc_id}")
-async def update_location(loc_id: str, loc: LocationUpdate):
+async def update_location(request: Request, loc_id: str, loc: LocationUpdate):
     """Update a location. Proxies to Master when in Client mode."""
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info(f"Client mode: Updating location {loc_id} via master")
-        result = await proxy_put(f"/api/locations/{loc_id}", loc.dict(exclude_unset=True))
+        result = await proxy_put(f"/api/locations/{loc_id}", loc.dict(exclude_unset=True), token=token)
         if result is not None:
             return result
         raise HTTPException(status_code=503, detail="Cannot connect to master node")
@@ -85,11 +88,12 @@ async def update_location(loc_id: str, loc: LocationUpdate):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.delete("/{loc_id}")
-async def delete_location(loc_id: str):
+async def delete_location(request: Request, loc_id: str):
     """Delete a location. Proxies to Master when in Client mode."""
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info(f"Client mode: Deleting location {loc_id} via master")
-        success = await proxy_delete(f"/api/locations/{loc_id}")
+        success = await proxy_delete(f"/api/locations/{loc_id}", token=token)
         if success:
             return {"message": "Deleted successfully"}
         raise HTTPException(status_code=503, detail="Cannot connect to master node")

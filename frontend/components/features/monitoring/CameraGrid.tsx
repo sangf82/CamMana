@@ -88,10 +88,10 @@ export default function CameraGrid({
 
       {/* Videos */}
       <div
-        className={`flex-1 min-h-0 bg-transparent rounded-lg overflow-hidden ${
+        className={`flex-1 min-h-0 bg-zinc-950 rounded-lg overflow-hidden p-1 ${
           viewMode === "grid"
-            ? "grid grid-cols-2 grid-rows-2 gap-1"
-            : "flex gap-1"
+            ? "grid grid-cols-2 grid-rows-2 gap-2"
+            : "flex gap-2"
         }`}
       >
         {viewMode === "grid" ? (
@@ -101,7 +101,9 @@ export default function CameraGrid({
               return (
                 <div
                   key={cam?.id || `empty-${idx}`}
-                  className="relative bg-black rounded-lg border border-border overflow-hidden"
+                  className={`relative bg-zinc-900 rounded-xl border-2 transition-all duration-300 overflow-hidden shadow-inner ${
+                    cam ? "border-border/40 hover:border-[#f59e0b]/50 hover:shadow-[#f59e0b]/5" : "border-dashed border-border/20"
+                  }`}
                 >
                   {cam ? (
                     <>
@@ -112,13 +114,14 @@ export default function CameraGrid({
                         label={cam.name}
                         camCode={cam.cam_id}
                         activeId={getActiveId(cam)}
-                        className="h-full"
+                        className="w-full h-full"
                         src={getStreamUrl(cam)}
                       />
                     </>
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground">
-                      <span className="text-xs opacity-50">Slot {idx + 1}</span>
+                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground/30">
+                      <PhotoCamera className="mb-2 opacity-10" fontSize="large" />
+                      <span className="text-[10px] font-medium uppercase tracking-widest">Trống {idx + 1}</span>
                     </div>
                   )}
                 </div>
@@ -126,17 +129,17 @@ export default function CameraGrid({
             })}
           </>
         ) : !currentGate ? (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-black/50 border border-dashed border-border rounded-lg text-muted-foreground">
-            <p>Vui lòng chọn Cổng từ Menu bên trái</p>
+          <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900/50 border-2 border-dashed border-border/20 rounded-xl text-muted-foreground/50">
+            <p className="text-sm font-medium">Vui lòng chọn Cổng để bắt đầu giám sát</p>
           </div>
         ) : filteredCameras.length === 0 ? (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-black/50 border border-dashed border-border rounded-lg text-muted-foreground">
-            <PhotoCamera className="text-4xl mb-2 opacity-20" />
-            <p>Chưa có camera tại {currentGate}</p>
+          <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900/50 border-2 border-dashed border-border/20 rounded-xl text-muted-foreground/50">
+            <PhotoCamera className="text-5xl mb-4 opacity-10" />
+            <p className="text-sm font-medium uppercase tracking-wider">Chưa có camera tại {currentGate}</p>
           </div>
         ) : (
-          <div className="h-full w-full flex flex-col overflow-hidden">
-            <div className="w-full flex-1 min-h-0 relative bg-black rounded-lg overflow-hidden border border-border">
+          <div className="h-full w-full flex flex-col overflow-hidden gap-2">
+            <div className="w-full flex-1 min-h-0 relative bg-black rounded-xl overflow-hidden border-2 border-border/40 shadow-2xl">
               {mainCamera && isConnecting(mainCamera) && (
                 <StreamingLoader message={`Đang kết nối ${mainCamera.name}...`} />
               )}
@@ -145,83 +148,74 @@ export default function CameraGrid({
                 camCode={mainCamera?.cam_id}
                 activeId={mainCamera ? getActiveId(mainCamera) : undefined}
                 src={mainCamera ? getStreamUrl(mainCamera) : undefined}
+                className="w-full h-full"
               />
             </div>
 
             {mainCamera && (
-              <div className="shrink-0 mt-1 bg-card border border-border rounded-lg px-3 py-2 flex items-center justify-between w-full">
-                <div className="flex items-center gap-4">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                      Tên Camera
+              <div className="shrink-0 bg-card/80 backdrop-blur-md border border-border/50 rounded-xl px-4 py-3 flex items-center justify-between w-full shadow-lg">
+                <div className="flex items-center gap-6 overflow-x-auto no-scrollbar">
+                  <div className="flex flex-col min-w-[120px]">
+                    <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-[0.15em] mb-1">
+                      Camera
                     </span>
-                    <span className="text-sm font-bold text-[#f59e0b] truncate max-w-[150px]" title={mainCamera.name}>
+                    <span className="text-sm font-black text-[#f59e0b] truncate" title={mainCamera.name}>
                       {mainCamera.name || "N/A"}
                     </span>
                   </div>
-                  <div className="w-px h-6 bg-border" />
+                  <div className="w-px h-8 bg-border/50" />
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                      Độ phân giải
+                    <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-[0.15em] mb-1">
+                      Resolution
                     </span>
-                    <span className="text-sm font-medium text-foreground font-mono">
-                      {streamInfo?.resolution || "N/A"}
+                    <span className="text-sm font-bold text-foreground font-mono">
+                      {streamInfo?.resolution || "---"}
                     </span>
                   </div>
-                  <div className="w-px h-6 bg-border" />
+                  <div className="w-px h-8 bg-border/50" />
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                    <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-[0.15em] mb-1">
                       FPS
                     </span>
-                    <span className="text-sm font-medium text-foreground font-mono">
+                    <span className="text-sm font-bold text-foreground font-mono">
                       {streamInfo?.fps || 0}
                     </span>
                   </div>
-                  <div className="w-px h-6 bg-border" />
+                  <div className="w-px h-8 bg-border/50" />
                   <div className="flex flex-col">
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                      Chức năng
+                    <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-[0.15em] mb-1">
+                      Tính năng
                     </span>
-                    <div className="flex gap-1 mt-0.5">
+                    <div className="flex gap-1.5 mt-0.5">
                       {mainCamera.type ? (
                         mainCamera.type.split(",").map((fid) => (
                           <span
                             key={fid}
-                            className="px-1 py-0.5 bg-primary/10 text-[#f59e0b] border border-primary/20 rounded-[2px] text-[8px] font-bold uppercase"
+                            className="px-1.5 py-0.5 bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/20 rounded-md text-[9px] font-black uppercase tracking-tighter"
                           >
                             {fid.replace("_detect", "").toUpperCase()}
                           </span>
                         ))
                       ) : (
-                        <span className="text-sm font-medium text-foreground">
+                        <span className="text-sm font-bold text-foreground">
                           Cơ bản
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="w-px h-6 bg-border" />
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                      Thương hiệu
-                    </span>
-                    <span className="text-sm font-medium text-foreground">
-                      {mainCamera.brand || "N/A"}
-                    </span>
-                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3 ml-4 shrink-0">
                   {/* PTZ Button */}
                   <button
                     onClick={onPtzClick}
-                    className={`flex items-center gap-2 px-4 py-2 font-semibold rounded-md transition-colors ${
+                    className={`flex items-center gap-2 px-4 py-2 text-xs font-black rounded-lg transition-all duration-200 uppercase tracking-wider ${
                       isPtzActive 
-                        ? "bg-blue-700 text-white ring-2 ring-blue-400" 
-                        : "bg-blue-600 text-white hover:bg-blue-700"
+                        ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-y-[-1px]" 
+                        : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white"
                     }`}
-                    title="Điều khiển PTZ"
                   >
-                    <ControlCamera fontSize="small" />
+                    <ControlCamera sx={{ fontSize: 16 }} />
                     PTZ
                   </button>
 
@@ -252,9 +246,9 @@ export default function CameraGrid({
                         toast.error("Lỗi khi chụp ảnh");
                       }
                     }}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#f59e0b] text-black hover:bg-[#f59e0b]/90 transition-colors"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#f59e0b] text-black font-black text-xs rounded-lg hover:bg-[#f59e0b]/90 transition-all duration-200 shadow-lg shadow-[#f59e0b]/20 hover:shadow-[#f59e0b]/30 uppercase tracking-widest active:scale-95"
                   >
-                    <PhotoCamera fontSize="small" />
+                    <PhotoCamera sx={{ fontSize: 18 }} />
                     Chụp ảnh
                   </button>
                 </div>

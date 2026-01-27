@@ -14,15 +14,31 @@ logger = logging.getLogger(__name__)
 SYNC_CONFIG_FILE = PROJECT_ROOT / "database" / "sync_config.json"
 
 
+import time
+
+_sync_config_cache = None
+_last_config_load_time = 0
+CONFIG_CACHE_TTL = 5.0 # seconds
+
 def get_sync_config() -> Dict[str, Any]:
-    """Read sync configuration from file."""
+    """Read sync configuration from file with 5s caching."""
+    global _sync_config_cache, _last_config_load_time
+    
+    now = time.time()
+    if _sync_config_cache is not None and (now - _last_config_load_time) < CONFIG_CACHE_TTL:
+        return _sync_config_cache
+
+    config = {"remote_url": None, "is_destination": True}
     if SYNC_CONFIG_FILE.exists():
         try:
             with open(SYNC_CONFIG_FILE, 'r') as f:
-                return json.load(f)
+                config = json.load(f)
         except Exception as e:
             logger.error(f"Failed to read sync config: {e}")
-    return {"remote_url": None, "is_destination": True}
+            
+    _sync_config_cache = config
+    _last_config_load_time = now
+    return config
 
 
 def is_client_mode() -> bool:
@@ -39,26 +55,23 @@ def get_master_url() -> Optional[str]:
     return None
 
 
-async def proxy_get(endpoint: str, timeout: float = 5.0) -> Optional[Any]:
+async def proxy_get(endpoint: str, timeout: float = 5.0, token: Optional[str] = None) -> Optional[Any]:
     """
     Proxy a GET request to the master node.
-    
-    Args:
-        endpoint: The API endpoint (e.g., '/api/registered_cars')
-        timeout: Request timeout in seconds
-        
-    Returns:
-        JSON response from master, or None if failed
     """
     master_url = get_master_url()
     if not master_url:
         return None
     
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             url = master_url.rstrip('/') + endpoint
             logger.info(f"[Proxy] Connecting to Master: {url}")
-            response = await client.get(url)
+            response = await client.get(url, headers=headers)
             if response.status_code == 200:
                 logger.info(f"[Proxy] Connection Successful: {url}")
                 return response.json()
@@ -76,29 +89,25 @@ async def proxy_get(endpoint: str, timeout: float = 5.0) -> Optional[Any]:
             return None
 
 
-async def proxy_post(endpoint: str, data: Dict[str, Any], timeout: float = 5.0) -> Optional[Any]:
+async def proxy_post(endpoint: str, data: Dict[str, Any], timeout: float = 5.0, token: Optional[str] = None) -> Optional[Any]:
     """
     Proxy a POST request to the master node.
-    
-    Args:
-        endpoint: The API endpoint
-        data: JSON data to send
-        timeout: Request timeout in seconds
-        
-    Returns:
-        JSON response from master, or None if failed
     """
     master_url = get_master_url()
     if not master_url:
         return None
     
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
     try:
         url = master_url.rstrip('/') + endpoint
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
                 url,
                 json=data,
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
             if response.status_code in (200, 201):
                 return response.json()
@@ -110,7 +119,7 @@ async def proxy_post(endpoint: str, data: Dict[str, Any], timeout: float = 5.0) 
         return None
 
 
-async def proxy_put(endpoint: str, data: Dict[str, Any], timeout: float = 5.0) -> Optional[Any]:
+async def proxy_put(endpoint: str, data: Dict[str, Any], timeout: float = 5.0, token: Optional[str] = None) -> Optional[Any]:
     """
     Proxy a PUT request to the master node.
     """
@@ -118,13 +127,17 @@ async def proxy_put(endpoint: str, data: Dict[str, Any], timeout: float = 5.0) -
     if not master_url:
         return None
     
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
     try:
         url = master_url.rstrip('/') + endpoint
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.put(
                 url,
                 json=data,
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
             if response.status_code == 200:
                 return response.json()
@@ -136,7 +149,7 @@ async def proxy_put(endpoint: str, data: Dict[str, Any], timeout: float = 5.0) -
         return None
 
 
-async def proxy_delete(endpoint: str, timeout: float = 5.0) -> bool:
+async def proxy_delete(endpoint: str, timeout: float = 5.0, token: Optional[str] = None) -> bool:
     """
     Proxy a DELETE request to the master node.
     """
@@ -144,10 +157,14 @@ async def proxy_delete(endpoint: str, timeout: float = 5.0) -> bool:
     if not master_url:
         return False
     
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
     try:
         url = master_url.rstrip('/') + endpoint
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.delete(url)
+            response = await client.delete(url, headers=headers)
             return response.status_code == 200
     except Exception as e:
         logger.error(f"Proxy DELETE failed for {endpoint}: {e}")
