@@ -26,12 +26,78 @@ export default function WelcomePage() {
     <AnimatePresence>
       {showSplash && (
         <motion.div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#09090b] overflow-hidden"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.5 }}
         >
+          {/* Animated gradient highlights - moving around */}
+          <motion.div
+            className="absolute w-[70%] h-[70%] bg-gradient-to-br from-amber-500/40 via-orange-500/30 to-transparent blur-[50px] rounded-full"
+            animate={{
+              x: ["-20%", "10%", "-10%", "-20%"],
+              y: ["-20%", "-10%", "10%", "-20%"],
+            }}
+            transition={{
+              duration: 8,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+            style={{ top: "-10%", left: "-10%" }}
+          />
+          <motion.div
+            className="absolute w-[55%] h-[55%] bg-amber-400/35 blur-[70px] rounded-full"
+            animate={{
+              x: ["-30%", "0%", "-20%", "-30%"],
+              y: ["-30%", "-20%", "0%", "-30%"],
+            }}
+            transition={{
+              duration: 10,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: 0.5,
+            }}
+            style={{ top: "-20%", left: "-20%" }}
+          />
+          
+          {/* Secondary moving glow on bottom right */}
+          <motion.div
+            className="absolute w-[45%] h-[45%] bg-amber-500/25 blur-[80px] rounded-full"
+            animate={{
+              x: ["20%", "-10%", "10%", "20%"],
+              y: ["20%", "10%", "-10%", "20%"],
+            }}
+            transition={{
+              duration: 12,
+              repeat: Infinity,
+              ease: "easeInOut",
+              delay: 1,
+            }}
+            style={{ bottom: "-10%", right: "-10%" }}
+          />
+          
+          {/* Subtle zinc glow */}
+          <motion.div
+            className="absolute w-[35%] h-[35%] bg-zinc-500/15 blur-[80px] rounded-full"
+            animate={{
+              x: ["10%", "-20%", "10%"],
+              y: ["-10%", "20%", "-10%"],
+            }}
+            transition={{
+              duration: 15,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+            style={{ bottom: "20%", right: "10%" }}
+          />
+          
+          {/* Grid Pattern Background - More visible */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff25_1px,transparent_1px),linear-gradient(to_bottom,#ffffff25_1px,transparent_1px)] bg-[size:48px_48px]" />
+          
+          {/* Radial fade overlay for grid - less fade */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,#09090b_80%)]" />
+
           {/* Logo/Icon Animation */}
           <motion.div
             initial={{ scale: 0, rotate: -180 }}

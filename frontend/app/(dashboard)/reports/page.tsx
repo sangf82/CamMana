@@ -16,6 +16,51 @@ import { ExpandMore, CheckCircle } from '@mui/icons-material'
 
 const COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
 
+// Format large numbers with Vietnamese units (trăm, nghìn, triệu, tỉ)
+const formatVietnameseNumber = (num: number, decimals: number = 2): string => {
+  if (num === 0) return '0';
+  
+  const absNum = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+  
+  if (absNum >= 1_000_000_000) {
+    // Tỉ (billion)
+    const value = absNum / 1_000_000_000;
+    return `${sign}${value.toFixed(decimals).replace(/\.?0+$/, '')} tỉ`;
+  } else if (absNum >= 1_000_000) {
+    // Triệu (million)
+    const value = absNum / 1_000_000;
+    return `${sign}${value.toFixed(decimals).replace(/\.?0+$/, '')} triệu`;
+  } else if (absNum >= 1_000) {
+    // Nghìn (thousand)
+    const value = absNum / 1_000;
+    return `${sign}${value.toFixed(decimals).replace(/\.?0+$/, '')} nghìn`;
+  } else if (absNum >= 100) {
+    // Trăm (hundred) - optional, usually not used
+    return `${sign}${absNum.toFixed(decimals).replace(/\.?0+$/, '')}`;
+  }
+  
+  return `${sign}${absNum.toFixed(decimals).replace(/\.?0+$/, '')}`;
+};
+
+// Format for chart axis (shorter)
+const formatAxisNumber = (num: number): string => {
+  if (num === 0) return '0';
+  
+  const absNum = Math.abs(num);
+  const sign = num < 0 ? '-' : '';
+  
+  if (absNum >= 1_000_000_000) {
+    return `${sign}${(absNum / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`;
+  } else if (absNum >= 1_000_000) {
+    return `${sign}${(absNum / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  } else if (absNum >= 1_000) {
+    return `${sign}${(absNum / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+  }
+  
+  return `${sign}${absNum}`;
+};
+
 interface ReportData {
   date: string;
   summary: {
@@ -123,7 +168,15 @@ export default function ReportsPage() {
   };
 
   const handleExportPDF = async () => {
-    if (!selectedDate) return;
+    if (!selectedDate) {
+      toast.error("Chưa chọn ngày báo cáo");
+      return;
+    }
+    
+    if (!data) {
+      toast.error("Không có dữ liệu để xuất");
+      return;
+    }
     
     try {
       const token = localStorage.getItem('token');
@@ -140,10 +193,21 @@ export default function ReportsPage() {
         return;
       }
       
+      // Check if no data on backend
+      if (saveResponse.status === 404) {
+        toast.error("Không có dữ liệu để xuất");
+        return;
+      }
+      
       // Fallback to browser download if save fails
       const response = await fetch(`/api/report/export/pdf?date=${selectedDate}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      
+      if (response.status === 404) {
+        toast.error("Không có dữ liệu để xuất");
+        return;
+      }
       
       if (!response.ok) throw new Error('Export failed');
       
@@ -282,7 +346,9 @@ export default function ReportsPage() {
             <Package className="h-5 w-5 text-[#f59e0b]" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{data?.summary.total_volume_out || 0}</div>
+            <div className="text-3xl font-bold" title={`${data?.summary.total_volume_out || 0} m³`}>
+              {formatVietnameseNumber(data?.summary.total_volume_out || 0)}
+            </div>
           </CardContent>
         </Card>
 
@@ -292,7 +358,9 @@ export default function ReportsPage() {
             <TrendingUp className="h-5 w-5 text-[#f59e0b]" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{data?.summary.avg_volume || 0}</div>
+            <div className="text-3xl font-bold" title={`${data?.summary.avg_volume || 0} m³`}>
+              {formatVietnameseNumber(data?.summary.avg_volume || 0)}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -339,7 +407,14 @@ export default function ReportsPage() {
                 <BarChart data={contractorChartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis dataKey="name" stroke="var(--border)" fontSize={12} tickLine={false} axisLine={false} tick={{ fill: 'var(--foreground)', fontSize: 11 }} dy={10} />
-                  <YAxis stroke="var(--border)" fontSize={12} tickLine={false} axisLine={false} tick={{ fill: 'var(--foreground)', fontSize: 11 }} />
+                  <YAxis 
+                    stroke="var(--border)" 
+                    fontSize={12} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    tick={{ fill: 'var(--foreground)', fontSize: 11 }} 
+                    tickFormatter={formatAxisNumber}
+                  />
                   <Tooltip 
                     cursor={{ fill: 'rgba(245, 158, 11, 0.1)' }}
                     contentStyle={{ 
@@ -350,7 +425,7 @@ export default function ReportsPage() {
                     }}
                     itemStyle={{ color: '#ffffff' }}
                     labelStyle={{ color: '#f59e0b', fontWeight: 'bold' }}
-                    formatter={(value: number) => [`${value} m³`, 'Khối lượng']}
+                    formatter={(value: number) => [`${formatVietnameseNumber(value)} m³`, 'Khối lượng']}
                   />
                   <Bar dataKey="value" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -380,6 +455,7 @@ export default function ReportsPage() {
                   }}
                   itemStyle={{ color: '#ffffff' }}
                   labelStyle={{ color: '#f59e0b', fontWeight: 'bold' }}
+                  formatter={(value: number) => [`${value}`, 'Số lượt']}
                 />
                 <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
               </BarChart>

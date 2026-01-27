@@ -49,30 +49,43 @@ class CheckOutService:
             primary_color = "Unknown"
             wheel_count = 0
             
+            print(f"[Checkout] Processing {len(images)} images")
+            
             tasks = []
             for img_info in images:
-                frame = await asyncio.to_thread(cv2.imread, str(img_info["path"]))
+                img_path = img_info["path"]
+                path_exists = img_path.exists() if hasattr(img_path, 'exists') else Path(str(img_path)).exists()
+                print(f"[Checkout] Reading image from: {img_path}, exists: {path_exists}")
+                frame = await asyncio.to_thread(cv2.imread, str(img_path))
                 if frame is not None:
                     funcs = img_info.get("functions", [])
+                    print(f"[Checkout] Image loaded successfully, size: {frame.shape}, functions: {funcs}")
                     if funcs:
                         tasks.append((img_info, self.orchestrator.process_image(frame, funcs)))
+                else:
+                    print(f"[Checkout] FAILED to read image: {img_path}")
             
             # Run all detection tasks
+            print(f"[Checkout] Running {len(tasks)} detection tasks")
             for img_info, task in tasks:
-                result = await task
-                all_results.update(result)
-                
-                # Extract plate
-                if "plate" in result and result["plate"].get("detected"):
-                    plate_number = result["plate"].get("plate", "Unknown")
-                
-                # Extract color
-                if "color" in result and result["color"].get("detected"):
-                    primary_color = result["color"].get("primary_color", "Unknown")
+                try:
+                    result = await task
+                    print(f"[Checkout] Task result keys: {list(result.keys()) if result else 'None'}")
+                    all_results.update(result)
                     
-                # Extract wheel count
-                if "wheel" in result and result["wheel"].get("detected"):
-                    wheel_count = result["wheel"].get("wheel_count_total", 0)
+                    # Extract plate
+                    if "plate" in result and result["plate"].get("detected"):
+                        plate_number = result["plate"].get("plate", "Unknown")
+                    
+                    # Extract color
+                    if "color" in result and result["color"].get("detected"):
+                        primary_color = result["color"].get("primary_color", "Unknown")
+                        
+                    # Extract wheel count
+                    if "wheel" in result and result["wheel"].get("detected"):
+                        wheel_count = result["wheel"].get("wheel_count_total", 0)
+                except Exception as task_err:
+                    print(f"[Checkout] Task error: {task_err}")
             
             # Normalize plate with error handling
             if plate_number and plate_number != "Unknown":
@@ -137,7 +150,6 @@ class CheckOutService:
                 
                 # Resolve Calibration Paths
                 calib_dir = DATA_ROOT / "calibration"
-                bg_dir = DATA_ROOT / "backgrounds"
                 
                 calib_side = calib_dir / f"calib_side_{side_cam_id}.json"
                 if not calib_side.exists(): calib_side = calib_dir / "calib_side.json"
@@ -145,59 +157,26 @@ class CheckOutService:
                 calib_top = calib_dir / f"calib_top_{top_cam_id}.json"
                 if not calib_top.exists(): calib_top = calib_dir / "calib_topdown.json"
                 
-                # Try to generate cleaned background using inpainting and save in car folder
-                from backend.model_process.utils.inpainting import generate_seamless_background
-                from backend.model_process.functions.truck import TruckDetector
+                # Get background from shared backgrounds folder
+                from backend.model_process.utils.background import get_background_for_camera, capture_background_if_empty
                 
-                cleaned_bg_path = folder_path / f"background_cleaned_{top_cam_id}.jpg"
-                
-                try:
-                    logger.info(f"[Checkout] Detecting truck on top image for inpainting mask...")
-                    td = TruckDetector(confidence=0.3) # Lower confidence for topdown
-                    top_img_cv = await asyncio.to_thread(cv2.imread, str(top_img_info["path"]))
-                    
-                    if top_img_cv is None:
-                        logger.warning("[Checkout] Failed to read top image for truck detection")
-                        raise ValueError("Could not read top image")
-                    
-                    det = td.detect(top_img_cv)
-                    
-                    bbox = None
-                    if det.get("detected"):
-                        x1, y1, x2, y2 = det["bbox"]
-                        bbox = {"x": x1, "y": y1, "w": x2-x1, "h": y2-y1}
-                        logger.info(f"[Checkout] Truck detected on top image at {bbox}")
-                    else:
-                        logger.info(f"[Checkout] No truck detected in top image, proceeding with full image inpainting")
-
-                    success = await generate_seamless_background(Path(top_img_info["path"]), cleaned_bg_path, truck_bbox=bbox)
-                    if success and cleaned_bg_path.exists():
-                        bg_image = cleaned_bg_path
-                        logger.info(f"[Checkout] Cleaned background saved to car folder: {bg_image}")
-                    else:
-                        logger.warning(f"[Checkout] Inpainting completed but file not created at {cleaned_bg_path}")
-                except Exception as ie:
-                    logger.warning(f"[Checkout] Inpainting failed, falling back to static background: {ie}", exc_info=True)
-
-                if not bg_image:
-                    # Fallback to static background
-                    logger.info(f"[Checkout] Using static background fallback")
-                    bg_image_candidate = bg_dir / f"bg_{top_cam_id}.jpg"
-                    if bg_image_candidate.exists():
-                         bg_image = bg_image_candidate
-                         logger.info(f"[Checkout] Found camera-specific background: {bg_image_candidate}")
-                    else:
-                         # Try any static background
-                         bgs = list(bg_dir.glob("*.jpg"))
-                         if bgs:
-                             bg_image = bgs[0]
-                             logger.info(f"[Checkout] Using generic background: {bg_image}")
-                         else:
-                             logger.warning(f"[Checkout] No background images found in {bg_dir}")
-                             bg_image = None
+                bg_image = get_background_for_camera(top_cam_id)
                 
                 if not bg_image:
-                    logger.warning(f"[Checkout] Skipped Volume: No background image found or generated.")
+                    # Try to capture background if no car detected in top image
+                    logger.info(f"[Checkout] No background found, checking if we can capture one...")
+                    try:
+                        top_img_cv = await asyncio.to_thread(cv2.imread, str(top_img_info["path"]))
+                        if top_img_cv is not None:
+                            await capture_background_if_empty(top_cam_id, top_img_cv)
+                            bg_image = get_background_for_camera(top_cam_id)
+                    except Exception as e:
+                        logger.warning(f"[Checkout] Failed to capture background: {e}")
+                
+                if bg_image:
+                    logger.info(f"[Checkout] Using background: {bg_image}")
+                else:
+                    logger.warning(f"[Checkout] Skipped Volume: No background image found.")
 
                 if calib_side.exists() and calib_top.exists() and bg_image:
                      logger.info(f"[Checkout] Starting volume estimation for session {uuid_val}...")
@@ -238,11 +217,17 @@ class CheckOutService:
                          json.dump({"error": "Volume Skipped", "reasons": msg}, f, indent=4)
 
             # 3. Save results to folder
+            print(f"[Checkout] Saving to folder: {folder_path}, exists: {folder_path.exists() if folder_path else 'N/A'}")
+            print(f"[Checkout] all_results keys: {list(all_results.keys())}")
+            print(f"[Checkout] images count: {len(images)}")
+            
             if folder_path and folder_path.exists():
                 # Save model outputs
                 for func_name, res in all_results.items():
                     if func_name != "raw":
-                        with open(folder_path / f"checkout_model_{func_name}.json", "w", encoding="utf-8") as f:
+                        output_path = folder_path / f"checkout_model_{func_name}.json"
+                        print(f"[Checkout] Saving model output to: {output_path}")
+                        with open(output_path, "w", encoding="utf-8") as f:
                             json.dump(res, f, indent=4)
                 
                 # Save images - use unified naming: {cam_name}_{functions}.jpg
@@ -250,10 +235,14 @@ class CheckOutService:
                     path = img_info["path"]
                     cam_name = img_info.get("cam_name", "UnknownCam").replace(" ", "_")
                     funcs_str = "_".join(img_info.get("functions", []))
-                    ext = path.suffix or ".jpg"
+                    ext = Path(str(path)).suffix or ".jpg"
                     new_name = f"{cam_name}_{funcs_str}{ext}"
-                    if path.exists():
-                        shutil.copy2(path, folder_path / new_name)
+                    src_exists = Path(str(path)).exists()
+                    print(f"[Checkout] Copying image {path} -> {folder_path / new_name}, src exists: {src_exists}")
+                    if src_exists:
+                        shutil.copy2(str(path), folder_path / new_name)
+            else:
+                print(f"[Checkout] Folder path invalid or doesn't exist: {folder_path}")
 
 
             # 4. Update History Record
@@ -271,13 +260,15 @@ class CheckOutService:
                 try:
                     update_data["vol_measured"] = str(round(float(final_volume), 2))
                 except (ValueError, TypeError) as e:
-                    logger.warning(f"Invalid volume value: {final_volume}, error: {e}")
+                    print(f"[Checkout] Invalid volume value: {final_volume}, error: {e}")
             
             if uuid_val:
                 try:
+                    print(f"[Checkout] Updating record {uuid_val} with: {update_data}")
                     self.history_logic.update_record(uuid_val, update_data)
+                    print(f"[Checkout] Record updated successfully")
                 except Exception as e:
-                    logger.error(f"Failed to update history record: {e}", exc_info=True)
+                    print(f"[Checkout] Failed to update history record: {e}")
             
             # --- SYNC FOLDER TO MASTER (if in Client mode) ---
             if is_client_mode() and folder_path:
@@ -321,7 +312,7 @@ class CheckOutService:
                 try: history_vol = float(target_record["vol_measured"])
                 except: pass
 
-            return {
+            result = {
                 "success": True,
                 "plate": clean_plate,
                 "color": primary_color,
@@ -333,10 +324,14 @@ class CheckOutService:
                 "volume": float(final_volume) if final_volume is not None else None,
                 "is_checkout": True
             }
+            print(f"[Checkout] Returning result: {result}")
+            return result
 
             
         except Exception as e:
-            logger.error(f"Checkout error: {e}", exc_info=True)
+            print(f"[Checkout] Checkout error: {e}")
+            import traceback
+            traceback.print_exc()
             return {"success": False, "error": str(e)}
 
     async def close(self):

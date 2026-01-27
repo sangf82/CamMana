@@ -18,13 +18,7 @@ REQUIRED_MODELS = [
         "name": "YOLO Car Detection",
         "path": "car_detect/yolo11n.pt",
         "size_min": 1_000_000,  # 1MB minimum
-        "download_url": None,  # Set if auto-download supported
-    },
-    {
-        "name": "U2Net Masking",
-        "path": "masking/u2netp.onnx",
-        "size_min": 1_000_000,
-        "download_url": None,
+        "download_url": "https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt",
     },
 ]
 
@@ -87,18 +81,29 @@ def download_model(model_info: Dict[str, Any]) -> bool:
         model_path = models_dir / model_info["path"]
         model_path.parent.mkdir(parents=True, exist_ok=True)
         
+        print(f"  ⬇️  Downloading {model_info['name']}...")
         logger.info(f"Downloading {model_info['name']} from {download_url}...")
         
-        with httpx.stream("GET", download_url, timeout=300) as response:
-            response.raise_for_status()
-            with open(model_path, "wb") as f:
-                for chunk in response.iter_bytes(chunk_size=8192):
-                    f.write(chunk)
+        with httpx.Client(timeout=600, follow_redirects=True) as client:
+            with client.stream("GET", download_url) as response:
+                response.raise_for_status()
+                total = int(response.headers.get("content-length", 0))
+                downloaded = 0
+                with open(model_path, "wb") as f:
+                    for chunk in response.iter_bytes(chunk_size=65536):
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total > 0:
+                            pct = (downloaded / total) * 100
+                            print(f"\r  ⬇️  {model_info['name']}: {pct:.1f}%", end="", flush=True)
+                print()  # New line
         
+        print(f"  ✅ Downloaded {model_info['name']}")
         logger.info(f"Downloaded {model_info['name']} successfully")
         return True
         
     except Exception as e:
+        print(f"  ❌ Failed to download {model_info['name']}: {e}")
         logger.error(f"Failed to download {model_info['name']}: {e}")
         return False
 

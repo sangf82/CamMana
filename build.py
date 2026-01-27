@@ -1,6 +1,13 @@
 """
 Build script for CamMana Windows Application
 Creates a standalone .exe file with all dependencies bundled
+
+Output Structure:
+  product/
+    build/          <- PyInstaller build artifacts
+    cammana.exe     <- Final executable
+    README.txt
+    .env.example
 """
 
 import subprocess
@@ -16,8 +23,9 @@ def build():
     project_dir = Path(__file__).parent
     frontend_dir = project_dir / "frontend"
     out_dir = frontend_dir / "out"
-    dist_dir = project_dir / "dist"
-    models_dir = project_dir / "backend" / "model_process" / "models"
+    product_dir = project_dir / "product"
+    build_dir = product_dir / "build"
+    models_dir = project_dir / "backend" / "model_process" / "models"  # Models in backend
     
     print("=" * 60)
     print("🔨 Building CamMana Windows Application")
@@ -44,14 +52,21 @@ def build():
     
     # Step 1: Clean previous builds
     print("\n🧹 Step 1: Cleaning previous builds...")
-    if dist_dir.exists():
-        shutil.rmtree(dist_dir)
-        print("✅ Cleaned dist directory")
+    if product_dir.exists():
+        shutil.rmtree(product_dir)
+        print("✅ Cleaned product directory")
     
-    build_dir = project_dir / "build"
-    if build_dir.exists():
-        shutil.rmtree(build_dir)
-        print("✅ Cleaned build directory")
+    # Create product directory structure
+    product_dir.mkdir(parents=True, exist_ok=True)
+    build_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Clean old dist/build in project root if exists
+    old_dist = project_dir / "dist"
+    old_build = project_dir / "build"
+    if old_dist.exists():
+        shutil.rmtree(old_dist)
+    if old_build.exists():
+        shutil.rmtree(old_build)
     
     spec_file = project_dir / "CamMana.spec"
     if spec_file.exists():
@@ -83,11 +98,11 @@ def build():
         f"--add-data={out_dir};frontend/out",
     ]
     
-    # Include models directory if exists (new location: backend/model_process/models)
+    # Include models directory if exists (backend/model_process/models)
     if models_dir.exists():
         add_data_args.append(f"--add-data={models_dir};backend/model_process/models")
     
-    # Build with PyInstaller
+    # Build with PyInstaller (output to product directory)
     pyinstaller_args = [
         sys.executable, "-m", "PyInstaller",
         "--name=CamMana",
@@ -95,6 +110,9 @@ def build():
         "--windowed",
         "--icon=NONE",
         "--noconfirm",  # Overwrite without asking
+        f"--distpath={product_dir}",  # Output exe to product folder
+        f"--workpath={build_dir}",     # Build artifacts to product/build
+        f"--specpath={build_dir}",     # Spec file to product/build
         # Hidden imports for FastAPI/Uvicorn
         "--hidden-import=uvicorn.logging",
         "--hidden-import=uvicorn.loops",
@@ -112,9 +130,6 @@ def build():
         # YOLO/Ultralytics
         "--hidden-import=ultralytics",
         "--collect-submodules=ultralytics",
-        # ONNX Runtime
-        "--hidden-import=onnxruntime",
-        "--collect-submodules=onnxruntime",
         # APScheduler
         "--hidden-import=apscheduler.schedulers.asyncio",
         "--hidden-import=apscheduler.triggers.cron",
@@ -127,6 +142,20 @@ def build():
         "--hidden-import=PySide6.QtGui",
         "--hidden-import=PySide6.QtWebEngineWidgets",
         "--hidden-import=PySide6.QtWebEngineCore",
+        # Image processing
+        "--hidden-import=cv2",
+        "--hidden-import=numpy",
+        "--hidden-import=PIL",
+        "--hidden-import=PIL.Image",
+        # Data processing
+        "--hidden-import=pandas",
+        "--hidden-import=openpyxl",  # Excel export
+        "--hidden-import=xlrd",      # Excel read
+        # HTTP/Async
+        "--hidden-import=httpx",
+        "--hidden-import=aiofiles",
+        "--hidden-import=passlib",
+        "--hidden-import=passlib.handlers.bcrypt",
         # Optimize
         "--optimize=2",  # Highest optimization level
     ] + add_data_args + ["app.py"]
@@ -140,14 +169,12 @@ def build():
     # Step 4: Create distribution package
     print("\n📦 Step 4: Creating distribution package...")
     
-    release_dir = dist_dir / "CamMana_Release"
-    release_dir.mkdir(parents=True, exist_ok=True)
+    # Executable is already in product folder
+    exe_path = product_dir / "CamMana.exe"
     
-    # Copy executable
-    exe_path = dist_dir / "CamMana.exe"
-    if exe_path.exists():
-        shutil.copy2(exe_path, release_dir / "CamMana.exe")
-        print(f"✅ Copied executable to {release_dir}")
+    if not exe_path.exists():
+        print(f"❌ Executable not found at {exe_path}")
+        sys.exit(1)
     
     # Create README for users
     readme_content = """# CamMana - Vehicle Management System
@@ -185,7 +212,7 @@ To use a custom data directory:
 For issues or questions, contact your system administrator.
 """
     
-    with open(release_dir / "README.txt", "w", encoding="utf-8") as f:
+    with open(product_dir / "README.txt", "w", encoding="utf-8") as f:
         f.write(readme_content)
     print("✅ Created README.txt")
     
@@ -204,9 +231,41 @@ For issues or questions, contact your system administrator.
 # CAMERA_DEFAULT_PASSWORD=password123
 """
     
-    with open(release_dir / ".env.example", "w", encoding="utf-8") as f:
+    with open(product_dir / ".env.example", "w", encoding="utf-8") as f:
         f.write(env_sample)
     print("✅ Created .env.example")
+    
+    # Save build configuration info
+    build_info = f"""# CamMana Build Configuration
+# Generated during build process
+
+Build Date: {os.popen('date /t').read().strip()}
+Python Version: {sys.version}
+PyInstaller Output: product/
+
+## Directory Structure
+product/
+├── CamMana.exe     <- Main executable
+├── README.txt      <- User documentation
+├── .env.example    <- Environment config template
+└── build/          <- PyInstaller artifacts (can be deleted)
+
+## Hidden Imports Included
+- uvicorn (logging, loops, protocols, lifespan)
+- zeep, onvif_zeep (ONVIF camera support)
+- ultralytics (YOLO car detection)
+- apscheduler (task scheduling)
+- zeroconf (network discovery)
+- PySide6 (Qt GUI)
+
+## Data Bundles
+- frontend/out (Next.js static export)
+- backend/model_process/models/ (YOLO model)
+"""
+    
+    with open(build_dir / "BUILD_CONFIG.md", "w", encoding="utf-8") as f:
+        f.write(build_info)
+    print("✅ Saved build configuration to product/build/BUILD_CONFIG.md")
     
     # Calculate size
     exe_size = exe_path.stat().st_size / (1024 * 1024)  # MB
@@ -214,12 +273,14 @@ For issues or questions, contact your system administrator.
     print("\n" + "=" * 60)
     print("✅ Build completed successfully!")
     print("=" * 60)
-    print(f"\n📁 Release package: {release_dir}")
+    print(f"\n📁 Output folder: {product_dir}")
     print(f"📊 Executable size: {exe_size:.1f} MB")
-    print(f"\n📋 Distribution includes:")
-    print(f"   - CamMana.exe")
-    print(f"   - README.txt")
-    print(f"   - .env.example")
+    print(f"\n📋 Distribution structure:")
+    print(f"   product/")
+    print(f"   ├── CamMana.exe")
+    print(f"   ├── README.txt")
+    print(f"   ├── .env.example")
+    print(f"   └── build/           <- Build artifacts")
     print(f"\n🚀 Ready to distribute!")
 
 

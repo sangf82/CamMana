@@ -267,7 +267,7 @@ export default function SettingsPage() {
   const isAdmin = currentUser?.role === 'admin'
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto pb-12">
       {/* Header */}
       <div className="space-y-1">
         <div className="flex items-center gap-3">
@@ -345,15 +345,15 @@ export default function SettingsPage() {
                         <p className="font-mono font-medium text-[12px]">{pcInfo?.os || '---'}</p>
                     </div>
                     <div className="space-y-1">
-                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Bộ nhớ RAM</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Dung lượng Bộ nhớ</p>
                         <p className="font-mono font-medium text-[12px]">{pcInfo?.ram || '---'}</p>
                     </div>
                     <div className="space-y-1">
-                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Địa chỉ IP nội bộ</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Địa chỉ IP</p>
                         <p className="font-mono font-semibold text-[12px] text-amber-500">{pcInfo?.ip_address || '---'}</p>
                     </div>
                     <div className="col-span-2 space-y-1 pt-2">
-                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Cấu trúc vi xử lý</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-semibold tracking-widest">Vi xử lý (CPU)</p>
                         <p className="font-mono text-[11px] bg-muted/50 p-2 rounded-lg text-foreground/70 italic border border-border/50">
                             {pcInfo?.processor || 'ĐANG TRUY XUẤT THÔNG TIN...'}
                         </p>
@@ -400,7 +400,7 @@ export default function SettingsPage() {
               <CardTitle className="text-[10px] font-semibold flex items-center justify-between gap-2 uppercase tracking-[0.2em] text-foreground">
                 <div className="flex items-center gap-2">
                     <Server className="h-4 w-4 text-amber-500" />
-                    Đồng bộ hạ tầng
+                    Đồng bộ Dữ liệu
                 </div>
                 <span className={`text-[9px] font-bold px-3 py-1 rounded-full border flex items-center justify-center min-w-[70px] ${syncConfig.is_destination ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30' : 'bg-amber-500/10 text-amber-500 border-amber-500/30'}`}>
                     {syncConfig.is_destination ? 'MÁY CHỦ' : 'TRẠM CUỐI'}
@@ -615,14 +615,7 @@ export default function SettingsPage() {
                 </div>
             </CardContent>
         </Card>
-      ) : (
-        <Card className="lg:col-span-12 bg-muted/20 border-dashed">
-            <CardContent className="py-12 flex flex-col items-center justify-center text-center opacity-50">
-                <ShieldCheck size={48} className="text-muted-foreground mb-4" />
-                <p className="text-sm">Bạn không có quyền xem danh sách người dùng.</p>
-            </CardContent>
-        </Card>
-      )}
+      ) : null}
 
       {/* Add/Edit User Dialog */}
       <Dialog 

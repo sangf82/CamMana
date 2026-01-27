@@ -222,60 +222,60 @@ export default function HistoryPage() {
     { header: "Ghi chú", accessorKey: "note", width: "300px" },
   ];
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (filteredData.length === 0) {
       toast.error("Không có dữ liệu để xuất");
       return;
     }
 
-    // CSV headers
-    const headers = [
-      "Biển số",
-      "Vị trí",
-      "Thời gian Vào",
-      "Thời gian Ra",
-      "Thễ tích tiêu chuẩn (m3)",
-      "Thể tích đo được (m3)",
-      "Trạng thái",
-      "Xác minh",
-      "Ghi chú",
-    ];
-
-    // Map data to CSV rows
-    const rows = filteredData.map((item) => [
-      item.plate,
-      item.location,
-      item.time_in,
-      item.time_out,
-      item.vol_std,
-      item.vol_measured,
-      STATUS_MAP[item.status]?.label || item.status,
-      VERIFY_MAP[item.verify]?.label || item.verify,
-      `"${(item.note || "").replace(/"/g, '""')}"`,
-    ]);
-
-    const csvContent = [
-      headers.join(","),
-      ...rows.map((row) => row.join(",")),
-    ].join("\n");
-
-    const blob = new Blob(["\ufeff" + csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-
-    link.setAttribute("href", url);
-    link.setAttribute(
-      "download",
-      `Lich_su_ra_vao_${today.replace(/\//g, "-")}.csv`,
-    );
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    toast.success("Đã tải xuống danh sách lịch sử");
+    try {
+      const token = localStorage.getItem('token');
+      const dateParam = today.replace(/\//g, '-');
+      
+      // Try to save directly to Downloads folder (desktop app mode)
+      const saveResponse = await fetch(`/api/history/export/excel/save?date=${dateParam}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (saveResponse.ok) {
+        const result = await saveResponse.json();
+        toast.success(`Đã lưu vào: ${result.file_path}`);
+        return;
+      }
+      
+      // Check if no data on backend
+      if (saveResponse.status === 404) {
+        toast.error("Không có dữ liệu để xuất");
+        return;
+      }
+      
+      // Fallback to browser download if save fails
+      const response = await fetch(`/api/history/export/excel?date=${dateParam}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.status === 404) {
+        toast.error("Không có dữ liệu để xuất");
+        return;
+      }
+      
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Lich_su_ra_vao_${dateParam}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success("Đã tải xuống danh sách lịch sử");
+    } catch (e) {
+      console.error('Export Error:', e);
+      toast.error('Lỗi khi xuất file');
+    }
   };
 
   return (

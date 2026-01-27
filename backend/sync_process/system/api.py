@@ -69,10 +69,31 @@ def get_lan_ip() -> str:
 @system_router.get("/info")
 def get_system_info():
     """Get system information - no auth required for sync discovery."""
+    # Try to get detailed CPU name
+    cpu_name = platform.processor()  # Fallback
+    
+    if platform.system() == "Windows":
+        try:
+            import winreg
+            key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0")
+            cpu_name = winreg.QueryValueEx(key, "ProcessorNameString")[0].strip()
+            winreg.CloseKey(key)
+        except:
+            pass
+    elif platform.system() == "Linux":
+        try:
+            with open("/proc/cpuinfo", "r") as f:
+                for line in f:
+                    if "model name" in line:
+                        cpu_name = line.split(":")[1].strip()
+                        break
+        except:
+            pass
+    
     return {
         "pc_name": socket.gethostname(),
         "os": f"{platform.system()} {platform.release()}",
-        "processor": platform.processor(),
+        "processor": cpu_name,
         "cpu_count": psutil.cpu_count(logical=True),
         "ram": f"{round(psutil.virtual_memory().total / (1024**3), 2)} GB",
         "ip_address": get_lan_ip()

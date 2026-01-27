@@ -1,6 +1,9 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
+from pathlib import Path
+from datetime import datetime
 import pandas as pd
 import io
 import logging
@@ -170,3 +173,107 @@ async def import_cars(file: UploadFile = File(...)):
 @router.get("/health")
 def health_check():
     return logic.health_check()
+
+
+@router.get("/export/excel")
+async def export_excel(request: Request):
+    """
+    Export registered cars to Excel (CSV format with UTF-8 BOM).
+    Returns the file as a download.
+    """
+    cars = logic.get_all_cars()
+    if not cars:
+        raise HTTPException(status_code=404, detail="No data to export")
+    
+    # Create DataFrame
+    df = pd.DataFrame(cars)
+    
+    # Rename columns for Vietnamese headers
+    column_map = {
+        'car_plate': 'Biển số',
+        'car_owner': 'Chủ xe',
+        'car_brand': 'Hãng xe',
+        'car_model': 'Loại xe',
+        'car_color': 'Màu xe',
+        'car_wheel': 'Số trục/bánh',
+        'car_volume': 'Thể tích (m3)',
+        'car_note': 'Ghi chú',
+        'car_register_date': 'Ngày ĐK',
+    }
+    df = df.rename(columns=column_map)
+    
+    # Select only needed columns in order
+    cols = ['Biển số', 'Loại xe', 'Màu xe', 'Số trục/bánh', 'Thể tích (m3)', 'Chủ xe', 'Ngày ĐK']
+    existing_cols = [c for c in cols if c in df.columns]
+    df = df[existing_cols]
+    
+    # Create CSV with UTF-8 BOM
+    output = io.StringIO()
+    df.to_csv(output, index=False, encoding='utf-8')
+    csv_content = '\ufeff' + output.getvalue()
+    
+    return StreamingResponse(
+        io.BytesIO(csv_content.encode('utf-8')),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename=Danh_sach_xe_dang_ky.csv"
+        }
+    )
+
+
+@router.post("/export/excel/save")
+async def save_excel_to_downloads(request: Request, user: UserSchema = Depends(get_current_user)):
+    """
+    Export registered cars and save directly to user's Downloads folder.
+    This endpoint is for desktop app usage where we can access local filesystem.
+    """
+    cars = logic.get_all_cars()
+    if not cars:
+        raise HTTPException(status_code=404, detail="No data to export")
+    
+    # Create DataFrame
+    df = pd.DataFrame(cars)
+    
+    # Rename columns for Vietnamese headers
+    column_map = {
+        'car_plate': 'Biển số',
+        'car_owner': 'Chủ xe',
+        'car_brand': 'Hãng xe',
+        'car_model': 'Loại xe',
+        'car_color': 'Màu xe',
+        'car_wheel': 'Số trục/bánh',
+        'car_volume': 'Thể tích (m3)',
+        'car_note': 'Ghi chú',
+        'car_register_date': 'Ngày ĐK',
+    }
+    df = df.rename(columns=column_map)
+    
+    # Select only needed columns
+    cols = ['Biển số', 'Loại xe', 'Màu xe', 'Số trục/bánh', 'Thể tích (m3)', 'Chủ xe', 'Ngày ĐK']
+    existing_cols = [c for c in cols if c in df.columns]
+    df = df[existing_cols]
+    
+    try:
+        # Get user's Downloads folder
+        downloads_folder = Path.home() / "Downloads"
+        if not downloads_folder.exists():
+            downloads_folder = Path.home() / "Desktop"
+        
+        # Create filename with timestamp
+        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
+        filename = f"Danh_sach_xe_dang_ky_{timestamp}.csv"
+        file_path = downloads_folder / filename
+        
+        # Write CSV with UTF-8 BOM
+        with open(file_path, 'w', encoding='utf-8-sig', newline='') as f:
+            df.to_csv(f, index=False)
+        
+        logger.info(f"Excel saved to: {file_path}")
+        return {
+            "success": True,
+            "message": "File saved successfully",
+            "file_path": str(file_path)
+        }
+    except Exception as e:
+        logger.error(f"Error saving Excel to downloads: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save file")

@@ -22,7 +22,6 @@ REQUIRED_PACKAGES = [
     ("httpx", "httpx"),
     ("PIL", "pillow"),
     ("ultralytics", "ultralytics"),
-    ("onnxruntime", "onnxruntime"),
     ("jose", "python-jose"),
     ("passlib", "passlib"),
     ("bcrypt", "bcrypt"),
@@ -31,6 +30,9 @@ REQUIRED_PACKAGES = [
     ("PySide6", "PySide6"),
     ("onvif", "onvif-zeep"),
     ("dotenv", "python-dotenv"),
+    ("apscheduler", "apscheduler"),
+    ("aiofiles", "aiofiles"),
+    ("openpyxl", "openpyxl"),
 ]
 
 

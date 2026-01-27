@@ -7,6 +7,8 @@ import sys
 import os
 import threading
 import time
+import shutil
+import atexit
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -16,6 +18,27 @@ from PySide6.QtCore import QUrl, Qt
 from PySide6.QtWidgets import QApplication, QMainWindow
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtGui import QIcon
+
+# Base directory for pycache cleanup
+BASE_DIR = Path(__file__).parent
+
+
+def clean_pycache():
+    """Remove all __pycache__ directories in project folder"""
+    # Only cleanup in development mode (not frozen)
+    if getattr(sys, 'frozen', False):
+        return
+    
+    count = 0
+    for pycache_dir in BASE_DIR.rglob("__pycache__"):
+        if pycache_dir.is_dir():
+            try:
+                shutil.rmtree(pycache_dir)
+                count += 1
+            except Exception:
+                pass
+    if count:
+        print(f"[cam_mana] Cleaned {count} __pycache__ directories")
 
 
 def get_base_path():
@@ -70,6 +93,12 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    # Cleanup __pycache__ on startup
+    clean_pycache()
+    
+    # Register cleanup on exit
+    atexit.register(clean_pycache)
+    
     # Start backend server in background thread
     backend_thread = threading.Thread(target=start_backend_server, daemon=True)
     backend_thread.start()

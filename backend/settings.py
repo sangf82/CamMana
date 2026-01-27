@@ -164,6 +164,7 @@ class Settings(BaseSettings):
         if getattr(sys, 'frozen', False):
             # Running as compiled executable - models bundled in _MEIPASS
             return Path(sys._MEIPASS) / "backend" / "model_process" / "models"  # type: ignore[attr-defined]
+        # In development, models are in backend/model_process/models
         return self.backend_dir / "model_process" / "models"
     
     @property

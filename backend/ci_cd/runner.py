@@ -120,10 +120,39 @@ def run_all_checks(
                 success=api_result["success"],
                 details=api_result
             ))
-            if not api_result["success"]:
-                print("  ⚠️ Some external APIs unreachable (app may still work)")
+            
+            # Show details for each API
+            for detail in api_result.get("details", []):
+                name = detail.get("name", "Unknown")
+                status = detail.get("status_code")
+                time_ms = detail.get("response_time_ms")
+                error = detail.get("error")
+                resp_data = detail.get("response_data")
+                
+                if detail.get("reachable") and status == 200:
+                    # Show brief response data for some endpoints
+                    extra = ""
+                    if resp_data:
+                        if "plates" in resp_data:
+                            extra = f" -> plates: {resp_data['plates']}"
+                        elif "wheel_count" in resp_data:
+                            extra = f" -> wheels: {resp_data['wheel_count']}"
+                        elif "detections" in resp_data and "color" in str(resp_data):
+                            colors = [d.get("color") for d in resp_data.get("detections", []) if d.get("color")]
+                            if colors:
+                                extra = f" -> colors: {colors}"
+                        elif "volume" in resp_data:
+                            extra = f" -> volume: {resp_data['volume']} m³"
+                    print(f"  ✅ {name}: HTTP {status} ({time_ms}ms){extra}")
+                elif status:
+                    print(f"  ❌ {name}: HTTP {status} - {error}")
+                else:
+                    print(f"  ⚠️ {name}: {error}")
+            
+            if api_result["success"]:
+                print("  ✅ All external APIs reachable (HTTP 200)")
             else:
-                print("  ✅ External APIs reachable")
+                print("  ⚠️ Some external APIs failed (app may still work)")
         except Exception as e:
             logger.error(f"API check failed: {e}")
             results.append(CheckResult(name="external_apis", success=False, error=str(e)))

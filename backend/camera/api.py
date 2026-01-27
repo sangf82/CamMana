@@ -188,8 +188,8 @@ async def delete_camera(request: Request, cam_id: str, user: UserSchema = Depend
 # Connect/Disconnect
 @router.post("/{cam_id}/connect")
 async def connect_camera(request: Request, cam_id: str, user: UserSchema = Depends(get_current_user)):
-    if user.role != "admin" and not user.can_manage_cameras:
-        raise HTTPException(status_code=403, detail="Permission denied")
+    # All authenticated users can connect cameras for monitoring
+    # (Camera configuration changes still require admin/can_manage_cameras)
     
     # Proxy to master if in client mode
     if is_client_mode():
@@ -245,8 +245,7 @@ async def connect_camera(request: Request, cam_id: str, user: UserSchema = Depen
 
 @router.post("/{cam_id}/disconnect")
 async def disconnect_camera(request: Request, cam_id: str, user: UserSchema = Depends(get_current_user)):
-    if user.role != "admin" and not user.can_manage_cameras:
-        raise HTTPException(status_code=403, detail="Permission denied")
+    # All authenticated users can disconnect cameras for monitoring cleanup
     
     # Proxy to master if in client mode
     if is_client_mode():

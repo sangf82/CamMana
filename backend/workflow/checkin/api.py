@@ -393,12 +393,12 @@ async def capture_and_process(
 
             if side_img and top_img:
                 from backend.model_process.control import orchestrator
+                from backend.model_process.utils.background import get_background_for_camera
 
                 folder = Path(result.folder_path)
 
-                # Paths for calibration and backgrounds
+                # Paths for calibration
                 calib_dir = settings.calibration_dir
-                bg_dir = settings.backgrounds_dir
 
                 side_cam_id = side_img.get("cam_id", "default")
                 top_cam_id = top_img.get("cam_id", "default")
@@ -412,11 +412,8 @@ async def capture_and_process(
                 if not calib_top.exists():
                     calib_top = calib_dir / "calib_topdown.json"
 
-                # 2. Resolve Background Image
-                bg_image = bg_dir / f"bg_{top_cam_id}.jpg"
-                if not bg_image.exists():
-                    bgs = list(bg_dir.glob("*.jpg"))
-                    bg_image = bgs[0] if bgs else None
+                # 2. Resolve Background Image from shared backgrounds folder
+                bg_image = get_background_for_camera(top_cam_id)
 
                 if calib_side.exists() and calib_top.exists() and bg_image:
                     print(

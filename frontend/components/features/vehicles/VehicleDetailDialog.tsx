@@ -284,19 +284,19 @@ export default function VehicleDetailDialog({
 
              {/* Admin Verification Code Section (Conditional) */}
              {(!editingItem?.id || editingItem.id === 0) && currentUser?.can_add_vehicles && (
-                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="bg-amber-500/10 dark:bg-amber-500/5 border border-amber-500/30 dark:border-amber-500/20 rounded-lg p-4 animate-in fade-in slide-in-from-top-2 duration-300">
                     <div className="space-y-2">
-                        <label className="text-xs font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2">
+                        <label className="text-xs font-bold text-amber-600 dark:text-amber-500 uppercase tracking-widest flex items-center gap-2">
                             <ShieldCheck size={14} /> Xác nhận từ Admin
                         </label>
                         <input 
-                            className="w-full p-2.5 bg-zinc-950/50 border border-amber-500/30 rounded focus:border-amber-500 focus:ring-0 outline-none font-sans text-md placeholder:text-zinc-700"
+                            className="w-full p-2.5 bg-background border border-amber-500/40 dark:border-amber-500/30 rounded focus:border-amber-500 focus:ring-0 outline-none font-sans text-md placeholder:text-muted-foreground"
                             value={adminCode}
                             onChange={e => setAdminCode(e.target.value)}
                             required
                             placeholder="Nhập mã xác nhận do Admin cấp để thêm xe"
                         />
-                        <p className="text-[10px] text-amber-500/60 italic">Bạn cần mã này để hoàn tất đăng ký phương tiện mới.</p>
+                        <p className="text-[10px] text-amber-600/70 dark:text-amber-500/60 italic">Bạn cần mã này để hoàn tất đăng ký phương tiện mới.</p>
                     </div>
                 </div>
              )}

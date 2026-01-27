@@ -21,12 +21,12 @@ dependencies = [
     "ultralytics>=8.3.250",
     "httpx>=0.28.1",
     "apscheduler>=3.11.2",
+    "aiofiles>=24.0.0",
     "fpdf2>=2.8.5",
     "python-jose>=3.5.0",
     "bcrypt==3.2.0",
     "passlib>=1.7.4",
     "zeroconf>=0.148.0",
-    "onnxruntime>=1.23.2",
 ]
 
 [project.optional-dependencies]

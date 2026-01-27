@@ -140,6 +140,11 @@ def initialize_backend():
         scheduler.start()
         print("[cam_mana] Daily report scheduler started (at 22:00)")
         
+        # Start Background Image Scheduler (every 1 hour)
+        from backend.model_process.utils.background import background_manager
+        background_manager.start_scheduler()
+        print("[cam_mana] Background image scheduler started (every 1 hour)")
+        
         # Initialize History logic (daily rotation & cleanup)
         from backend.data_process.history.logic import HistoryLogic
         HistoryLogic()

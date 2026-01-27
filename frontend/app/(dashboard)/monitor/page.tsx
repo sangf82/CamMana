@@ -78,6 +78,9 @@ function MonitorPageContent() {
   const [viewMode, setViewMode] = useState<"focus" | "grid">("grid");
   const [currentGate, setCurrentGate] = useState<string>("");
   const [isAutoDetect, setIsAutoDetect] = useState(false);
+  
+  // Track previous gate for disconnect logic
+  const previousGateRef = React.useRef<string>("");
   const [selectedCameraIndex, setSelectedCameraIndex] = useState(0);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showPtzPanel, setShowPtzPanel] = useState(false);
@@ -90,6 +93,13 @@ function MonitorPageContent() {
   const [activeCameras, setActiveCameras] = useState<Record<string, string>>(
     {},
   );
+  const activeCamerasRef = React.useRef<Record<string, string>>({});
+  
+  // Keep ref in sync with state
+  React.useEffect(() => {
+    activeCamerasRef.current = activeCameras;
+  }, [activeCameras]);
+  
   const [connectingCameras, setConnectingCameras] = useState<Set<string>>(
     new Set(),
   );
@@ -172,6 +182,69 @@ function MonitorPageContent() {
     [],
   );
 
+  // Disconnect all cameras for a specific gate
+  const disconnectCamerasForGate = useCallback(async (gateName: string) => {
+    if (!gateName) return;
+    
+    const camerasToDisconnect = cameras.filter((c) => c.location === gateName);
+    const token = localStorage.getItem('token');
+    
+    // Get current active cameras from ref to avoid stale closure
+    const currentActive = activeCamerasRef.current;
+    
+    for (const cam of camerasToDisconnect) {
+      if (currentActive[cam.id]) {
+        try {
+          await fetch(`/api/cameras/${cam.id}/disconnect`, {
+            method: "POST",
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+        } catch (e) {
+          console.error(`Failed to disconnect ${cam.name}`, e);
+        }
+      }
+    }
+    
+    // Clear active cameras state for disconnected cameras
+    setActiveCameras((prev) => {
+      const next = { ...prev };
+      for (const cam of camerasToDisconnect) {
+        delete next[cam.id];
+      }
+      return next;
+    });
+  }, [cameras]); // Only depends on cameras list
+
+  // Handle gate change - disconnect old cameras before connecting new ones
+  // Use ref to prevent re-running on every activeCameras change
+  const isGateChangeInProgress = React.useRef(false);
+  
+  useEffect(() => {
+    const handleGateChange = async () => {
+      const previousGate = previousGateRef.current;
+      
+      // Skip if same gate or already processing a gate change
+      if (previousGate === currentGate || isGateChangeInProgress.current) {
+        previousGateRef.current = currentGate;
+        return;
+      }
+      
+      // If gate changed and there was a previous gate, disconnect its cameras
+      if (previousGate) {
+        isGateChangeInProgress.current = true;
+        addLog(`Ngắt kết nối cameras từ ${previousGate}...`, "info");
+        await disconnectCamerasForGate(previousGate);
+        addLog(`✓ Đã ngắt kết nối cameras từ ${previousGate}`, "success");
+        isGateChangeInProgress.current = false;
+      }
+      
+      // Update the previous gate ref
+      previousGateRef.current = currentGate;
+    };
+    
+    handleGateChange();
+  }, [currentGate]); // Only depend on currentGate, not the functions
+
   // 1. Load Data & Sync Filter
   useEffect(() => {
     const loadCameras = async () => {
@@ -253,54 +326,82 @@ function MonitorPageContent() {
   }, [filteredCameras, hasFunction, frontCamera, topCamera]);
 
 
+  // Track if initial connection for this gate has been done
+  const connectedGatesRef = React.useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (!currentGate || filteredCameras.length === 0) return;
+    
+    // Skip if already connected cameras for this gate
+    if (connectedGatesRef.current.has(currentGate)) return;
 
-    const connectAndStream = async (cam: Camera) => {
-      if (activeCameras[cam.id]) return;
+    // Add a small delay to ensure disconnect completes first
+    const timeoutId = setTimeout(() => {
+      // Mark this gate as connected
+      connectedGatesRef.current.add(currentGate);
+      
+      const connectAndStream = async (cam: Camera) => {
+        // Check if already active using current state
+        setActiveCameras((prevActive) => {
+          if (prevActive[cam.id]) return prevActive; // Already connected, skip
+          
+          // Start connection process
+          setConnectingCameras((prev) => {
+            if (prev.has(cam.id)) return prev;
+            const next = new Set(prev);
+            next.add(cam.id);
+            return next;
+          });
 
-      setConnectingCameras((prev) => {
-        if (prev.has(cam.id)) return prev;
-        const next = new Set(prev);
-        next.add(cam.id);
-        return next;
+          (async () => {
+            try {
+              addLog(`Đang kết nối ${cam.name}...`, "info");
+              const token = localStorage.getItem('token');
+              const connectRes = await fetch(`/api/cameras/${cam.id}/connect`, {
+                method: "POST",
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+
+              if (connectRes.ok) {
+                const data = await connectRes.json();
+                if (data.success) {
+                  setActiveCameras((prev) => ({ ...prev, [cam.id]: cam.id }));
+                  addLog(`✓ Đã kết nối ${cam.name}`, "success");
+                } else {
+                  addLog(`✗ Lỗi kết nối ${cam.name}: ${data.details?.error || 'Unknown'}`, "error");
+                }
+              }
+            } catch (e) {
+              addLog(`✗ Lỗi kết nối ${cam.name}`, "error");
+            } finally {
+              setConnectingCameras((prev) => {
+                const next = new Set(prev);
+                next.delete(cam.id);
+                return next;
+              });
+            }
+          })();
+          
+          return prevActive; // Return unchanged, actual update happens in async
+        });
+      };
+
+      filteredCameras.forEach((cam, index) => {
+        setTimeout(() => connectAndStream(cam), index * 500);
       });
+    }, 300); // Wait 300ms for disconnect to complete
 
-      try {
-        addLog(`Đang kết nối ${cam.name}...`, "info");
-        const token = localStorage.getItem('token');
-        const connectRes = await fetch(`/api/cameras/${cam.id}/connect`, {
-          method: "POST",
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (connectRes.ok) {
-          const data = await connectRes.json();
-          // Backend connects and returns success. activeId is cam.id or handled internally.
-          // data.details has connection info
-          if (data.success) {
-            setActiveCameras((prev) => ({ ...prev, [cam.id]: cam.id }));
-            addLog(`✓ Đã kết nối ${cam.name}`, "success");
-            // Stream start handled by backend /stream endpoint lazy loading or implicitly started
-          } else {
-             addLog(`✗ Lỗi kết nối ${cam.name}: ${data.details?.error || 'Unknown'}`, "error");
-          }
-        }
-      } catch (e) {
-        addLog(`✗ Lỗi kết nối ${cam.name}`, "error");
-      } finally {
-        setConnectingCameras((prev) => {
-          const next = new Set(prev);
-          next.delete(cam.id);
-          return next;
-        });
-      }
-    };
-
-    filteredCameras.forEach((cam, index) => {
-      setTimeout(() => connectAndStream(cam), index * 500);
-    });
-  }, [currentGate, filteredCameras, activeCameras, addLog]);
+    return () => clearTimeout(timeoutId);
+  }, [currentGate, filteredCameras, addLog]);
+  
+  // Clear connected gate tracking when gate changes
+  useEffect(() => {
+    // Remove the old gate from tracked set when switching
+    const previousGate = previousGateRef.current;
+    if (previousGate && previousGate !== currentGate) {
+      connectedGatesRef.current.delete(previousGate);
+    }
+  }, [currentGate]);
 
   const getStreamUrl = (cam: Camera) => {
     const activeId = activeCameras[cam.id];
@@ -792,38 +893,39 @@ function MonitorPageContent() {
 
 
         {/* 2. Comparison */}
-        <div className="flex-1 flex gap-8">
-          <div className="flex-1 space-y-3">
+        <div className="flex-1 flex gap-4 lg:gap-8">
+          <div className="flex-1 space-y-3 min-w-0">
             <h4 className="text-xs font-bold text-[#f59e0b] uppercase tracking-wider flex items-center gap-2">
               <div
                 className={`w-2 h-2 rounded-full ${currentDetection ? "bg-[#f59e0b] animate-pulse" : "bg-muted"}`}
               />
               Kết quả AI
             </h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-muted/30 p-2 rounded border border-border/50">
+            <div className="grid grid-cols-2 gap-2 lg:gap-4">
+              <div className="bg-muted/30 p-2 rounded border border-border/50 min-w-0">
                 <span className="block text-xs text-muted-foreground mb-1">
                   Biển số
                 </span>
                 <span
-                  className={`text-xl font-mono font-bold tracking-widest ${currentDetection?.plate_number ? "text-white" : "text-muted-foreground"}`}
+                  className={`block text-sm sm:text-base lg:text-xl font-mono font-bold tracking-wide lg:tracking-widest truncate ${currentDetection?.plate_number ? "text-foreground" : "text-muted-foreground"}`}
+                  title={currentDetection?.plate_number || "---"}
                 >
                   {currentDetection?.plate_number || "---"}
                 </span>
               </div>
-              <div className="bg-muted/30 p-2 rounded border border-border/50">
+              <div className="bg-muted/30 p-2 rounded border border-border/50 min-w-0">
                 <span className="block text-xs text-muted-foreground mb-1">
                   Thể tích
                 </span>
                 {(() => {
                    const vol = currentDetection?.volume;
-                   if (!vol) return <span className="text-xl font-mono font-bold tracking-widest text-muted-foreground">---</span>;
+                   if (!vol) return <span className="text-sm sm:text-base lg:text-xl font-mono font-bold tracking-wide lg:tracking-widest text-muted-foreground">---</span>;
                    
                    const stdVol = parseFloat(currentDetection.registered_info?.standard_volume || "");
                    const histVol = currentDetection.history_volume;
                    const baseline = !isNaN(stdVol) ? stdVol : (histVol || null);
                    
-                   let colorClass = "text-white";
+                   let colorClass = "text-foreground";
                    if (baseline) {
                        const diff = Math.abs(vol - baseline);
                        const tolerance = baseline * 0.05;
@@ -831,36 +933,36 @@ function MonitorPageContent() {
                    }
                    
                    return (
-                     <span className={`text-xl font-mono font-bold tracking-widest ${colorClass}`}>
+                     <span className={`block text-sm sm:text-base lg:text-xl font-mono font-bold tracking-wide lg:tracking-widest truncate ${colorClass}`}>
                        {vol} m³
                      </span>
                    );
                 })()}
               </div>
-              <div className="flex items-center gap-2">
-                <Palette fontSize="small" className="text-muted-foreground" />
-                <div>
+              <div className="flex items-center gap-2 min-w-0">
+                <Palette fontSize="small" className="text-muted-foreground flex-shrink-0" />
+                <div className="min-w-0">
                   <span className="block text-[10px] text-muted-foreground">
                     Màu xe
                   </span>
                   <span
-                    className={`text-sm font-medium ${currentDetection?.color ? "text-foreground" : "text-muted-foreground"}`}
+                    className={`block text-xs sm:text-sm font-medium truncate ${currentDetection?.color ? "text-foreground" : "text-muted-foreground"}`}
                   >
                     {currentDetection?.color || "---"}
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <TireRepair
                   fontSize="small"
-                  className="text-muted-foreground"
+                  className="text-muted-foreground flex-shrink-0"
                 />
-                <div>
+                <div className="min-w-0">
                   <span className="block text-[10px] text-muted-foreground">
                     Số bánh
                   </span>
                   <span
-                    className={`text-sm font-medium ${currentDetection?.wheel_count ? "text-foreground" : "text-muted-foreground"}`}
+                    className={`block text-xs sm:text-sm font-medium truncate ${currentDetection?.wheel_count ? "text-foreground" : "text-muted-foreground"}`}
                   >
                     {currentDetection?.wheel_count || "---"}
                   </span>
@@ -868,9 +970,9 @@ function MonitorPageContent() {
               </div>
             </div>
           </div>
-          <div className="w-px bg-border my-2" />
+          <div className="w-px bg-border my-2 flex-shrink-0" />
           <div
-            className={`flex-1 space-y-3 ${!currentDetection?.matched ? "opacity-50" : ""}`}
+            className={`flex-1 space-y-3 min-w-0 ${!currentDetection?.matched ? "opacity-50" : ""}`}
           >
             <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               {currentDetection?.matched ? (
@@ -925,7 +1027,7 @@ function MonitorPageContent() {
                 <div className="p-3 border border-dashed border-border rounded bg-muted/10 text-center text-sm text-muted-foreground">
                   {currentDetection
                     ? "Xe không có trong danh sách"
-                    : "Chờ xe vào cổng..."}
+                    : "Chờ kết quả AI..."}
                 </div>
                 {currentDetection?.history_volume && (
                     <div className="p-2 bg-muted/20 rounded border border-border/50">
@@ -954,22 +1056,22 @@ function MonitorPageContent() {
           <button
             onClick={handleConfirm}
             disabled={!currentDetection}
-            className={`flex-1 font-medium rounded shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95 ${
+            className={`flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 border ${
               currentDetection
-                ? "bg-green-600 hover:bg-green-500 text-white shadow-green-900/20"
-                : "bg-muted text-muted-foreground cursor-not-allowed"
+                ? "bg-green-600 hover:bg-green-500 text-white border-green-500 shadow-lg shadow-green-900/20"
+                : "bg-muted text-muted-foreground border-border cursor-not-allowed"
             }`}
           >
-            <CheckCircle />
+            <CheckCircle fontSize="small" />
             Xác nhận
           </button>
           <button
             onClick={openEditModal}
             disabled={!currentDetection}
-            className={`flex-1 font-medium rounded flex items-center justify-center gap-2 transition-colors ${
+            className={`flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 border ${
               currentDetection
-                ? "bg-secondary hover:bg-muted border border-border text-foreground"
-                : "bg-muted text-muted-foreground cursor-not-allowed"
+                ? "bg-amber-600 hover:bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-900/20"
+                : "bg-muted text-muted-foreground border-border cursor-not-allowed"
             }`}
           >
             <Edit fontSize="small" />
@@ -978,10 +1080,10 @@ function MonitorPageContent() {
           <button
             onClick={handleReject}
             disabled={!currentDetection}
-            className={`flex-1 font-medium rounded flex items-center justify-center gap-2 transition-colors ${
+            className={`flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 border ${
               currentDetection
-                ? "bg-red-900/30 hover:bg-red-900/50 border border-red-900 text-red-400"
-                : "bg-muted text-muted-foreground cursor-not-allowed"
+                ? "bg-red-600 hover:bg-red-500 text-white border-red-500 shadow-lg shadow-red-900/20"
+                : "bg-muted text-muted-foreground border-border cursor-not-allowed"
             }`}
           >
             <Cancel fontSize="small" />

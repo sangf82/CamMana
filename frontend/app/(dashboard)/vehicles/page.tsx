@@ -183,50 +183,59 @@ export default function VehiclesPage() {
     });
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (filteredData.length === 0) {
       toast.error('Không có dữ liệu để xuất')
       return
     }
 
-    const headers = [
-      'Biển số', 
-      'Loại xe', 
-      'Màu xe', 
-      'Số trục/bánh', 
-      'Kích thước thùng', 
-      'Thể tích (m3)', 
-      'Nhà thầu', 
-      'Ngày ĐK'
-    ]
-
-    const rows = filteredData.map(item => [
-      item.plate,
-      item.truckModel,
-      item.color,
-      `"${(item.axles || '').replace(/"/g, '""')}"`,
-      item.standardVolume,
-      `"${(item.contractor || '').replace(/"/g, '""')}"`,
-      item.registrationDate
-    ])
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n')
-
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    
-    link.setAttribute('href', url)
-    link.setAttribute('download', `Danh_sach_xe_dang_ky.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    
-    toast.success('Đã tải xuống danh sách xe')
+    try {
+      const token = localStorage.getItem('token');
+      
+      // Try to save directly to Downloads folder (desktop app mode)
+      const saveResponse = await fetch('/api/registered_cars/export/excel/save', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (saveResponse.ok) {
+        const result = await saveResponse.json();
+        toast.success(`Đã lưu vào: ${result.file_path}`);
+        return;
+      }
+      
+      // Check if no data on backend
+      if (saveResponse.status === 404) {
+        toast.error("Không có dữ liệu để xuất");
+        return;
+      }
+      
+      // Fallback to browser download if save fails
+      const response = await fetch('/api/registered_cars/export/excel', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.status === 404) {
+        toast.error("Không có dữ liệu để xuất");
+        return;
+      }
+      
+      if (!response.ok) throw new Error('Export failed');
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'Danh_sach_xe_dang_ky.csv';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('Đã tải xuống danh sách xe');
+    } catch (e) {
+      console.error('Export Error:', e);
+      toast.error('Lỗi khi xuất file');
+    }
   }
 
   const handleImport = (importedData: any[]) => {

@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useState } from "react";
 import {
   EventNote,
   ToggleOn,
@@ -10,6 +10,7 @@ import {
   ArrowBack,
   ArrowForward,
   Close,
+  Speed,
 } from "@mui/icons-material";
 import { toast } from "sonner";
 
@@ -43,6 +44,10 @@ export default function EventLog({
   onClosePtz,
 }: EventLogProps) {
   const [activeKey, setActiveKey] = React.useState<string | null>(null);
+  const [ptzSpeed, setPtzSpeed] = useState(50); // Speed from 1-100, default 50%
+
+  // Convert percentage to actual speed (0.1 - 1.0)
+  const getActualSpeed = useCallback(() => ptzSpeed / 100, [ptzSpeed]);
 
   const sendPtzCommand = useCallback(async (action: string) => {
     if (!activeMainCameraId) {
@@ -57,7 +62,7 @@ export default function EventLog({
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ speed: 0.5 }),
+        body: JSON.stringify({ speed: getActualSpeed() }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -71,7 +76,7 @@ export default function EventLog({
     } catch (e) {
       toast.error("Lỗi kết nối PTZ");
     }
-  }, [activeMainCameraId]);
+  }, [activeMainCameraId, getActualSpeed]);
 
   const stopPtz = useCallback(async () => {
     if (!activeMainCameraId) return;
@@ -220,8 +225,42 @@ export default function EventLog({
              </div>
           </div>
 
-          {/* Keyboard hints - moved to bottom */}
-          <div className="bg-muted/30 rounded-lg p-3 text-center mt-4">
+          {/* Speed Control Slider */}
+          <div className="bg-muted/30 rounded-lg p-3 mt-4">
+            <div className="flex items-center gap-3">
+              <Speed className="text-[#f59e0b] text-sm flex-shrink-0" />
+              <div className="flex-1 relative h-6 flex items-center">
+                {/* Track background */}
+                <div className="absolute inset-x-0 h-1 bg-muted-foreground/30 rounded-full" />
+                {/* Filled track */}
+                <div 
+                  className="absolute left-0 h-1 bg-[#f59e0b] rounded-full transition-all"
+                  style={{ width: `${((ptzSpeed - 10) / 90) * 100}%` }}
+                />
+                {/* Range input */}
+                <input
+                  type="range"
+                  min="10"
+                  max="100"
+                  step="10"
+                  value={ptzSpeed}
+                  onChange={(e) => setPtzSpeed(Number(e.target.value))}
+                  className="absolute inset-0 w-full opacity-0 cursor-pointer z-10"
+                />
+                {/* Custom thumb */}
+                <div 
+                  className="absolute w-4 h-4 bg-[#f59e0b] rounded-full shadow-lg border-2 border-background cursor-pointer pointer-events-none transition-all hover:scale-110"
+                  style={{ left: `calc(${((ptzSpeed - 10) / 90) * 100}% - 8px)` }}
+                />
+              </div>
+              <div className="bg-[#f59e0b] text-black text-xs font-bold px-2 py-1 rounded-md min-w-[42px] text-center flex-shrink-0">
+                {ptzSpeed}%
+              </div>
+            </div>
+          </div>
+
+          {/* Keyboard hints */}
+          <div className="bg-muted/30 rounded-lg p-2 text-center mt-2">
             <p className="text-[10px] text-muted-foreground">
               <span className="font-bold">Bàn phím:</span> Sử dụng phím mũi tên ← ↑ → ↓
             </p>

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { VideocamOff, Refresh } from '@mui/icons-material'
 
 interface VideoPlayerProps {
@@ -25,6 +25,30 @@ export default function VideoPlayer({
   const [hasError, setHasError] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [streamInfo, setStreamInfo] = useState<{resolution: string, fps: number} | null>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Reset state when src changes
+  useEffect(() => {
+    setHasError(false)
+    setIsLoading(true)
+    
+    // Set a timeout for loading - if stream doesn't load in 10s, show error
+    if (src) {
+      loadingTimeoutRef.current = setTimeout(() => {
+        if (isLoading) {
+          setHasError(true)
+          setIsLoading(false)
+        }
+      }, 10000)
+    }
+    
+    return () => {
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current)
+      }
+    }
+  }, [src])
 
   // Consolidating polling into the parent page to prevent connection flooding
   // Stream info is now passed down or fetched centrally
@@ -34,6 +58,26 @@ export default function VideoPlayer({
     e.stopPropagation()
     setHasError(false)
     setIsLoading(true)
+    // Force reload the image by updating src
+    if (imgRef.current && src) {
+      const newSrc = src.includes('?') ? `${src}&t=${Date.now()}` : `${src}?t=${Date.now()}`
+      imgRef.current.src = newSrc
+    }
+  }, [src])
+
+  const handleLoad = useCallback(() => {
+    setIsLoading(false)
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current)
+    }
+  }, [])
+
+  const handleError = useCallback(() => {
+    setHasError(true)
+    setIsLoading(false)
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current)
+    }
   }, [])
 
   const displayLabel = camCode || label
@@ -47,11 +91,12 @@ export default function VideoPlayer({
       {!hasError && src && (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img 
+          ref={imgRef}
           src={src}
           alt={displayLabel}
           className={`w-full h-full object-cover transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
-          onLoad={() => setIsLoading(false)}
-          onError={() => { setHasError(true); setIsLoading(false); }}
+          onLoad={handleLoad}
+          onError={handleError}
         />
       )}
 

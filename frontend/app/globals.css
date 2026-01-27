@@ -338,3 +338,18 @@ input[type="date"] {
   animation: icon-pulse 2s ease-in-out infinite;
 }
 
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}
+
+/* Smooth scrolling - use data-scroll-behavior on html element for Next.js */
+* {
+  scroll-behavior: smooth;
+}
+

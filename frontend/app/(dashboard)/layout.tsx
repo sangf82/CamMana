@@ -23,7 +23,7 @@ export default function DashboardLayout({
       <Suspense fallback={<div className="w-64 bg-sidebar" />}>
         <Sidebar />
       </Suspense>
-      <main className="flex-1 flex flex-col overflow-hidden bg-muted/30 relative">
+      <main className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden bg-muted/30 relative scroll-smooth">
         {children}
       </main>
     </div>

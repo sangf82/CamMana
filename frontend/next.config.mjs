@@ -3,6 +3,9 @@ const nextConfig = {
   // Asset prefix for standalone builds
   assetPrefix: process.env.NODE_ENV === 'production' ? '' : undefined,
   
+  // Allow cross-origin requests from localhost variants in dev
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  
   // Disable image optimization for static export
   images: {
     unoptimized: true,
