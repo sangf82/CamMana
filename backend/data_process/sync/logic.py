@@ -133,6 +133,14 @@ class SyncLogic:
                 if plate and time_in:
                     self.history_logic.update_record_by_plate_time(plate, time_in, data)
                     return True
+            elif payload.action == "update_folder_path":
+                # Update folder_path for a specific record (used after file sync)
+                record_id = data.get("id")
+                folder_path = data.get("folder_path")
+                if record_id and folder_path:
+                    self.history_logic.update_record(record_id, {"folder_path": folder_path})
+                    logger.info(f"Updated folder_path for record {record_id}")
+                    return True
         elif payload.type == "registered_car":
             from backend.data_process.register_car.logic import RegisteredCarLogic
             reg_logic = RegisteredCarLogic()

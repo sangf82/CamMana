@@ -1,9 +1,14 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
+import logging
+
 from .logic import LocationLogic
 from backend.api.user import get_current_user
 from backend.schemas import User as UserSchema
+from backend.data_process.sync.proxy import is_client_mode, proxy_get, proxy_post, proxy_put, proxy_delete
+
+logger = logging.getLogger(__name__)
 
 class LocationBase(BaseModel):
     name: Optional[str] = None
@@ -26,8 +31,19 @@ class LocationResponse(BaseModel):
 router = APIRouter(prefix="/api/locations", tags=["Locations"])
 logic = LocationLogic()
 
-@router.get("", response_model=List[LocationResponse])
-def get_locations(user: UserSchema = Depends(get_current_user)):
+@router.get("")
+async def get_locations(user: UserSchema = Depends(get_current_user)):
+    """Get all locations. Proxies to Master when in Client mode."""
+    if is_client_mode():
+        logger.info("Client mode: Fetching locations from master")
+        result = await proxy_get("/api/locations")
+        if result is not None:
+            # Filter by user permissions
+            if user.role == "admin" or user.allowed_gates == "*":
+                return result
+            allowed = [g.strip() for g in user.allowed_gates.split(',')]
+            return [l for l in result if l.get('name') in allowed]
+    
     all_locs = logic.get_locations()
     if user.role == "admin" or user.allowed_gates == "*":
         return all_locs
@@ -35,16 +51,31 @@ def get_locations(user: UserSchema = Depends(get_current_user)):
     allowed = [g.strip() for g in user.allowed_gates.split(',')]
     return [l for l in all_locs if l['name'] in allowed]
 
-@router.post("", response_model=LocationResponse)
-def add_location(loc: LocationBase):
+@router.post("")
+async def add_location(loc: LocationBase):
+    """Add a new location. Proxies to Master when in Client mode."""
+    if is_client_mode():
+        logger.info("Client mode: Adding location via master")
+        result = await proxy_post("/api/locations", loc.dict())
+        if result is not None:
+            return result
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+    
     try:
-        # Pass dict, Logic handles key mapping
         return logic.add_location(loc.dict())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.put("/{loc_id}", response_model=LocationResponse)
-def update_location(loc_id: str, loc: LocationUpdate):
+@router.put("/{loc_id}")
+async def update_location(loc_id: str, loc: LocationUpdate):
+    """Update a location. Proxies to Master when in Client mode."""
+    if is_client_mode():
+        logger.info(f"Client mode: Updating location {loc_id} via master")
+        result = await proxy_put(f"/api/locations/{loc_id}", loc.dict(exclude_unset=True))
+        if result is not None:
+            return result
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+    
     try:
         updated = logic.update_location(loc_id, loc.dict(exclude_unset=True))
         if not updated:
@@ -54,8 +85,17 @@ def update_location(loc_id: str, loc: LocationUpdate):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.delete("/{loc_id}")
-def delete_location(loc_id: str):
+async def delete_location(loc_id: str):
+    """Delete a location. Proxies to Master when in Client mode."""
+    if is_client_mode():
+        logger.info(f"Client mode: Deleting location {loc_id} via master")
+        success = await proxy_delete(f"/api/locations/{loc_id}")
+        if success:
+            return {"message": "Deleted successfully"}
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+    
     success = logic.delete_location(loc_id)
     if not success:
          raise HTTPException(status_code=404, detail="Location not found")
     return {"message": "Deleted successfully"}
+

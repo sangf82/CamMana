@@ -14,6 +14,7 @@ from backend.model_process.control import orchestrator
 from backend.data_process.history.logic import HistoryLogic
 from backend.data_process.register_car.logic import RegisteredCarLogic
 from backend.workflow.config import get_location_strategy, LocationTag
+from backend.data_process.sync.proxy import is_client_mode, upload_folder_to_master
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,42 @@ class CheckInService:
             status_file = folder_path / "checkin_status.json"
             with open(status_file, "w", encoding="utf-8") as f:
                 json.dump(status_data, f, indent=4)
+            
+            # --- SYNC FOLDER TO MASTER (if in Client mode) ---
+            if is_client_mode():
+                try:
+                    logger.info(f"[CheckIn] Syncing folder to Master: {folder_path}")
+                    sync_result = await upload_folder_to_master(folder_path)
+                    if sync_result and sync_result.get("success"):
+                        master_folder_path = sync_result.get("folder_path")
+                        logger.info(f"[CheckIn] Folder synced to Master: {master_folder_path}")
+                        
+                        # Update the synced record's folder_path on Master
+                        from backend.data_process.sync.proxy import get_master_url
+                        from backend.schemas import SyncPayload
+                        import httpx
+                        
+                        master_url = get_master_url()
+                        if master_url:
+                            payload = SyncPayload(
+                                type="history",
+                                action="update_folder_path",
+                                data={
+                                    "id": session_id,
+                                    "folder_path": master_folder_path
+                                },
+                                timestamp=datetime.now().isoformat()
+                            )
+                            async with httpx.AsyncClient(timeout=5.0) as client:
+                                await client.post(
+                                    f"{master_url.rstrip('/')}/api/sync/receive",
+                                    json=payload.model_dump(),
+                                    headers={"Content-Type": "application/json"}
+                                )
+                    else:
+                        logger.warning("[CheckIn] Failed to sync folder to Master")
+                except Exception as e:
+                    logger.error(f"[CheckIn] File sync error: {e}")
             
             return CheckInResult(
                 uuid=session_id,

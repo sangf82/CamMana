@@ -12,6 +12,7 @@ from .connection import CameraConnection, CameraConnectionConfig
 from .capture import VideoStreamer
 from .control import PTZController
 from backend.api._shared import cameras as active_cameras
+from backend.data_process.sync.proxy import is_client_mode, proxy_get, proxy_post, proxy_put, proxy_delete
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +56,16 @@ class CameraResponse(CameraBase):
 class PTZRequest(BaseModel):
     speed: float = 0.5
     
-@router.get("", response_model=List[CameraResponse])
-def get_cameras(user: UserSchema = Depends(get_current_user)):
+@router.get("")
+async def get_cameras(user: UserSchema = Depends(get_current_user)):
+    """Get all cameras. Proxies to Master when in Client mode."""
+    # Proxy to master if in client mode
+    if is_client_mode():
+        logger.info("Client mode: Fetching cameras from master")
+        result = await proxy_get("/api/cameras")
+        if result is not None:
+            return result
+    
     all_cameras = logic.get_cameras()
     
     # Get functions mapping
@@ -98,10 +107,20 @@ def get_cameras(user: UserSchema = Depends(get_current_user)):
     return enriched
 
 
-@router.post("", response_model=CameraResponse)
-def add_camera(cam: CameraBase, user: UserSchema = Depends(get_current_user)):
+@router.post("")
+async def add_camera(cam: CameraBase, user: UserSchema = Depends(get_current_user)):
+    """Add a new camera. Proxies to Master when in Client mode."""
     if user.role != "admin" and not user.can_manage_cameras:
         raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Proxy to master if in client mode
+    if is_client_mode():
+        logger.info("Client mode: Adding camera via master")
+        result = await proxy_post("/api/cameras", cam.dict())
+        if result is not None:
+            return result
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+    
     try:
         data = cam.dict()
         if 'status' not in data or not data['status']:
@@ -113,10 +132,20 @@ def add_camera(cam: CameraBase, user: UserSchema = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.put("/{cam_id}", response_model=CameraResponse)
-def update_camera(cam_id: str, cam: CameraUpdate, user: UserSchema = Depends(get_current_user)):
+@router.put("/{cam_id}")
+async def update_camera(cam_id: str, cam: CameraUpdate, user: UserSchema = Depends(get_current_user)):
+    """Update a camera. Proxies to Master when in Client mode."""
     if user.role != "admin" and not user.can_manage_cameras:
         raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Proxy to master if in client mode
+    if is_client_mode():
+        logger.info(f"Client mode: Updating camera {cam_id} via master")
+        result = await proxy_put(f"/api/cameras/{cam_id}", cam.dict(exclude_unset=True))
+        if result is not None:
+            return result
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+    
     updated = logic.update_camera(cam_id, cam.dict(exclude_unset=True))
     if not updated:
         raise HTTPException(status_code=404, detail="Camera not found")
@@ -132,9 +161,19 @@ def update_camera(cam_id: str, cam: CameraUpdate, user: UserSchema = Depends(get
     return {**updated, "status": status}
 
 @router.delete("/{cam_id}")
-def delete_camera(cam_id: str, user: UserSchema = Depends(get_current_user)):
+async def delete_camera(cam_id: str, user: UserSchema = Depends(get_current_user)):
+    """Delete a camera. Proxies to Master when in Client mode."""
     if user.role != "admin" and not user.can_manage_cameras:
         raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Proxy to master if in client mode
+    if is_client_mode():
+        logger.info(f"Client mode: Deleting camera {cam_id} via master")
+        success = await proxy_delete(f"/api/cameras/{cam_id}")
+        if success:
+            return {"message": "Deleted successfully"}
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+    
     if cam_id in active_cameras:
         _disconnect_camera(cam_id)
     success = logic.delete_camera(cam_id)

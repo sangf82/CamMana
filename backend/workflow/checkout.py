@@ -8,6 +8,7 @@ from typing import Optional, Dict
 from backend.model_process.control import orchestrator
 from backend.data_process.history.logic import HistoryLogic
 from backend.data_process.register_car.logic import RegisteredCarLogic
+from backend.data_process.sync.proxy import is_client_mode, upload_folder_to_master
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +191,42 @@ class CheckOutService:
                 update_data["vol_measured"] = str(round(final_volume, 2))
                 
             self.history_logic.update_record(uuid_val, update_data)
+            
+            # --- SYNC FOLDER TO MASTER (if in Client mode) ---
+            if is_client_mode() and folder_path:
+                try:
+                    logger.info(f"[CheckOut] Syncing folder to Master: {folder_path}")
+                    sync_result = await upload_folder_to_master(Path(folder_path) if isinstance(folder_path, str) else folder_path)
+                    if sync_result and sync_result.get("success"):
+                        master_folder_path = sync_result.get("folder_path")
+                        logger.info(f"[CheckOut] Folder synced to Master: {master_folder_path}")
+                        
+                        # Update the synced record's folder_path on Master
+                        from backend.data_process.sync.proxy import get_master_url
+                        from backend.schemas import SyncPayload
+                        import httpx
+                        
+                        master_url = get_master_url()
+                        if master_url:
+                            payload = SyncPayload(
+                                type="history",
+                                action="update_folder_path",
+                                data={
+                                    "id": uuid_val,
+                                    "folder_path": master_folder_path
+                                },
+                                timestamp=datetime.now().isoformat()
+                            )
+                            async with httpx.AsyncClient(timeout=5.0) as client:
+                                await client.post(
+                                    f"{master_url.rstrip('/')}/api/sync/receive",
+                                    json=payload.model_dump(),
+                                    headers={"Content-Type": "application/json"}
+                                )
+                    else:
+                        logger.warning("[CheckOut] Failed to sync folder to Master")
+                except Exception as e:
+                    logger.error(f"[CheckOut] File sync error: {e}")
             
             # Get history volume (vol_measured from entry)
             history_vol = None

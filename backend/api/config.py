@@ -5,6 +5,10 @@ from backend.api.user import get_current_user
 from backend.schemas import User as UserSchema
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
+from backend.data_process.sync.proxy import is_client_mode, proxy_get, proxy_post
+import logging
+
+logger = logging.getLogger(__name__)
 
 config_router = APIRouter(prefix="/api/cameras", tags=["configuration"])
 
@@ -51,8 +55,18 @@ async def get_tag_detection_config(tag: str, user: UserSchema = Depends(get_curr
 
 @config_router.get("/locations")
 async def get_locations_alias(user: UserSchema = Depends(get_current_user)):
-    """Alias for locations list to match frontend expectations"""
+    """Alias for locations list to match frontend expectations. Proxies to Master when in Client mode."""
     try:
+        # Proxy to master if in client mode
+        if is_client_mode():
+            logger.info("Client mode: Fetching locations from master (alias)")
+            result = await proxy_get("/api/cameras/locations")
+            if result is not None:
+                if user.role == "admin" or user.allowed_gates == "*":
+                    return result
+                allowed = [g.strip() for g in user.allowed_gates.split(',')]
+                return [l for l in result if l.get('name') in allowed]
+        
         from backend.data_process.location.logic import LocationLogic
         all_locs = LocationLogic().get_locations()
         
@@ -66,10 +80,18 @@ async def get_locations_alias(user: UserSchema = Depends(get_current_user)):
 
 @config_router.post("/locations")
 async def add_location_alias(loc: dict, user: UserSchema = Depends(get_current_user)):
-    """Alias for adding location to match frontend expectations"""
+    """Alias for adding location to match frontend expectations. Proxies to Master when in Client mode."""
     if user.role != 'admin':
         return JSONResponse(status_code=403, content={"detail": "Permission denied"})
     try:
+        # Proxy to master if in client mode
+        if is_client_mode():
+            logger.info("Client mode: Adding location via master (alias)")
+            result = await proxy_post("/api/cameras/locations", loc)
+            if result is not None:
+                return result
+            return JSONResponse(status_code=503, content={"detail": "Cannot connect to master node"})
+        
         from backend.data_process.location.logic import LocationLogic
         # Use logic directly
         return LocationLogic().add_location(loc)
@@ -78,8 +100,15 @@ async def add_location_alias(loc: dict, user: UserSchema = Depends(get_current_u
 
 @config_router.get("/types")
 async def get_types_alias(user: UserSchema = Depends(get_current_user)):
-    """Alias for camera types list to match frontend expectations"""
+    """Alias for camera types list to match frontend expectations. Proxies to Master when in Client mode."""
     try:
+        # Proxy to master if in client mode
+        if is_client_mode():
+            logger.info("Client mode: Fetching camera types from master (alias)")
+            result = await proxy_get("/api/cameras/types")
+            if result is not None:
+                return result
+        
         from backend.data_process.camera_type.logic import CameraTypeLogic
         return CameraTypeLogic().get_types()
     except Exception as e:
@@ -87,8 +116,15 @@ async def get_types_alias(user: UserSchema = Depends(get_current_user)):
 
 @config_router.get("/saved")
 async def get_saved_cameras_alias(user: UserSchema = Depends(get_current_user)):
-    """Alias for saved cameras list to match frontend expectations"""
+    """Alias for saved cameras list to match frontend expectations. Proxies to Master when in Client mode."""
     try:
+        # Proxy to master if in client mode
+        if is_client_mode():
+            logger.info("Client mode: Fetching saved cameras from master (alias)")
+            result = await proxy_get("/api/cameras/saved")
+            if result is not None:
+                return result
+        
         from backend.camera.logic import CameraLogic
         return CameraLogic().get_cameras()
     except Exception as e:
@@ -114,3 +150,4 @@ async def get_all_tag_configs(user: UserSchema = Depends(get_current_user)):
         return {"success": True, "configs": configs}
     except Exception as e:
         return JSONResponse(status_code=500, content={"detail": str(e)})
+

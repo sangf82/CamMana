@@ -1,6 +1,7 @@
 """FastAPI Backend Server for CamMana"""
 import sys
 import shutil
+from datetime import datetime
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +19,7 @@ from backend.api import (
 )
 from backend.api.user import user_router
 from backend.api.sync import sync_router
+from backend.api.file_sync import file_sync_router
 from backend.data_process.history.api import router as history_router
 from backend.data_process.register_car.api import router as registered_car_router
 from backend.data_process.location.api import router as location_router
@@ -69,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(report_router)
     app.include_router(user_router)
     app.include_router(sync_router)
+    app.include_router(file_sync_router)  # File sync for Client -> Master uploads
     app.include_router(system_router)
     
     # Serve captured car images from car_history folder
