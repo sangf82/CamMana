@@ -173,11 +173,26 @@ def initialize_backend():
         from backend.data_process.location.logic import LocationLogic
         from backend.data_process.camera_type.logic import CameraTypeLogic
         
-        locations = LocationLogic().get_locations()
-        camtypes = CameraTypeLogic().get_types()
-        result = CameraDataSync.full_sync(locations, camtypes)
-        if result['locations'] > 0 or result['types'] > 0:
-            print(f"[cam_mana] Synced cameras: {result['locations']} locations, {result['types']} types")
+        # Sync camera data with locations and camera types
+        from backend.data_process._sync import CameraDataSync
+        from backend.data_process.location.logic import LocationLogic
+        from backend.data_process.camera_type.logic import CameraTypeLogic
+        import threading
+
+        def run_sync():
+            try:
+                locations = LocationLogic().get_locations()
+                camtypes = CameraTypeLogic().get_types()
+                result = CameraDataSync.full_sync(locations, camtypes)
+                if result['locations'] > 0 or result['types'] > 0:
+                    print(f"[cam_mana] Synced cameras: {result['locations']} locations, {result['types']} types")
+            except Exception as e:
+                print(f"[cam_mana] Background sync warning: {e}")
+
+        # Run sync in background thread
+        sync_thread = threading.Thread(target=run_sync, daemon=True)
+        sync_thread.start()
+        print("[cam_mana] Camera sync started in background")
         
     except Exception as e:
         print(f"[cam_mana] Warning: Failed to initialize backend services: {e}")

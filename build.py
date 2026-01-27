@@ -96,7 +96,9 @@ def build():
     # Prepare add-data arguments
     add_data_args = [
         f"--add-data={out_dir};frontend/out",
+        f"--add-data={project_dir / 'assets'};assets",
     ]
+
     
     # Include models directory if exists (backend/model_process/models)
     if models_dir.exists():
@@ -108,8 +110,9 @@ def build():
         "--name=CamMana",
         "--onefile",
         "--windowed",
-        "--icon=NONE",
+        f"--icon={project_dir / 'assets' / 'icon.ico'}",
         "--noconfirm",  # Overwrite without asking
+
         f"--distpath={product_dir}",  # Output exe to product folder
         f"--workpath={build_dir}",     # Build artifacts to product/build
         f"--specpath={build_dir}",     # Spec file to product/build

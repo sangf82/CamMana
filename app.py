@@ -22,137 +22,26 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from PySide6.QtCore import QUrl, Qt, QTimer, Signal, QObject
-from PySide6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtCore import QUrl, Qt, QTimer, Signal, QObject, QRect
+from PySide6.QtWidgets import QApplication, QMainWindow, QSplashScreen
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QPixmap, QColor, QFont
+
+
+def get_base_path():
+    """Get base path for resources"""
+    if getattr(sys, 'frozen', False):
+        return Path(sys._MEIPASS)
+    else:
+        return Path(__file__).parent
+
 
 # Base directory
-BASE_DIR = Path(__file__).parent
+BASE_DIR = get_base_path()
 
-# Loading page HTML
-LOADING_HTML = """
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CamMana - Đang khởi động...</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: white;
-        }
-        
-        .container {
-            text-align: center;
-            padding: 40px;
-        }
-        
-        .logo {
-            font-size: 64px;
-            margin-bottom: 20px;
-            animation: pulse 2s ease-in-out infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.05); opacity: 0.8; }
-        }
-        
-        h1 {
-            font-size: 36px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            background: linear-gradient(90deg, #f59e0b, #fbbf24);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .subtitle {
-            font-size: 18px;
-            color: #94a3b8;
-            margin-bottom: 40px;
-        }
-        
-        .loader {
-            display: flex;
-            justify-content: center;
-            gap: 8px;
-            margin-bottom: 30px;
-        }
-        
-        .loader-dot {
-            width: 12px;
-            height: 12px;
-            background: #f59e0b;
-            border-radius: 50%;
-            animation: bounce 1.4s ease-in-out infinite;
-        }
-        
-        .loader-dot:nth-child(1) { animation-delay: 0s; }
-        .loader-dot:nth-child(2) { animation-delay: 0.2s; }
-        .loader-dot:nth-child(3) { animation-delay: 0.4s; }
-        
-        @keyframes bounce {
-            0%, 80%, 100% { transform: translateY(0); }
-            40% { transform: translateY(-20px); }
-        }
-        
-        .status {
-            font-size: 14px;
-            color: #64748b;
-        }
-        
-        .status-text {
-            display: inline-block;
-            min-width: 200px;
-        }
-        
-        .footer {
-            position: absolute;
-            bottom: 30px;
-            font-size: 12px;
-            color: #475569;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="logo">📷</div>
-        <h1>CamMana</h1>
-        <p class="subtitle">Hệ thống quản lý camera thông minh</p>
-        
-        <div class="loader">
-            <div class="loader-dot"></div>
-            <div class="loader-dot"></div>
-            <div class="loader-dot"></div>
-        </div>
-        
-        <p class="status">
-            <span class="status-text" id="status">Đang khởi động hệ thống...</span>
-        </p>
-    </div>
-    
-    <div class="footer">
-        © 2026 CamMana - Camera Management System
-    </div>
-</body>
-</html>
-"""
+
+
+
 
 
 def clean_pycache():
@@ -172,12 +61,7 @@ def clean_pycache():
         print(f"[cam_mana] Cleaned {count} __pycache__ directories")
 
 
-def get_base_path():
-    """Get base path for resources"""
-    if getattr(sys, 'frozen', False):
-        return Path(sys._MEIPASS)
-    else:
-        return Path(__file__).parent
+
 
 
 def is_production_mode():
@@ -306,12 +190,13 @@ class ServerStarter(QObject):
             )
         
         # Start Next.js dev server
+        # In DEV mode, dump output to console so we can debug "White Screen" issues
         self.frontend_process = subprocess.Popen(
             ["npm", "run", "dev"],
             cwd=str(frontend_dir),
             shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=sys.stdout, 
+            stderr=sys.stderr,
             creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         )
     
@@ -336,7 +221,7 @@ class ServerStarter(QObject):
 class MainWindow(QMainWindow):
     """Main application window"""
     
-    def __init__(self):
+    def __init__(self, url=None):
         super().__init__()
         
         # Set window properties
@@ -344,49 +229,35 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1024, 768)
         self.resize(1400, 900)
         
+        # Center the window
+        screen = QApplication.primaryScreen().geometry()
+        x = (screen.width() - 1400) // 2
+        y = (screen.height() - 900) // 2
+        self.move(x, y)
+        
         # Set application icon
-        icon_path = get_base_path() / "assets" / "icon.ico"
+        icon_path = BASE_DIR / "assets" / "icon.ico"
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
         
-        # Create web view with loading page
+        # Create web view
         self.browser = QWebEngineView()
-        self.browser.setHtml(LOADING_HTML)
         self.setCentralWidget(self.browser)
         
+        if url:
+            self.browser.setUrl(QUrl(url))
+        
         # Set window flags
-        self.setWindowFlags(Qt.Window)
+        self.setWindowFlags(Qt.Window | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint)
+
+
         
-        # Create server starter
-        self.server_starter = ServerStarter(self)
-        self.server_starter.status_changed.connect(self._on_status_changed)
-        self.server_starter.ready.connect(self._on_ready)
-        self.server_starter.error.connect(self._on_error)
-        
-        # Start servers after window is shown
-        QTimer.singleShot(100, self.server_starter.start)
     
-    def _on_status_changed(self, status: str):
-        """Update loading status"""
-        js = f'document.getElementById("status").textContent = "{status}";'
-        self.browser.page().runJavaScript(js)
     
-    def _on_ready(self, url: str):
-        """Navigate to the app when ready"""
-        print(f"[cam_mana] Navigating to {url}")
-        self.browser.setUrl(QUrl(url))
-    
-    def _on_error(self, error: str):
-        """Show error in loading page"""
-        error_html = f'''
-            document.querySelector(".loader").innerHTML = '<div style="font-size: 48px;">❌</div>';
-            document.getElementById("status").innerHTML = '<span style="color: #ef4444;">Lỗi: {error}</span>';
-        '''
-        self.browser.page().runJavaScript(error_html)
     
     def closeEvent(self, event):
         """Cleanup on window close"""
-        self.server_starter.cleanup()
+        # The starter is managed globally now
         event.accept()
 
 
@@ -405,9 +276,56 @@ def main():
     app.setApplicationName("CamMana")
     app.setOrganizationName("CamMana")
     
-    # Create and show main window immediately
-    window = MainWindow()
-    window.show()
+    # Create and show native splash screen
+    pixmap_path = BASE_DIR / "assets" / "icon.png"
+    if pixmap_path.exists():
+        pixmap = QPixmap(str(pixmap_path)).scaled(256, 256, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    else:
+        # Fallback empty pixmap if icon not found
+        pixmap = QPixmap(256, 256)
+        pixmap.fill(QColor("#09090b"))
+
+    splash = QSplashScreen(pixmap)
+    splash.show()
+    
+    # Styling for splash messages
+    app.processEvents()
+    
+    main_window = None
+    starter = ServerStarter()
+    
+    def on_ready(url):
+        nonlocal main_window
+        main_window = MainWindow(url)
+        main_window.show()
+        splash.finish(main_window)
+        print(f"[cam_mana] App ready, showing main window")
+
+    def on_status(status):
+        splash.showMessage(
+            status, 
+            Qt.AlignBottom | Qt.AlignCenter, 
+            QColor("#fbbf24")
+        )
+        print(f"[cam_mana] Status: {status}")
+
+    def on_error(error):
+        splash.showMessage(
+            f"Lỗi: {error}", 
+            Qt.AlignBottom | Qt.AlignCenter, 
+            QColor("#ef4444")
+        )
+        print(f"[cam_mana] Launcher Error: {error}")
+
+    starter.ready.connect(on_ready)
+    starter.status_changed.connect(on_status)
+    starter.error.connect(on_error)
+    
+    # Start the backend servers
+    starter.start()
+    
+    # Register cleanup
+    atexit.register(starter.cleanup)
     
     # Start event loop
     sys.exit(app.exec())

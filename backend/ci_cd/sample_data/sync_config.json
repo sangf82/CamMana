@@ -1,6 +1,0 @@
-{
-    "server_url": "https://example.com/api",
-    "sync_interval": 300,
-    "enabled": false,
-    "last_sync": null
-}

@@ -154,41 +154,46 @@ class CheckInService:
 
             # --- SYNC FOLDER TO MASTER (if in Client mode) ---
             if is_client_mode():
-                try:
-                    logger.info(f"[CheckIn] Syncing folder to Master: {folder_path}")
-                    sync_result = await upload_folder_to_master(folder_path)
-                    if sync_result and sync_result.get("success"):
-                        master_folder_path = sync_result.get("folder_path")
-                        logger.info(
-                            f"[CheckIn] Folder synced to Master: {master_folder_path}"
-                        )
-
-                        # Update the synced record's folder_path on Master
-                        from backend.sync_process.sync.proxy import get_master_url
-                        from backend.schemas import SyncPayload
-                        import httpx
-
-                        master_url = get_master_url()
-                        if master_url:
-                            payload = SyncPayload(
-                                type="history",
-                                action="update_folder_path",
-                                data={
-                                    "id": session_id,
-                                    "folder_path": master_folder_path,
-                                },
-                                timestamp=datetime.now().isoformat(),
+                # Define sync task
+                async def run_sync_task():
+                    try:
+                        logger.info(f"[CheckIn] Background syncing folder to Master: {folder_path}")
+                        sync_result = await upload_folder_to_master(folder_path)
+                        if sync_result and sync_result.get("success"):
+                            master_folder_path = sync_result.get("folder_path")
+                            logger.info(
+                                f"[CheckIn] Folder synced to Master: {master_folder_path}"
                             )
-                            async with httpx.AsyncClient(timeout=5.0) as client:
-                                await client.post(
-                                    f"{master_url.rstrip('/')}/api/sync/receive",
-                                    json=payload.model_dump(),
-                                    headers={"Content-Type": "application/json"},
+
+                            # Update the synced record's folder_path on Master
+                            from backend.sync_process.sync.proxy import get_master_url
+                            from backend.schemas import SyncPayload
+                            import httpx
+
+                            master_url = get_master_url()
+                            if master_url:
+                                payload = SyncPayload(
+                                    type="history",
+                                    action="update_folder_path",
+                                    data={
+                                        "id": session_id,
+                                        "folder_path": master_folder_path,
+                                    },
+                                    timestamp=datetime.now().isoformat(),
                                 )
-                    else:
-                        logger.warning("[CheckIn] Failed to sync folder to Master")
-                except Exception as e:
-                    logger.error(f"[CheckIn] File sync error: {e}")
+                                async with httpx.AsyncClient(timeout=5.0) as client:
+                                    await client.post(
+                                        f"{master_url.rstrip('/')}/api/sync/receive",
+                                        json=payload.model_dump(),
+                                        headers={"Content-Type": "application/json"},
+                                    )
+                        else:
+                            logger.warning("[CheckIn] Failed to sync folder to Master")
+                    except Exception as e:
+                        logger.error(f"[CheckIn] File sync error: {e}")
+
+                # Fire and forget (background task)
+                asyncio.create_task(run_sync_task())
 
             return CheckInResult(
                 uuid=session_id,

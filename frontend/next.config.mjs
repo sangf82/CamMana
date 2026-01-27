@@ -16,6 +16,10 @@ const nextConfig = {
   
   // Trailing slash for static export
   trailingSlash: false,
+  
+  // Security and Performance
+  poweredByHeader: false,
+  compress: true,
 }
 
 // Only add output: export for production builds
