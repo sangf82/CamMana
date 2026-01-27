@@ -37,8 +37,10 @@ export default function SettingsPage() {
   const [syncConfig, setSyncConfig] = React.useState({
     is_destination: true,
     remote_url: '',
-    status: 'standalone'
+    item_cleanup_days: 30
   })
+  const [firewallStatus, setFirewallStatus] = React.useState<{rule_exists?: boolean, supported?: boolean, message?: string}>({})
+  const [isOpeningFirewall, setIsOpeningFirewall] = React.useState(false)
 
   // Avoid hydration mismatch
   React.useEffect(() => {
@@ -81,6 +83,14 @@ export default function SettingsPage() {
     })
     .then(res => res.json())
     .then(data => setSyncConfig(data))
+    .catch(() => {})
+
+    // Check Firewall Status
+    fetch('/api/system/firewall/status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => setFirewallStatus(data))
     .catch(() => {})
   }, [])
 
@@ -176,6 +186,31 @@ export default function SettingsPage() {
         }
     } catch (e) {
         toast.error("Lỗi kết nối");
+    }
+  };
+
+  const handleOpenFirewall = async () => {
+    if (!window.confirm("Hệ thống sẽ thử tự động mở cổng 8000 trong Windows Firewall. Bạn cần nhấn 'Yes' trong cửa sổ yêu cầu quyền Admin sắp hiện ra. Tiếp tục?")) return;
+    
+    setIsOpeningFirewall(true);
+    try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/system/firewall/open', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+            toast.success(data.message);
+            setFirewallStatus({ rule_exists: true, supported: true, message: "Đã có quy tắc tường lửa" });
+        } else {
+            toast.error(data.message || "Không thể thực hiện");
+        }
+    } catch (e) {
+        toast.error("Lỗi khi gửi yêu cầu");
+    } finally {
+        setIsOpeningFirewall(false);
     }
   };
 
@@ -438,7 +473,23 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="flex-1 flex flex-col justify-center text-center opacity-60">
+                  <div className="flex-1 flex flex-col justify-center text-center space-y-3">
+                    <div className="flex items-center justify-center gap-2">
+                      <span className={`text-[10px] uppercase font-bold ${firewallStatus.rule_exists ? 'text-green-500' : 'text-amber-500'}`}>
+                        Tường lửa: {firewallStatus.message || 'Chưa kiểm tra'}
+                      </span>
+                      {!firewallStatus.rule_exists && firewallStatus.supported && (
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          className="h-6 text-[9px] bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30"
+                          onClick={handleOpenFirewall}
+                          disabled={isOpeningFirewall}
+                        >
+                          {isOpeningFirewall ? 'ĐANG MỞ...' : 'TỰ ĐỘNG MỞ'}
+                        </Button>
+                      )}
+                    </div>
                     <p className="text-[10px] text-muted-foreground italic">
                       Các PC Client sẽ kết nối đến địa chỉ này để đồng bộ dữ liệu.<br/>
                       Đảm bảo tường lửa cho phép cổng 8000.

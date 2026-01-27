@@ -37,18 +37,82 @@ class SyncLogic:
         # Start browsing for others (clients use this to find master)
         self.browser = ServiceBrowser(self.zc, "_cammana-sync._tcp.local.", self)
 
+    def _get_best_local_ip(self) -> str:
+        """
+        Get the best local IP address for advertising.
+        Prioritizes physical network interfaces over VPN/virtual ones.
+        """
+        import subprocess
+        import re
+        
+        # Method 1: Use UDP socket trick (works when internet is available)
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(1)
+            try:
+                s.connect(("8.8.8.8", 80))
+                ip = s.getsockname()[0]
+                # Skip APIPA addresses (169.254.x.x)
+                if not ip.startswith("169.254."):
+                    return ip
+            finally:
+                s.close()
+        except:
+            pass
+        
+        # Method 2: Parse ipconfig output (Windows specific)
+        try:
+            result = subprocess.run(
+                ["ipconfig"], 
+                capture_output=True, 
+                text=True, 
+                timeout=5
+            )
+            output = result.stdout
+            
+            # Look for IPv4 addresses in common interface patterns
+            # Prioritize: Ethernet > Wi-Fi > others
+            priority_patterns = [
+                (r"Ethernet adapter.*?IPv4 Address.*?:\s*([\d.]+)", 1),
+                (r"Wireless LAN adapter Wi-Fi.*?IPv4 Address.*?:\s*([\d.]+)", 2),
+                (r"Wireless LAN adapter.*?IPv4 Address.*?:\s*([\d.]+)", 3),
+            ]
+            
+            found_ips = []
+            for section in output.split("\n\n"):
+                for pattern, priority in priority_patterns:
+                    match = re.search(pattern, section, re.DOTALL | re.IGNORECASE)
+                    if match:
+                        ip = match.group(1)
+                        # Skip APIPA and loopback
+                        if not ip.startswith("169.254.") and ip != "127.0.0.1":
+                            found_ips.append((priority, ip))
+            
+            if found_ips:
+                found_ips.sort(key=lambda x: x[0])
+                return found_ips[0][1]
+        except:
+            pass
+        
+        # Method 3: Fallback to socket hostname resolution
+        try:
+            hostname = socket.gethostname()
+            ips = socket.gethostbyname_ex(hostname)[2]
+            for ip in ips:
+                if not ip.startswith("169.254.") and ip != "127.0.0.1":
+                    return ip
+        except:
+            pass
+        
+        # Last resort
+        return "127.0.0.1"
+
     def start_advertising(self):
         """Advertise this PC as a CamMana Master on the network."""
         try:
             desc = {'version': '2.0.0'}
             hostname = socket.gethostname()
-            # Try to get the local IP
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            try:
-                s.connect(("8.8.8.8", 80))
-                ip = s.getsockname()[0]
-            finally:
-                s.close()
+            ip = self._get_best_local_ip()
 
             info = ServiceInfo(
                 "_cammana-sync._tcp.local.",

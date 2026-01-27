@@ -32,7 +32,28 @@ export default function LoginPage() {
     setIsScanning(true);
     try {
         const res = await fetch("http://127.0.0.1:8000/api/sync/discover");
-        if (res.ok) setDiscoveryList(await res.json());
+        if (res.ok) {
+            const rawList = await res.json();
+            // Parse cleaner names from Zeroconf format
+            // e.g., "DESKTOP-4C6855B._cammana-sync._tcp.local." -> "DESKTOP-4C6855B"
+            const cleanedList = rawList.map((pc: any) => {
+                let cleanName = pc.name;
+                // Remove the Zeroconf service suffix
+                const suffixIndex = cleanName.indexOf('._cammana-sync');
+                if (suffixIndex > 0) {
+                    cleanName = cleanName.substring(0, suffixIndex);
+                }
+                // Also remove trailing dots
+                cleanName = cleanName.replace(/\.$/, '');
+                
+                return {
+                    ...pc,
+                    displayName: cleanName,
+                    originalName: pc.name
+                };
+            });
+            setDiscoveryList(cleanedList);
+        }
     } catch (e) {
         toast.error("Không thể quét mạng nội bộ");
     } finally {
@@ -40,8 +61,35 @@ export default function LoginPage() {
     }
   };
 
-  const connectToMaster = async (url: string) => {
+  const [isConnecting, setIsConnecting] = useState<string | null>(null);
+
+  const connectToMaster = async (url: string, displayName?: string) => {
+    setIsConnecting(url);
+    
     try {
+        // Step 1: Check if the Master is reachable
+        toast.info(`Đang kiểm tra kết nối đến ${displayName || url}...`);
+        
+        const checkRes = await fetch(`${url}/api/sync/status`, {
+            signal: AbortSignal.timeout(5000) // 5 second timeout
+        });
+        
+        if (!checkRes.ok) {
+            toast.error(`Không thể kết nối: Master trả về lỗi ${checkRes.status}`);
+            setIsConnecting(null);
+            return;
+        }
+        
+        const masterStatus = await checkRes.json();
+        
+        // Verify it's actually a Master (is_destination = true)
+        if (!masterStatus.is_destination) {
+            toast.error("Thiết bị này không phải là Master (PC Chủ)");
+            setIsConnecting(null);
+            return;
+        }
+        
+        // Step 2: Configure local backend to use this Master
         const params = new URLSearchParams();
         params.append('remote_url', url);
         params.append('is_destination', 'false');
@@ -51,14 +99,20 @@ export default function LoginPage() {
         });
         
         if (res.ok) {
-            toast.success("Đã kết nối với Master PC!");
+            toast.success(`Đã kết nối với ${displayName || 'Master PC'}!`);
             setIsSyncDialogOpen(false);
             fetchSyncStatus();
         } else {
-            toast.error("Không thể kết nối với thiết bị đã chọn");
+            toast.error("Không thể lưu cấu hình kết nối");
         }
-    } catch (e) {
-        toast.error("Lỗi cấu hình");
+    } catch (e: any) {
+        if (e.name === 'TimeoutError' || e.name === 'AbortError') {
+            toast.error(`Không thể kết nối: Hết thời gian chờ (${displayName || url})`);
+        } else {
+            toast.error(`Lỗi kết nối: ${e.message || 'Không xác định'}`);
+        }
+    } finally {
+        setIsConnecting(null);
     }
   };
 
@@ -250,22 +304,29 @@ export default function LoginPage() {
 
                 <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                     {discoveryList.length > 0 ? discoveryList.map((pc) => (
-                        <div key={pc.name} className="p-3 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-between group hover:border-blue-500/50 transition-all">
+                        <div key={pc.name || pc.url} className={`p-3 rounded-lg bg-zinc-900 border flex items-center justify-between group transition-all ${
+                            isConnecting === pc.url ? 'border-blue-500 bg-blue-500/5' : 'border-zinc-800 hover:border-blue-500/50'
+                        }`}>
                             <div className="flex items-center gap-3">
                                 <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500 font-bold text-xs uppercase">
-                                    {pc.name.substring(0,2)}
+                                    {(pc.displayName || pc.name || 'PC').substring(0,2)}
                                 </div>
                                 <div>
-                                    <p className="text-xs font-bold text-zinc-200">{pc.name}</p>
+                                    <p className="text-xs font-bold text-zinc-200">{pc.displayName || pc.name}</p>
                                     <p className="text-[10px] font-mono text-zinc-500">{pc.url}</p>
                                 </div>
                             </div>
                             <Button 
                                 size="sm" 
-                                className="h-7 text-[10px] font-black bg-blue-600 hover:bg-blue-500"
-                                onClick={() => connectToMaster(pc.url)}
+                                className="h-7 text-[10px] font-black bg-blue-600 hover:bg-blue-500 min-w-[70px]"
+                                onClick={() => connectToMaster(pc.url, pc.displayName || pc.name)}
+                                disabled={isConnecting !== null}
                             >
-                                KẾT NỐI
+                                {isConnecting === pc.url ? (
+                                    <RefreshCw size={12} className="animate-spin" />
+                                ) : (
+                                    'KẾT NỐI'
+                                )}
                             </Button>
                         </div>
                     )) : (

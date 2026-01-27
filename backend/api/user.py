@@ -59,6 +59,54 @@ async def register(user_in: UserCreate):
 
 @user_router.post("/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    # Import proxy utilities
+    from backend.data_process.sync.proxy import is_client_mode, get_master_url
+    import httpx
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    # If in Client mode, proxy login to Master
+    if is_client_mode():
+        master_url = get_master_url()
+        if master_url:
+            try:
+                logger.info(f"[Login] Proxying login request to Master: {master_url}")
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    # Forward the login request to Master
+                    response = await client.post(
+                        f"{master_url}/api/user/login",
+                        data={
+                            "username": form_data.username,
+                            "password": form_data.password
+                        }
+                    )
+                    
+                    if response.status_code == 200:
+                        # Return Master's response directly
+                        logger.info(f"[Login] Successfully authenticated via Master")
+                        return response.json()
+                    else:
+                        # Forward the error from Master
+                        error_detail = "Incorrect username or password"
+                        try:
+                            error_data = response.json()
+                            error_detail = error_data.get("detail", error_detail)
+                        except:
+                            pass
+                        raise HTTPException(
+                            status_code=response.status_code,
+                            detail=error_detail,
+                            headers={"WWW-Authenticate": "Bearer"},
+                        )
+            except httpx.RequestError as e:
+                logger.error(f"[Login] Failed to reach Master: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Không thể kết nối đến Master tại {master_url}",
+                )
+    
+    # Local authentication (Master mode or fallback)
     user = user_logic.get_user_by_username(form_data.username)
     if not user or not user_logic.verify_password(form_data.password, user["hashed_password"]):
         raise HTTPException(

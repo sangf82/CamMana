@@ -52,8 +52,20 @@ async def configure_sync(remote_url: Optional[str] = None, is_destination: bool 
 
 @sync_router.get("/discover")
 async def discover_masters():
-    """Return list of discovered Master PCs on the local network."""
-    return [{"name": name, "url": url} for name, url in sync_logic.discovered_pcs.items()]
+    """Return list of discovered Master PCs on the local network. Filters out own PC."""
+    import socket
+    
+    own_hostname = socket.gethostname().lower()
+    
+    result = []
+    for name, url in sync_logic.discovered_pcs.items():
+        # Filter out own PC (case-insensitive hostname match)
+        pc_name = name.split("._cammana-sync")[0].lower() if "._cammana-sync" in name else name.lower()
+        
+        if pc_name != own_hostname:
+            result.append({"name": name, "url": url})
+    
+    return result
 
 @sync_router.post("/test-push")
 async def test_push():
