@@ -12,9 +12,7 @@ from typing import Optional, Dict, Any, List
 
 from backend.model_process.control import orchestrator
 from backend.data_process.history.logic import HistoryLogic
-from backend.data_process.register_car.logic import RegisteredCarLogic
-from backend.workflow.config import get_location_strategy, LocationTag
-from backend.data_process.sync.proxy import is_client_mode, upload_folder_to_master
+from backend.data_process.location.logic import LocationLogic
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +34,7 @@ class CheckInService:
         self.history_logic = HistoryLogic()
         self.registered_logic = RegisteredCarLogic()
         self.orchestrator = orchestrator
+        self.location_logic = LocationLogic()
 
     async def process_checkin(
         self,
@@ -53,6 +52,8 @@ class CheckInService:
             # 0. Initialize UUID for the session
             session_id = str(uuid.uuid4())
             
+            # Resolve Location Name
+            location_name = self.location_logic.get_location_name(location_id)
             
             # 1. AI Detection on all images
             tasks = []
@@ -113,7 +114,7 @@ class CheckInService:
             record_data = {
                 "id": session_id,
                 "plate": clean_plate,
-                "location": location_id,
+                "location": location_name,
                 "status": "Check-In Pending",
                 "folder_path": str(folder_path),
                 "vol_std": vol_std, 

@@ -11,6 +11,8 @@ from backend.data_process.history.logic import HistoryLogic
 from backend.data_process.register_car.logic import RegisteredCarLogic
 from backend.data_process.sync.proxy import is_client_mode, upload_folder_to_master
 
+from backend.data_process.location.logic import LocationLogic
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,6 +21,7 @@ class CheckOutService:
         self.history_logic = HistoryLogic()
         self.registered_logic = RegisteredCarLogic()
         self.orchestrator = orchestrator
+        self.location_logic = LocationLogic()
 
     async def process_checkout(
         self,
@@ -37,6 +40,9 @@ class CheckOutService:
         import json
         
         try:
+            # Resolve Location Name
+            location_name = self.location_logic.get_location_name(location_id)
+
             # 1. Process ALL images with their functions
             all_results = {}
             plate_number = "Unknown"
@@ -90,7 +96,7 @@ class CheckOutService:
                 record_data = {
                     "id": uuid_val,
                     "plate": clean_plate,
-                    "location": location_id,
+                    "location": location_name,
                     "time_in": "---",
                     "status": "Xe ra lạ",
                     "verify": "Cần KT",

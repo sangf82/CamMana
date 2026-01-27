@@ -43,6 +43,13 @@ class LocationLogic:
     def get_locations(self) -> List[Dict[str, str]]:
         return self._read_csv()
 
+    def get_location_name(self, loc_id: str) -> str:
+        """Get location name by ID, or return the ID if not found."""
+        for loc in self._read_csv():
+            if loc['id'] == loc_id:
+                return loc['name']
+        return loc_id
+
     def add_location(self, data: Dict[str, Any]) -> Dict[str, str]:
         # Mapping for API compatibility if API sends long keys
         name = data.get('name') or data.get('location_name')
