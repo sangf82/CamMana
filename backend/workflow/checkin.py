@@ -61,7 +61,8 @@ class CheckInService:
                 funcs = img_info.get("functions", [])
                 if not path.exists(): continue
                 
-                frame = cv2.imread(str(path))
+                # Use to_thread to avoid blocking event loop
+                frame = await asyncio.to_thread(cv2.imread, str(path))
                 if frame is not None:
                     # Run functions in parallel for this frame
                     tasks.append(self.orchestrator.process_image(frame, funcs))
@@ -101,16 +102,6 @@ class CheckInService:
                 new_name = f"{cam_name}_{funcs_str}{ext}"
                 if path.exists():
                     shutil.copy2(path, folder_path / new_name)
-
-            # Extract Data
-            plate_res = results.get("plate", {})
-            plate_number = plate_res.get("plate", "Unknown")
-            
-            color_res = results.get("color", {})
-            primary_color = color_res.get("primary_color", "Unknown")
-            
-            wheel_res = results.get("wheel", {})
-            wheel_count = wheel_res.get("wheel_count_total", 0)
             
             # 4. Check Registration
             car = self.registered_logic.get_car_by_plate(plate_number)

@@ -1,7 +1,7 @@
-import requests
 import cv2
 import numpy as np
 import logging
+import httpx
 from typing import Dict, Any
 from backend.model_process.config import MODEL_API_URL
 
@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 class PlateDetector:
     ENDPOINT = "/alpr"
     
-    def detect(self, frame: np.ndarray) -> Dict[str, Any]:
+    async def detect(self, frame: np.ndarray) -> Dict[str, Any]:
         """
-        Detect license plate via API.
+        Detect license plate via async API.
         """
         if frame is None:
             return {"detected": False, "error": "Empty frame"}
@@ -23,16 +23,26 @@ class PlateDetector:
             return {"detected": False, "error": "Encoding failed"}
         
         files = {"file": ("image.jpg", encoded_image.tobytes(), "image/jpeg")}
+        headers = {"accept": "application/json"}
         
         try:
             url = f"{MODEL_API_URL}{self.ENDPOINT}"
-            resp = requests.post(url, files=files, timeout=30)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, files=files, headers=headers)
             
             if resp.status_code != 200:
-                logger.error(f"API Error {resp.status_code}: {resp.text}")
+                logger.error(f"Plate API Error {resp.status_code}: {resp.text}")
                 return {"detected": False, "error": f"API Error {resp.status_code}"}
                 
             data = resp.json()
+            if isinstance(data, str):
+                return {
+                    "detected": True,
+                    "plate": data,
+                    "all_plates": [data],
+                    "raw": data
+                }
+
             # Response: { "plates": ["19A..."], "count": ... }
             plates = data.get("plates", [])
             

@@ -1,7 +1,7 @@
-import requests
 import cv2
 import numpy as np
 import logging
+import httpx
 from typing import Dict, Any
 from backend.model_process.config import MODEL_API_URL
 
@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 class ColorDetector:
     ENDPOINT = "/detect_colors"
     
-    def detect(self, frame: np.ndarray) -> Dict[str, Any]:
+    async def detect(self, frame: np.ndarray) -> Dict[str, Any]:
         """
-        Detect vehicle color.
+        Detect vehicle color via async API.
         """
         if frame is None:
             return {"detected": False, "error": "Empty frame"}
@@ -21,17 +21,29 @@ class ColorDetector:
         if not success: return {"detected": False, "error": "Encoding failed"}
         
         files = {"file": ("image.jpg", encoded_image.tobytes(), "image/jpeg")}
+        headers = {"accept": "application/json"}
         
         try:
             url = f"{MODEL_API_URL}{self.ENDPOINT}"
-            resp = requests.post(url, files=files, timeout=30)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, files=files, headers=headers)
             
             if resp.status_code != 200:
+                logger.error(f"Color API error {resp.status_code}: {resp.text}")
                 return {"detected": False, "error": f"API Error {resp.status_code}"}
             
             data = resp.json()
             # { "detections": [ { "color": "Black", "confidence": ... } ] }
             
+            if isinstance(data, str):
+                primary_color = data
+                return {
+                    "detected": True,
+                    "primary_color": primary_color,
+                    "all_detections": [{"color": primary_color, "confidence": 1.0}],
+                    "raw": data
+                }
+
             detections = data.get("detections", [])
             primary_color = "Unknown"
             

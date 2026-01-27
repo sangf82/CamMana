@@ -44,10 +44,10 @@ class VolumeDetector:
                 return {"success": False, "error": error_msg}
 
         url = f"{MODEL_API_URL}{self.ENDPOINT}"
+        headers = {"accept": "application/json"}
         
         try:
             # Open files
-            # Note: We use a list to keep track of open handles to close them ensuringly
             file_handles = []
             try:
                 files = {
@@ -58,10 +58,7 @@ class VolumeDetector:
                     "calib_topdown": ("calib_topdown.json", open(top_calib_path, "rb"), "application/json"),
                 }
                 
-                # Keep references to close later (though context manager in open() is not used here directly in dict)
-                # The 'open' calls above return file objects. We need to close them.
-                # Let's collect them from the dict values.
-                for _, (name, f_obj, mime) in files.items():
+                for _, (_, f_obj, _) in files.items():
                     file_handles.append(f_obj)
 
                 data = {
@@ -72,14 +69,21 @@ class VolumeDetector:
 
                 logger.info(f"Sending volume estimation request to {url}")
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    response = await client.post(url, files=files, data=data)
+                    response = await client.post(url, files=files, data=data, headers=headers)
 
                 if response.status_code == 200:
                     result = response.json()
-                    logger.info(f"Volume estimation success: {result.get('volume')} m3")
+                    vol = result.get("volume")
+                    
+                    # Handle case where volume is returned as string or number
+                    if isinstance(vol, str):
+                        try: vol = float(vol)
+                        except: vol = 0.0
+                        
+                    logger.info(f"Volume estimation success: {vol} m3")
                     return {
                         "success": True,
-                        "volume": result.get("volume"),
+                        "volume": vol,
                         "raw": result
                     }
                 else:
@@ -93,6 +97,7 @@ class VolumeDetector:
             finally:
                 for f in file_handles:
                     f.close()
+
 
         except Exception as e:
             logger.exception("Volume detection exception")

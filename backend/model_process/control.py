@@ -44,32 +44,43 @@ class ModelOrchestrator:
 
         tasks = []
         
-        # Helper to run synchronous detect methods in thread pool
+        # Helper to run synchronous detect methods in thread pool (Truck is sync YOLO)
         async def run_sync_detect(name: str, detector: Any) -> tuple[str, Dict]:
             try:
-                # Use to_thread to prevent blocking the event loop
                 result = await asyncio.to_thread(detector.detect, frame)
                 return name, result
             except Exception as e:
                 logger.error(f"Error running {name} detection: {e}", exc_info=True)
                 return name, {"detected": False, "error": str(e)}
 
+        # Helper for ASYNC detectors (Plate, Wheel, Color use httpx)
+        async def run_async_detect(name: str, detector: Any) -> tuple[str, Dict]:
+            try:
+                result = await detector.detect(frame)
+                return name, result
+            except Exception as e:
+                logger.error(f"Error running {name} detection: {e}", exc_info=True)
+                return name, {"detected": False, "error": str(e)}
+
         # Map function names to detectors
-        # Supports various aliases for robustness
         for func in functions:
             func_lower = func.lower().strip()
             
             if func_lower in ["truck", "box", "truck_detect", "box_detect", "car", "car_detect"]:
+                # Truck detector is sync (YOLO)
                 tasks.append(run_sync_detect("truck", self.truck_detector))
                 
             elif func_lower in ["plate", "alpr", "plate_detect"]:
-                tasks.append(run_sync_detect("plate", self.plate_detector))
+                # Plate detector is ASYNC
+                tasks.append(run_async_detect("plate", self.plate_detector))
                 
             elif func_lower in ["wheel", "wheel_detect", "count_wheels"]:
-                tasks.append(run_sync_detect("wheel", self.wheel_detector))
+                # Wheel detector is ASYNC
+                tasks.append(run_async_detect("wheel", self.wheel_detector))
                 
             elif func_lower in ["color", "color_detect"]:
-                tasks.append(run_sync_detect("color", self.color_detector))
+                # Color detector is ASYNC
+                tasks.append(run_async_detect("color", self.color_detector))
             
             # Volume is NOT handled here as it requires multiple images
 

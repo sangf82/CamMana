@@ -1,6 +1,7 @@
 
 import logging
 import asyncio
+import cv2
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict
@@ -32,7 +33,6 @@ class CheckOutService:
         - Handle Volume if applicable.
         - Save evidence to history folder.
         """
-        import cv2
         import shutil
         import json
         
@@ -45,7 +45,7 @@ class CheckOutService:
             
             tasks = []
             for img_info in images:
-                frame = cv2.imread(str(img_info["path"]))
+                frame = await asyncio.to_thread(cv2.imread, str(img_info["path"]))
                 if frame is not None:
                     funcs = img_info.get("functions", [])
                     if funcs:
@@ -101,6 +101,7 @@ class CheckOutService:
 
             # --- VOLUME DETECTION LOGIC ---
             volume_val = None
+            bg_image = None
             
             # Identify Side and Top images for volume
             side_img_info = next((img for img in images if "volume_left_right" in img.get("functions", []) 
@@ -125,14 +126,42 @@ class CheckOutService:
                 calib_top = calib_dir / f"calib_top_{top_cam_id}.json"
                 if not calib_top.exists(): calib_top = calib_dir / "calib_topdown.json"
                 
-                # Resolve Background
-                bg_image = bg_dir / f"bg_{top_cam_id}.jpg"
-                if not bg_image.exists():
-                     bgs = list(bg_dir.glob("*.jpg"))
-                     bg_image = bgs[0] if bgs else None
+                # Resolve Background - Use Inpainting for "Cleaned" Background
+                from backend.utils.inpainting import generate_seamless_background
+                from backend.model_process.functions.truck import TruckDetector
+                
+                bg_image = None
+                cleaned_bg_path = Path("cleaned_output") / f"cleaned_{uuid_val}.jpg"
+                
+                try:
+                    logger.info(f"[Checkout] Detecting truck on top image for inpainting mask...")
+                    td = TruckDetector(confidence=0.3) # Lower confidence for topdown
+                    top_img_cv = await asyncio.to_thread(cv2.imread, str(top_img_info["path"]))
+                    det = td.detect(top_img_cv)
+                    
+                    bbox = None
+                    if det.get("detected"):
+                        x1, y1, x2, y2 = det["bbox"]
+                        bbox = {"x": x1, "y": y1, "w": x2-x1, "h": y2-y1}
+                        logger.info(f"[Checkout] Truck detected on top image at {bbox}")
+
+                    success = await generate_seamless_background(Path(top_img_info["path"]), cleaned_bg_path, truck_bbox=bbox)
+                    if success:
+                        bg_image = cleaned_bg_path
+                        logger.info(f"[Checkout] Cleaned background generated: {bg_image}")
+                except Exception as ie:
+                    logger.warning(f"[Checkout] Inpainting failed, falling back to static background: {ie}")
+
+                if not bg_image:
+                    bg_image_candidate = bg_dir / f"bg_{top_cam_id}.jpg"
+                    if bg_image_candidate.exists():
+                         bg_image = bg_image_candidate
+                    else:
+                         bgs = list(bg_dir.glob("*.jpg"))
+                         bg_image = bgs[0] if bgs else None
                 
                 if not bg_image:
-                    logger.warning(f"[Checkout] Skipped Volume: No background image found in {bg_dir}")
+                    logger.warning(f"[Checkout] Skipped Volume: No background image found or generated.")
 
                 if calib_side.exists() and calib_top.exists() and bg_image:
                      logger.info(f"[Checkout] Starting volume estimation for session {uuid_val}...")
@@ -163,7 +192,7 @@ class CheckOutService:
                  msg = []
                  if not side_img_info: msg.append("Missing Side Cam")
                  if not top_img_info: msg.append("Missing Top Cam")
-                 if not bg_image: msg.append("Missing Background Image")
+                 if not folder_path: msg.append("Missing Folder Path")
                  
                  logger.warning(f"[Checkout] Volume Skipped: {', '.join(msg)}")
                  if folder_path:
