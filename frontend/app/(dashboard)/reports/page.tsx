@@ -203,7 +203,7 @@ export default function ReportsPage() {
             </button>
             
             {isDateDropdownOpen && (
-              <div className="absolute top-full right-0 mt-1 w-full z-[100] bg-[#121212] border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+              <div className="absolute top-full right-0 mt-1 w-full z-[100] bg-popover text-popover-foreground border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
                 {availableDates.map(date => (
                   <button 
                     key={date} 

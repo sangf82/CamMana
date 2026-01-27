@@ -14,6 +14,47 @@ FIREWALL_RULE_NAME = "CamMana Backend"
 @router.get("/info")
 def get_system_info():
     """Get system information - no auth required for sync discovery."""
+    
+    def get_lan_ip():
+        # Priority 1: Try active gateway interface
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('8.8.8.8', 1))
+            IP = s.getsockname()[0]
+            if not IP.startswith('169.254'): return IP
+        except Exception: pass
+        finally: s.close()
+
+        # Priority 2: Iterate interfaces (Strictly look for common private ranges first)
+        import psutil
+        interfaces = psutil.net_if_addrs()
+        
+        # Preferred ranges
+        preferred_prefixes = ('192.168.', '10.', '172.')
+        
+        for _, addrs in interfaces.items():
+            for addr in addrs:
+                if addr.family == socket.AF_INET:
+                    ip = addr.address
+                    if any(ip.startswith(pref) for pref in preferred_prefixes):
+                        return ip
+
+        # Priority 3: Any non-loopback, non-APIPA
+        for _, addrs in interfaces.items():
+            for addr in addrs:
+                if addr.family == socket.AF_INET:
+                    ip = addr.address
+                    if not ip.startswith('127.') and not ip.startswith('169.254'):
+                        return ip
+                        
+        # Fallback to hostname - though this often returns APIPA on Windows if not careful
+        try:
+            host_ip = socket.gethostbyname(socket.gethostname())
+            if not host_ip.startswith('169.254'): return host_ip
+        except: pass
+
+        return "127.0.0.1"
+
     # Basic specs
     info = {
         "pc_name": socket.gethostname(),
@@ -21,7 +62,7 @@ def get_system_info():
         "processor": platform.processor(),
         "cpu_count": psutil.cpu_count(logical=True),
         "ram": f"{round(psutil.virtual_memory().total / (1024**3), 2)} GB",
-        "ip_address": socket.gethostbyname(socket.gethostname())
+        "ip_address": get_lan_ip()
     }
     return info
 
@@ -46,13 +87,14 @@ def check_firewall_status():
             "supported": True,
             "rule_exists": rule_exists,
             "rule_name": FIREWALL_RULE_NAME,
-            "message": "Đã có quy tắc tường lửa" if rule_exists else "Chưa có quy tắc tường lửa cho CamMana"
+            "message": "Đã mở firewall" if rule_exists else "CONFIG: Rule Not Found"
         }
     except Exception as e:
         return {
             "supported": True,
             "rule_exists": False,
-            "error": str(e)
+            "error": str(e),
+            "message": "CORE: System Exception"
         }
 
 @router.post("/firewall/open")
@@ -71,26 +113,24 @@ def open_firewall(user: User = Depends(get_current_user)):
         # Create a PowerShell script to add the rule with elevation
         port = os.getenv("PORT", "8000")
         
-        # PowerShell command to run elevated
-        ps_command = f'''
-        $rule = Get-NetFirewallRule -DisplayName "{FIREWALL_RULE_NAME}" -ErrorAction SilentlyContinue
-        if (-not $rule) {{
-            New-NetFirewallRule -DisplayName "{FIREWALL_RULE_NAME}" -Direction Inbound -Protocol TCP -LocalPort {port} -Action Allow -Profile Any
-            Write-Output "SUCCESS: Firewall rule added"
-        }} else {{
-            Write-Output "EXISTS: Rule already exists"
-        }}
-        '''
+        # PowerShell command to run elevated using netsh (sometimes more reliable than New-NetFirewallRule)
+        # Using netsh inside an invisible elevated process
+        cmd = f'netsh advfirewall firewall add rule name="{FIREWALL_RULE_NAME}" dir=in action=allow protocol=TCP localport={port} profile=any'
         
         # Use Start-Process with -Verb RunAs to trigger UAC
-        elevated_cmd = f'Start-Process powershell -ArgumentList \'-ExecutionPolicy Bypass -Command "{ps_command.replace(chr(10), " ")}"\'  -Verb RunAs -Wait'
+        elevated_cmd = f'Start-Process cmd -ArgumentList \'/c {cmd}\' -Verb RunAs -Wait -WindowStyle Hidden'
+        
+        print(f"Executing firewall open command: {elevated_cmd}") # Log to server console
         
         result = subprocess.run(
             ["powershell", "-ExecutionPolicy", "Bypass", "-Command", elevated_cmd],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=45 # Increased timeout
         )
+        
+        if result.returncode != 0:
+             print(f"Firewall automation error: {result.stderr}")
         
         # Check if rule was added successfully
         check_result = subprocess.run(
@@ -111,8 +151,8 @@ def open_firewall(user: User = Depends(get_current_user)):
         else:
             return {
                 "success": False,
-                "message": "Không thể thêm quy tắc. Có thể bạn đã hủy yêu cầu UAC.",
-                "hint": "Vui lòng chấp nhận yêu cầu quyền Admin khi được hỏi"
+                "message": "Không thể thêm quy tắc. Có thể bạn đã hủy yêu cầu UAC hoặc lỗi quyền truy cập.",
+                "hint": "Vui lòng chấp nhận yêu cầu quyền Admin khi được hỏi hoặc thử chạy backend dưới quyền Administrator."
             }
             
     except subprocess.TimeoutExpired:
@@ -121,5 +161,6 @@ def open_firewall(user: User = Depends(get_current_user)):
             "message": "Hết thời gian chờ. Đã hủy yêu cầu?"
         }
     except Exception as e:
+        print(f"firewall exception: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
