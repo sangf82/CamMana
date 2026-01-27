@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from backend.schemas import SyncPayload
@@ -41,11 +42,20 @@ async def configure_sync(remote_url: Optional[str] = None, is_destination: bool 
 async def test_push():
     """Manually trigger a sync broadcast to test connectivity."""
     if sync_logic.is_destination:
-        return {"error": "Cannot test push in Destination mode"}
+        return {"success": False, "message": "Cannot test push while in Master mode"}
     
-    await sync_logic.broadcast_change(
-        type="history",
-        action="update",
-        data={"id": "test-sync", "plate": "TEST-SYNC", "note": "Sync test from Node"}
+    if not sync_logic.remote_url:
+        return {"success": False, "message": "Master URL not configured"}
+
+    payload = SyncPayload(
+        type="test",
+        action="ping",
+        data={"message": "ping from client"},
+        timestamp=datetime.now().isoformat()
     )
-    return {"status": "pushed", "target": sync_logic.remote_url}
+    
+    success = await sync_logic.push_to_remote(payload)
+    if success:
+        return {"success": True, "message": f"Successfully connected to Master at {sync_logic.remote_url}"}
+    else:
+        return {"success": False, "message": f"Failed to connect to Master at {sync_logic.remote_url}"}

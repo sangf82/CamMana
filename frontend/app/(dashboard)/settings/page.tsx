@@ -400,12 +400,21 @@ export default function SettingsPage() {
                         className="h-8 text-[10px] font-black border-blue-600 text-blue-600" 
                         onClick={async () => {
                             const token = localStorage.getItem('token');
-                            const res = await fetch('/api/sync/test-push', { 
-                                method: 'POST',
-                                headers: { 'Authorization': `Bearer ${token}` }
-                            });
-                            if (res.ok) toast.success("Đã gửi signal kiểm tra");
-                            else toast.error("Không thể kết nối Master");
+                            toast.loading("Đang kiểm tra kết nối...", { id: 'sync-test' });
+                            try {
+                                const res = await fetch('/api/sync/test-push', { 
+                                    method: 'POST',
+                                    headers: { 'Authorization': `Bearer ${token}` }
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                    toast.success(data.message, { id: 'sync-test' });
+                                } else {
+                                    toast.error(data.message, { id: 'sync-test' });
+                                }
+                            } catch (e) {
+                                toast.error("Lỗi kết nối đến máy chủ nội bộ", { id: 'sync-test' });
+                            }
                         }}
                     >
                         TEST

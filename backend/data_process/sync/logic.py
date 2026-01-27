@@ -78,6 +78,10 @@ class SyncLogic:
             return False
             
         data = payload.data
+        if payload.type == "test":
+            logger.info("Received test sync signal (ping)")
+            return True
+
         if payload.type == "history":
             if payload.action == "create":
                 # Save to local history
