@@ -121,76 +121,91 @@ if (!(Get-Command git -ErrorAction SilentlyContinue)) {
 
 # 4. TẢI MÃ NGUỒN
 Write-Step "Đang tải mã nguồn ứng dụng..."
-$TargetDir = "CamMana"
 $RepoUrl = "https://github.com/sangf82/CamMana.git"
+$ProjectName = "CamMana"
 
-if (Test-Path $TargetDir) {
-    Write-Warning "Thư mục $TargetDir đã tồn tại. Đang dọn dẹp..."
-    try {
-        Remove-Item -Recurse -Force $TargetDir
-    } catch {
-        $TargetDir = "$TargetDir-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+# Kiểm tra xem có đang đứng trong thư mục CamMana không để tránh clone lồng
+if ($PWD.Path -split "\\" | Select-Object -Last 1 | Where-Object { $_ -eq $ProjectName }) {
+    if (Test-Path "pyproject.toml") {
+        Write-Success "Bạn đang đứng trong thư mục dự án. Bỏ qua bước Clone."
+        $TargetDir = "."
+    } else {
+        $TargetDir = $ProjectName
+    }
+} else {
+    $TargetDir = $ProjectName
+}
+
+if ($TargetDir -ne ".") {
+    if (Test-Path $TargetDir) {
+        Write-Warning "Thư mục $TargetDir đã tồn tại. Đang dọn dẹp..."
+        try {
+            Remove-Item -Recurse -Force $TargetDir
+        } catch {
+            $TargetDir = "$TargetDir-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        }
+    }
+
+    if (Get-Command git -ErrorAction SilentlyContinue) {
+        Write-Host "Đang thực hiện Git Clone từ: $RepoUrl" -ForegroundColor Gray
+        git clone --depth 1 $RepoUrl $TargetDir
+    } else {
+        Write-Warning "Không tìm thấy Git. Dùng ZIP..."
+        $BaseUrl = $RepoUrl.Replace(".git", "")
+        $ZipFile = "CamMana.zip"
+        $ZipUrl = "$BaseUrl/archive/refs/heads/master.zip"
+        Invoke-WebRequest -Uri $ZipUrl -OutFile $ZipFile
+        Expand-Archive -Path $ZipFile -DestinationPath "." -Force
+        $ExtractedDir = Get-ChildItem -Directory | Where-Object { $_.Name -like "CamMana-*" } | Select-Object -First 1
+        if ($ExtractedDir) { Rename-Item -Path $ExtractedDir.FullName -NewName $TargetDir }
+        Remove-Item $ZipFile
     }
 }
 
-if (Get-Command git -ErrorAction SilentlyContinue) {
-    Write-Host "Đang thực hiện Git Clone từ: $RepoUrl" -ForegroundColor Gray
-    git clone --depth 1 $RepoUrl $TargetDir
-} else {
-    Write-Warning "Không tìm thấy Git. Đang dùng phương thức tải ZIP dự phòng..."
-    $BaseUrl = $RepoUrl.Replace(".git", "")
-    $ZipFile = "CamMana.zip"
-    $ZipUrl = "$BaseUrl/archive/refs/heads/master.zip"
-    Invoke-WebRequest -Uri $ZipUrl -OutFile $ZipFile
-    Expand-Archive -Path $ZipFile -DestinationPath "." -Force
-    $ExtractedDir = Get-ChildItem -Directory | Where-Object { $_.Name -like "CamMana-*" } | Select-Object -First 1
-    if ($ExtractedDir) { Rename-Item -Path $ExtractedDir.FullName -NewName $TargetDir }
-    Remove-Item $ZipFile
-}
-
 if (!(Test-Path $TargetDir)) {
-    Write-Error-Custom "Không thể tải mã nguồn."
+    Write-Error-Custom "Không thể xác định thư mục nguồn."
     exit 1
 }
-Set-Location $TargetDir
+if ($TargetDir -ne ".") { Set-Location $TargetDir }
 
 # 5. THIẾT LẬP MÔI TRƯỜNG PYTHON & CẤU HÌNH
 Write-Step "Đang cấu hình môi trường Python (uv sync)..."
 try {
-    # Tạo file .env nếu chưa có (Rất quan trọng cho Backend)
     if (!(Test-Path ".env") -and (Test-Path ".env.example")) {
         Write-Host "📝 Tạo file .env từ mẫu..." -ForegroundColor Gray
         Copy-Item ".env.example" ".env"
     }
-
     & uv sync
-    Write-Success "Cấu hình Python và môi trường thành công."
+    Write-Success "Cấu hình Python thành công."
 } catch {
-    Write-Error-Custom "Lỗi khi đồng bộ môi trường: $_"
+    Write-Error-Custom "Lỗi đồng bộ môi trường: $_"
     exit 1
 }
 
 # 6. THIẾT LẬP FRONTEND
 if (Test-Path "frontend") {
-    Write-Step "Đang cài đặt và đóng gói Frontend (Production)..."
-    try {
-        Set-Location "frontend"
-        if (Get-Command npm -ErrorAction SilentlyContinue) {
-            Write-Host "📦 Cài đặt thư viện..." -ForegroundColor Gray
-            & npm install --no-audit --no-fund
+    Write-Step "Đang cấu hình Frontend..."
+    # Nếu đã có thư mục 'out', tức là đã build rồi, có thể bỏ qua để tiết kiệm thời gian
+    if (Test-Path "frontend/out") {
+        Write-Success "Đã tìm thấy bản build sẵn. Bỏ qua bước đóng gói."
+    } else {
+        try {
+            Set-Location "frontend"
+            # Sử dụng npm.cmd để tránh lỗi Execution Policy của PowerShell
+            $npm = if (Get-Command npm.cmd -ErrorAction SilentlyContinue) { "npm.cmd" } else { "npm" }
             
-            Write-Host "🏗️ Đang biên dịch frontend (Build)..." -ForegroundColor Gray
-            & npm run build
+            Write-Host "📦 Cài đặt thư viện..." -ForegroundColor Gray
+            & $npm install --no-audit --no-fund
+            
+            Write-Host "🏗️ Đang biên dịch frontend..." -ForegroundColor Gray
+            & $npm run build
             
             Set-Location ".."
-            Write-Success "Frontend đã được đóng gói sẵn sàng."
-        } else {
-            Write-Warning "Không tìm thấy 'npm', bỏ qua bước build frontend."
+            Write-Success "Frontend đã sẵn sàng."
+        } catch {
+            Write-Warning "Lỗi khi build Frontend: $_"
             Set-Location ".."
         }
-    } catch {
-        Write-Warning "Lỗi khi build Frontend: $_"
-        Set-Location ".."
     }
 }
 
