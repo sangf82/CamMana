@@ -59,8 +59,21 @@ Write-Host @"
 ****************************************************
 "@ -ForegroundColor Magenta
 
+# --- CLEANUP FUNCTION ---
+function Stop-AppProcesses {
+    Write-Host "🧹 Đang dọn dẹp các tiến trình cũ để giải phóng tệp tin..." -ForegroundColor Gray
+    # Dùng Get-CimInstance để lấy được CommandLine trên Windows
+    $Procs = Get-CimInstance Win32_Process -Filter "name = 'python.exe' OR name = 'CamMana.exe'"
+    foreach ($p in $Procs) {
+        if ($p.CommandLine -like "*$PWD*" -or $p.CommandLine -like "*app.py*") {
+            Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 # 1. CHUẨN BỊ MÔI TRƯỜNG & KIỂM TRA QUYỀN GHI
-Write-Step "Đang khởi tạo môi trường làm việc..."
+Stop-AppProcesses
+Write-Step 'Đang khởi tạo môi trường làm việc...'
 
 # Kiểm tra quyền ghi vào thư mục hiện tại
 $TempFile = "test_perm_$($PID).tmp"
