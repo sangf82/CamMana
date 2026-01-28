@@ -68,8 +68,10 @@ def is_production_mode() -> bool:
     """Detect if running in production mode"""
     if "--prod" in sys.argv: return True
     if "--dev" in sys.argv: return False
+    # Check if we are running from a frozen bundle (Nuitka, PyInstaller)
+    if getattr(sys, 'frozen', False) or hasattr(sys, '__compiled__'): return True
+    # Fallback checks
     if (get_resource_path("frontend/out")).exists(): return True
-    if getattr(sys, 'frozen', False) or hasattr(sys, 'nuitka_binary'): return True
     return not (Path(__file__).parent / "pyproject.toml").exists()
 
 def get_assets_dir() -> Path:
@@ -154,8 +156,7 @@ class BootstrapManager(QObject):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.is_compiled = hasattr(sys, 'nuitka_binary')
-        self.is_frozen = getattr(sys, 'frozen', False) or self.is_compiled
+        self.is_frozen = getattr(sys, 'frozen', False) or hasattr(sys, '__compiled__')
         self._cancelled = False
     
     def run(self):
@@ -172,7 +173,11 @@ class BootstrapManager(QObject):
             if not self.is_frozen:
                 logging.info("Environment managed by external runner (uv/python)")
                 self.finished.emit(); return
-            if self.is_compiled:
+            
+            # If we are compiled (frozen), we don't need to sync environment
+            # BUT we might be in a 'portable' mode that isn't fully compiled (e.g. PyInstaller onedir with venv)
+            # However, for Nuitka standalone, we skip.
+            if hasattr(sys, '__compiled__') or hasattr(sys, 'nuitka_binary'):
                 logging.info("Native binary: skipping environment setup")
                 self.finished.emit(); return
             venv_path = APP_DIR / ".venv"
@@ -218,16 +223,18 @@ class BackendManager(QObject):
     def _start_servers(self):
         try:
             self.status_changed.emit("Khởi động hệ thống...")
-            if hasattr(sys, 'nuitka_binary'):
-                exe_path = os.environ.get("NUITKA_ONEFILE_BINARY")
-                python_exe = Path(exe_path) if exe_path else Path(sys.executable)
-            elif getattr(sys, "frozen", False):
-                python_exe = APP_DIR / ".venv" / "Scripts" / "python.exe"
+            
+            # Detect the executable to use for backend
+            if self.is_frozen:
+                # In a bundle, use the binary itself (Nuitka/PyInstaller)
+                onefile_exe = os.environ.get("NUITKA_ONEFILE_BINARY")
+                python_exe = Path(onefile_exe) if onefile_exe else Path(sys.executable)
             else:
+                # In development
                 python_exe = Path(sys.executable)
             
-            if not hasattr(sys, 'nuitka_binary') and not python_exe.exists():
-                self.error.emit(f"Python not found: {python_exe}"); return
+            if not python_exe.exists():
+                self.error.emit(f"Python executable not found: {python_exe}"); return
             
             self._start_backend(python_exe)
             status = self._wait_for_port(self.PORT, timeout=300)
