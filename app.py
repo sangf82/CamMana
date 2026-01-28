@@ -259,8 +259,21 @@ class BackendManager(QObject):
                 self.error.emit(f"Python not found: {python_exe}"); return
             
             self._start_backend(python_exe)
-            if not self._wait_for_port(self.PORT):
-                self.error.emit("Backend timeout (Port 8000)"); return
+            
+            # Chờ backend sẵn sàng với thông tin lỗi chi tiết nếu thất bại
+            status = self._wait_for_port(self.PORT, timeout=90)
+            if not status:
+                # Tìm nguyên nhân lỗi từ file log
+                error_msg = "Backend timeout (Port 8000)"
+                try:
+                    log_path = APP_DIR / "database" / "logs" / "backend_errors.log"
+                    if log_path.exists():
+                        lines = log_path.read_text(encoding="utf-8").splitlines()
+                        relevant_errors = [l for l in lines[-10:] if "Error" in l or "Exception" in l or "Traceback" in l]
+                        if relevant_errors:
+                            error_msg = "Lỗi Backend: " + " | ".join(relevant_errors[-2:])
+                except: pass
+                self.error.emit(error_msg); return
             
             if self.is_production:
                 url = f"http://127.0.0.1:{self.PORT}"
@@ -352,11 +365,13 @@ def main():
     if "--backend" in sys.argv:
         try:
             from backend.server import app as fastapi_app
-            from backend import config
             import uvicorn
-            uvicorn.run(fastapi_app, host=config.HOST, port=config.PORT, log_level="warning", access_log=False)
+            # Ưu tiên sử dụng 127.0.0.1 để tránh vấn đề phân giải localhost
+            uvicorn.run(fastapi_app, host="127.0.0.1", port=8000, log_level="info", access_log=False)
         except Exception as e:
+            import traceback
             print(f"Backend process error: {e}")
+            traceback.print_exc() # In chi tiết lỗi ra stderr (sẽ vào file log)
             sys.exit(1)
         return
 
