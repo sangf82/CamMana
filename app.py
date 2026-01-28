@@ -344,6 +344,10 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    # Fix cho lỗi "Unable to open monitor interface" và các cảnh báo Qt QPA
+    os.environ["QT_LOGGING_RULES"] = "qt.qpa.screen=false"
+    os.environ["QT_QPA_PLATFORM"] = "windows:darkmode=2"
+    
     # Handle backend process mode
     if "--backend" in sys.argv:
         try:
