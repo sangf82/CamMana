@@ -5,7 +5,7 @@ from typing import List, Dict, Optional, Any
 from pydantic import BaseModel
 from pathlib import Path
 from datetime import datetime
-import pandas as pd
+# Delayed pandas import
 import io
 import logging
 
@@ -139,6 +139,7 @@ async def export_history_excel(
     if not records:
         raise HTTPException(status_code=404, detail="No data to export")
     
+    import pandas as pd
     # Create DataFrame
     df = pd.DataFrame(records)
     
@@ -197,6 +198,7 @@ async def save_history_excel_to_downloads(
     if not records:
         raise HTTPException(status_code=404, detail="No data to export")
     
+    import pandas as pd
     # Create DataFrame
     df = pd.DataFrame(records)
     

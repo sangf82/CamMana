@@ -3,11 +3,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-import pandas as pd
-import matplotlib.pyplot as plt
-import io
 import os
-from fpdf import FPDF
 
 from backend.config import DATA_DIR, PROJECT_ROOT
 
@@ -35,6 +31,7 @@ class ReportLogic:
             return self._empty_report(date_str)
 
         try:
+            import pandas as pd
             df_history = pd.read_csv(history_file)
             
             # Filter by gate if restricted
@@ -153,8 +150,10 @@ class ReportLogic:
         dates.sort(key=lambda x: datetime.strptime(x, self.DATE_FORMAT), reverse=True)
         return dates
 
-    def _create_chart_image(self, data: Dict[str, Any], title: str, ylabel: str, color: str) -> io.BytesIO:
+    def _create_chart_image(self, data: Dict[str, Any], title: str, ylabel: str, color: str) -> "io.BytesIO":
         """Create a chart image and return as BytesIO"""
+        import io
+        import matplotlib.pyplot as plt
         plt.figure(figsize=(10, 6))
         
         # Vietnamese support for matplotlib requires font setting
@@ -186,6 +185,7 @@ class ReportLogic:
             data = self.generate_report(date_str)
         
         try:
+            from fpdf import FPDF
             pdf = FPDF()
             
             # Setup Fonts

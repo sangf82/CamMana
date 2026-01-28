@@ -58,6 +58,7 @@ allow-direct-references = true
 [dependency-groups]
 dev = [
     "nuitka>=2.8.10",
+    "tqdm>=4.67.1",
 ]
 
 [project.scripts]

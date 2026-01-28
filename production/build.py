@@ -14,8 +14,10 @@ import sys
 import shutil
 import subprocess
 import time
+import re
 from pathlib import Path
 from datetime import datetime
+from tqdm import tqdm
 
 # Paths
 ROOT_DIR = Path(__file__).parent.parent.resolve()
@@ -183,39 +185,69 @@ def compile_nuitka():
         bufsize=1
     )
     
+    pbar = tqdm(total=100, desc="Building", unit="%", bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]')
+    
     errors = []
-    last_phase = ""
+    modules_total = 0
     modules_done = 0
     
+    # regex for module progress: (123/456)
+    module_regex = re.compile(r"\((\d+)/(\d+)\)")
+    # regex for C compilation progress: [ 10%]
+    color_strip = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
     for line in iter(process.stdout.readline, ''):
         if not line:
             break
         line = line.rstrip()
+        # Strip ANSI colors if present
+        clean_line = color_strip.sub('', line)
         
-        # Track phases
-        if "Completed Python level" in line:
-            print()
-            log("Phase 2/3: Generating C code...", "info")
-            last_phase = "c_gen"
-        elif "Running C compilation" in line:
-            print()
-            log("Phase 3/3: Compiling C code...", "info")
-            last_phase = "c_compile"
-        elif "Backend C:" in line:
-            # Show C compilation progress
-            print(f"\r         {line.strip()}", end="", flush=True)
-        elif "Optimizing module" in line:
-            # Count modules
-            modules_done += 1
-            if modules_done % 50 == 0:
-                print(f"\r         Optimized {modules_done} modules...", end="", flush=True)
-        elif "error:" in line.lower() and "torch" not in line.lower():
-            errors.append(line)
-            print(f"\n[ERROR] {line}")
-        elif "warning:" in line.lower() and any(kw in line.lower() for kw in ["missing", "failed"]):
-            print(f"\n[WARN] {line}")
+        # Track phases and update pbar
+        if "Completed Python level" in clean_line:
+            pbar.set_description("Phase 2/3: Generating C code")
+            pbar.n = 33 # roughly 1/3
+            pbar.refresh()
+        elif "Running C compilation" in clean_line:
+            pbar.set_description("Phase 3/3: Compiling C code")
+            pbar.n = 66 # roughly 2/3
+            pbar.refresh()
+        elif "Backend C:" in clean_line:
+            # Try to find percentage like [ 10%]
+            if "%" in clean_line:
+                try:
+                    pct_str = clean_line.split("[")[1].split("%")[0].strip()
+                    pct = int(pct_str)
+                    # Maps 0-100% C comp to 66-100% total progress
+                    total_pct = 66 + int(pct * 0.34)
+                    pbar.n = total_pct
+                    pbar.set_postfix_str(f"C Comp: {pct}%")
+                    pbar.refresh()
+                except:
+                    pass
+        elif "Optimizing module" in clean_line:
+            match = module_regex.search(clean_line)
+            if match:
+                done = int(match.group(1))
+                total = int(match.group(2))
+                modules_done = done
+                modules_total = total
+                # Maps module progress to 0-33% total progress
+                total_pct = int((done / total) * 33)
+                pbar.n = total_pct
+                pbar.set_description(f"Phase 1/3: Optimizing ({done}/{total})")
+                pbar.refresh()
+        
+        elif "error:" in clean_line.lower() and "torch" not in clean_line.lower():
+            errors.append(clean_line)
+        elif "warning:" in clean_line.lower() and any(kw in clean_line.lower() for kw in ["missing", "failed"]):
+            # We can log warnings to tqdm.write to avoid breaking the bar
+            tqdm.write(f"[{elapsed()}] [WARN] {clean_line}")
     
-    print()  # New line after progress
+    pbar.n = 100
+    pbar.set_description("Compilation Finished")
+    pbar.close()
+    print()
     process.wait()
     
     if process.returncode != 0:
