@@ -302,7 +302,13 @@ class BackendManager(QObject):
         log_dir.mkdir(parents=True, exist_ok=True)
         backend_log = log_dir / "backend_errors.log"
 
-        cmd = [str(python_exe), "--backend"]
+        # Nếu python_exe là trình thông dịch (python.exe), ta cần truyền file script
+        # Nếu là file chạy (EXE), ta chạy trực tiếp tham số --backend
+        if python_exe.name.lower() == "python.exe" or python_exe.name.lower() == "python":
+            cmd = [str(python_exe), str(APP_DIR / "app.py"), "--backend"]
+        else:
+            cmd = [str(python_exe), "--backend"]
+            
         logging.info(f"Starting backend process: {' '.join(cmd)}")
         
         # Chạy backend và chuyển hướng cả stdout/stderr ra file để debug
