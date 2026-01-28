@@ -165,43 +165,43 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#09090b] relative overflow-hidden font-sans">
+    <div className="min-h-screen w-full flex items-center justify-center bg-background relative overflow-hidden font-sans">
       {/* Yellow/Orange gradient highlight in top left */}
       <div className="absolute top-0 left-0 w-[60%] h-[60%] bg-gradient-to-br from-amber-500/30 via-orange-500/20 to-transparent blur-[60px] rounded-full" />
       <div className="absolute top-[-20%] left-[-20%] w-[50%] h-[50%] bg-amber-400/25 blur-[80px] rounded-full" />
       
       {/* Subtle secondary glow */}
-      <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-zinc-500/5 blur-[100px] rounded-full" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-muted-foreground/5 blur-[100px] rounded-full" />
       
       {/* Grid Pattern Background - Clear and visible */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff15_1px,transparent_1px),linear-gradient(to_bottom,#ffffff15_1px,transparent_1px)] bg-[size:48px_48px]" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:48px_48px] opacity-10" />
       
       {/* Radial fade overlay for grid - softer fade */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,transparent_30%,#09090b_80%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,transparent_30%,var(--background)_80%)]" />
 
-      <Card className="w-full max-w-md border-white/5 bg-zinc-900/50 backdrop-blur-xl shadow-2xl relative z-10 transition-all duration-300 hover:border-amber-500/20">
+      <Card className="w-full max-w-md border-border/50 bg-card/50 backdrop-blur-xl shadow-2xl relative z-10 transition-all duration-300 hover:border-amber-500/20">
         <CardHeader className="space-y-1 pb-6 text-center">
             <div className="flex justify-center mb-4">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                    <ShieldCheck className="w-10 h-10 text-zinc-950" />
+                    <ShieldCheck className="w-10 h-10 text-black" />
                 </div>
             </div>
-          <CardTitle className="text-3xl font-bold tracking-tight text-white font-sans">CamMana</CardTitle>
-          <CardDescription className="text-zinc-400">
+          <CardTitle className="text-3xl font-bold tracking-tight text-foreground font-sans">CamMana</CardTitle>
+          <CardDescription className="text-muted-foreground">
             Hệ thống giám sát & Quản lý Gate
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username" className="text-zinc-200">Tài khoản</Label>
+              <Label htmlFor="username" className="text-foreground">Tài khoản</Label>
               <div className="relative group">
                 <Input
                   id="username"
                   placeholder="Nhập tên đăng nhập"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="pl-10 h-11 bg-zinc-950/50 border-zinc-800 text-white placeholder:text-zinc-500 focus:border-amber-500/50 transition-all duration-300"
+                  className="pl-10 h-11 bg-background/50 border-input text-foreground placeholder:text-muted-foreground focus:border-amber-500/50 transition-all duration-300"
                   required
                 />
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500/70 group-focus-within:text-amber-500 transition-colors">
@@ -211,7 +211,7 @@ export default function LoginPage() {
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-zinc-200">Mật khẩu</Label>
+                <Label htmlFor="password" className="text-foreground">Mật khẩu</Label>
               </div>
               <div className="relative group">
                 <Input
@@ -220,7 +220,7 @@ export default function LoginPage() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 h-11 bg-zinc-950/50 border-zinc-800 text-white placeholder:text-zinc-500 focus:border-amber-500/50 transition-all duration-300"
+                  className="pl-10 h-11 bg-background/50 border-input text-foreground placeholder:text-muted-foreground focus:border-amber-500/50 transition-all duration-300"
                   required
                 />
                 <div className="absolute left-3 top-1/2 -translate-y-1/2 text-amber-500/70 group-focus-within:text-amber-500 transition-colors">
@@ -232,15 +232,15 @@ export default function LoginPage() {
           <CardFooter className="flex flex-col space-y-4 pt-2 pb-8">
             <Button 
                 type="submit" 
-                className="w-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold h-11 shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98]"
+                className="w-full bg-amber-500 hover:bg-amber-400 text-black font-bold h-11 shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98]"
                 disabled={isLoading}
             >
               {isLoading ? "Đang đăng nhập..." : "Đăng nhập"}
             </Button>
 
-            <div className="w-full pt-2 flex items-center justify-between text-[10px] text-zinc-500 border-t border-white/5 pt-4">
+            <div className="w-full flex items-center justify-between text-[10px] text-muted-foreground border-t border-border/50 pt-4">
                 <div className="flex items-center gap-1.5">
-                    <div className={`w-1.5 h-1.5 rounded-full ${syncStatus?.is_destination ? 'bg-green-500' : 'bg-blue-500'} animate-pulse`} />
+                    <div className={`w-1.5 h-1.5 rounded-full ${syncStatus?.is_destination ? 'bg-success' : 'bg-info'} animate-pulse`} />
                     <span className="uppercase tracking-widest font-bold">
                         {syncStatus?.mode || 'ĐANG TẢI...'}
                     </span>

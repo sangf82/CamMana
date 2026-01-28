@@ -163,8 +163,8 @@ export default function Sidebar() {
       <div className={`h-16 flex items-center border-b border-sidebar-border relative ${isCollapsed ? 'justify-center px-0' : 'justify-between pl-6 pr-2'}`}>
         {!isCollapsed && (
             <div className="flex items-center">
-                <Construction className="text-[#f59e0b] mr-3" />
-                <span className="font-bold text-lg text-[#f59e0b] tracking-tight whitespace-nowrap">CamMana</span>
+                <Construction className="text-primary mr-3" />
+                <span className="font-bold text-lg text-primary tracking-tight whitespace-nowrap">CamMana</span>
             </div>
         )}
         
@@ -174,7 +174,7 @@ export default function Sidebar() {
             className={`text-muted-foreground hover:text-primary transition-colors ${isCollapsed ? '' : 'p-1'}`}
             title={isCollapsed ? "Mở rộng" : "Thu gọn"}
         >
-            {isCollapsed ? <Construction className="text-[#f59e0b]" /> : <div className="p-1 rounded hover:bg-sidebar-accent"><ChevronRight className="rotate-180" /></div>}
+            {isCollapsed ? <Construction className="text-primary" /> : <div className="p-1 rounded hover:bg-sidebar-accent"><ChevronRight className="rotate-180" /></div>}
         </button>
       </div>
 

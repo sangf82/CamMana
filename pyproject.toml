@@ -44,6 +44,11 @@ packages = ["backend", "app.py"]
 [tool.hatch.metadata]
 allow-direct-references = true
 
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.18.0",
+]
+
 [project.scripts]
 cammana = "app:main"
 

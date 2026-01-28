@@ -103,6 +103,16 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+
+  /* Semantic Colors */
+  --success: oklch(0.627 0.194 149.214); /* emerald-500 */
+  --success-foreground: oklch(0.985 0 0);
+  
+  --warning: oklch(0.704 0.14 73.018); /* orange-500 */
+  --warning-foreground: oklch(0.985 0 0);
+
+  --info: oklch(0.552 0.177 247.965); /* blue-500 */
+  --info-foreground: oklch(0.985 0 0);
 }
 
 .dark {
@@ -149,6 +159,16 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+
+  /* Semantic Colors Dark */
+  --success: oklch(0.5 0.194 149.214); /* emerald-600 */
+  --success-foreground: oklch(0.985 0 0);
+  
+  --warning: oklch(0.6 0.14 73.018); /* orange-600 */
+  --warning-foreground: oklch(0.985 0 0);
+
+  --info: oklch(0.4 0.177 247.965); /* blue-600 */
+  --info-foreground: oklch(0.985 0 0);
 }
 
 /* Utilities */
@@ -267,6 +287,14 @@ input[type="date"] {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  
+  /* Semantic Utilities */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
 }
 
 @layer base {
@@ -276,6 +304,11 @@ input[type="date"] {
   body {
     @apply bg-background text-foreground;
   }
+  h1 { @apply text-2xl font-bold tracking-tight md:text-3xl; }
+  h2 { @apply text-xl font-semibold tracking-tight; }
+  h3 { @apply text-lg font-semibold tracking-tight; }
+  p { @apply leading-7; }
+  small { @apply text-sm font-medium leading-none; }
 }
 
 /* ===== GLOBAL UI CONSISTENCY UTILITIES ===== */

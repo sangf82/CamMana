@@ -274,7 +274,7 @@ export default function SystemConfigPage() {
   ]
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto pb-12">
+    <div className="p-6 space-y-6 w-full mx-auto pb-12">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Settings2 className="h-6 w-6 text-[#f59e0b]" />
@@ -310,7 +310,7 @@ export default function SystemConfigPage() {
         <CardContent className="space-y-6">
           {/* Background Images Grid */}
           {backgrounds.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
               {backgrounds.map((bg) => (
                 <div 
                   key={bg.camera_id} 

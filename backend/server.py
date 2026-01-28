@@ -46,11 +46,20 @@ def clean_pycache():
 
 
 def get_static_dir():
+    """Get path to static frontend files.
+    
+    In production (frozen), the frontend is at APP_DIR/frontend/out
+    where APP_DIR is the directory containing CamMana.exe
+    (NOT sys._MEIPASS which is the internal bundle folder).
+    """
     if getattr(sys, 'frozen', False):
-        base_path = Path(sys._MEIPASS)
+        # Production: frontend/out is next to CamMana.exe
+        app_dir = Path(sys.executable).parent
+        static_path = app_dir / "frontend" / "out"
     else:
+        # Development: frontend/out is in project root
         base_path = Path(__file__).parent.parent
-    static_path = base_path / "frontend" / "out"
+        static_path = base_path / "frontend" / "out"
     return static_path if static_path.exists() else None
 
 

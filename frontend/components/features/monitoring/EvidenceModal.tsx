@@ -1,5 +1,6 @@
-import { Close, PhotoCamera, Videocam } from "@mui/icons-material";
+import { X, Camera, Video } from "lucide-react";
 import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
 
 interface DetectionResult {
   plate_number: string | null;
@@ -73,40 +74,42 @@ export default function EvidenceModal({
   const activeImage = getActiveImage();
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-[9999] pointer-events-auto flex items-center justify-center p-4">
-      <div className="bg-card border border-border rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black/80 z-[9999] pointer-events-auto flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-card border border-border rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
+        <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
           <div className="flex items-center gap-3">
-            <PhotoCamera className="text-[#f59e0b]" />
+            <Camera className="w-5 h-5 text-amber-500" />
             <h3 className="text-lg font-bold">Bằng chứng</h3>
             {currentDetection?.plate_number && (
-              <span className="px-2 py-0.5 bg-primary/20 text-[#f59e0b] rounded text-sm font-mono">
+              <span className="px-2 py-0.5 bg-primary/20 text-amber-500 border border-primary/20 rounded text-sm font-mono font-bold tracking-wider">
                 {currentDetection.plate_number}
               </span>
             )}
           </div>
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={onClose}
-            className="p-1 hover:bg-muted rounded-full transition-colors"
+            className="rounded-full h-8 w-8 hover:bg-destructive/10 hover:text-destructive transition-colors"
           >
-            <Close />
-          </button>
+            <X className="w-4 h-4" />
+          </Button>
         </div>
 
         {/* Dynamic Camera Tabs */}
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border bg-muted/10">
           {displayCameras.map((cam, index) => (
             <button
               key={cam.id}
               onClick={() => setActiveTabIndex(index)}
-              className={`flex-1 py-3 px-4 text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+              className={`flex-1 py-3 px-4 text-sm font-medium transition-all flex items-center justify-center gap-2 border-b-2 ${
                 activeTabIndex === index
-                  ? "text-[#f59e0b] border-b-2 border-[#f59e0b] bg-[#f59e0b]/10"
-                  : "text-muted-foreground hover:bg-muted/50"
+                  ? "text-amber-500 border-amber-500 bg-amber-500/10"
+                  : "text-muted-foreground border-transparent hover:bg-muted/50 hover:text-foreground"
               }`}
             >
-              <Videocam fontSize="small" /> {cam.name}
+              <Video className="w-4 h-4" /> {cam.name}
             </button>
           ))}
           {displayCameras.length === 0 && (
@@ -117,17 +120,17 @@ export default function EvidenceModal({
         </div>
 
         {/* Image Content */}
-        <div className="p-4 bg-black min-h-[400px] flex items-center justify-center">
+        <div className="p-4 bg-black/95 flex-1 min-h-[400px] flex items-center justify-center relative overflow-hidden group">
           {activeImage ? (
             <img
               src={activeImage}
               alt={activeCamera?.name || "Camera"}
-              className="max-w-full max-h-[60vh] object-contain rounded shadow-lg"
+              className="max-w-full max-h-[60vh] object-contain rounded shadow-lg transition-transform duration-300 group-hover:scale-[1.01]"
             />
           ) : (
-            <div className="text-muted-foreground text-center">
-              <PhotoCamera className="w-16 h-16 mx-auto mb-2 opacity-30" />
-              <p>Chưa có ảnh {activeCamera?.name || "camera"}</p>
+            <div className="text-muted-foreground text-center flex flex-col items-center">
+              <Camera className="w-16 h-16 mb-4 opacity-20" />
+              <p className="opacity-60">Chưa có ảnh {activeCamera?.name || "camera"}</p>
             </div>
           )}
         </div>
@@ -135,37 +138,37 @@ export default function EvidenceModal({
         {/* Detection Info Footer */}
         {currentDetection && (
           <div className="p-4 border-t border-border bg-muted/30">
-            <div className="grid grid-cols-4 gap-4 text-center">
-              <div>
-                <span className="block text-xs text-muted-foreground">
+            <div className="grid grid-cols-4 gap-4 text-center divide-x divide-border/50">
+              <div className="px-2">
+                <span className="block text-xs text-muted-foreground uppercase tracking-wider mb-1">
                   Biển số
                 </span>
-                <span className="font-mono font-bold">
+                <span className="font-mono font-bold text-lg">
                   {currentDetection.plate_number || "---"}
                 </span>
               </div>
-              <div>
-                <span className="block text-xs text-muted-foreground">
+              <div className="px-2">
+                <span className="block text-xs text-muted-foreground uppercase tracking-wider mb-1">
                   Màu xe
                 </span>
                 <span className="font-medium">
                   {currentDetection.color || "---"}
                 </span>
               </div>
-              <div>
-                <span className="block text-xs text-muted-foreground">
+              <div className="px-2">
+                <span className="block text-xs text-muted-foreground uppercase tracking-wider mb-1">
                   Số bánh
                 </span>
                 <span className="font-medium">
                   {currentDetection.wheel_count || "---"}
                 </span>
               </div>
-              <div>
-                <span className="block text-xs text-muted-foreground">
+              <div className="px-2">
+                <span className="block text-xs text-muted-foreground uppercase tracking-wider mb-1">
                   Trạng thái
                 </span>
                 <span
-                  className={`font-medium ${
+                  className={`font-bold ${
                     currentDetection.matched
                       ? "text-green-400"
                       : "text-amber-400"

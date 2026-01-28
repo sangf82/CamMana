@@ -2,22 +2,22 @@
 
 import React, { useState, useEffect, Suspense, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-
 import {
-  PhotoCamera,
+  Camera as CameraIcon,
   CheckCircle,
-  Cancel,
-  Edit,
+  XCircle,
+  Pencil,
   Palette,
-  TireRepair,
-  DriveEta,
-  Warning,
-} from "@mui/icons-material";
+  CircleDashed,
+  Car,
+  AlertTriangle,
+} from "lucide-react";
 import { toast } from "sonner";
 import CameraGrid from "../../../components/features/monitoring/CameraGrid";
 import EventLog from "../../../components/features/monitoring/EventLog";
 import EvidenceModal from "../../../components/features/monitoring/EvidenceModal";
 import EditModal from "../../../components/features/monitoring/EditModal";
+import { Button } from "@/components/ui/button";
 
 // --- Types ---
 interface Camera {
@@ -36,7 +36,6 @@ interface Camera {
   brand?: string;
   functions?: string[];
 }
-
 
 interface DetectionResult {
   plate_number: string | null;
@@ -403,14 +402,14 @@ function MonitorPageContent() {
     }
   }, [currentGate]);
 
-  const getStreamUrl = (cam: Camera) => {
+  const getStreamUrl = useCallback((cam: Camera) => {
     const activeId = activeCameras[cam.id];
     if (activeId) return `/api/cameras/${activeId}/stream`;
     return undefined;
-  };
+  }, [activeCameras]);
 
-  const getActiveId = (cam: Camera) => activeCameras[cam.id];
-  const isConnecting = (cam: Camera) => connectingCameras.has(cam.id);
+  const getActiveId = useCallback((cam: Camera) => activeCameras[cam.id], [activeCameras]);
+  const isConnecting = useCallback((cam: Camera) => connectingCameras.has(cam.id), [connectingCameras]);
 
   const mainCamera = filteredCameras[selectedCameraIndex] || filteredCameras[0];
 
@@ -799,21 +798,23 @@ function MonitorPageContent() {
         <div className="w-10 flex flex-col gap-1 bg-card border border-border rounded-lg p-1 overflow-hidden shrink-0">
           {filteredCameras.length > 0 ? (
             filteredCameras.map((cam, idx) => (
-              <button
+              <Button
                 key={cam.id}
                 onClick={() => {
                   setSelectedCameraIndex(idx);
                   setViewMode("focus");
                 }}
-                className={`w-8 h-8 rounded flex items-center justify-center text-[10px] font-bold transition-colors ${
+                variant={selectedCameraIndex === idx && viewMode === "focus" ? "default" : "secondary"}
+                size="sm"
+                className={`w-8 h-8 p-0 text-[10px] font-bold ${
                   selectedCameraIndex === idx && viewMode === "focus"
-                    ? "bg-[#f59e0b] text-black"
-                    : "bg-muted text-muted-foreground hover:bg-[#f59e0b] hover:text-black"
+                    ? "bg-amber-500 text-black hover:bg-amber-600"
+                    : "text-muted-foreground"
                 }`}
                 title={cam.name}
               >
                 {idx + 1}
-              </button>
+              </Button>
             ))
           ) : (
             <div className="text-[8px] text-center text-muted-foreground pt-2">
@@ -885,7 +886,7 @@ function MonitorPageContent() {
               </>
             ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">
-                  <PhotoCamera className="mr-2" /> Bằng chứng
+                  <CameraIcon className="mr-2" /> Bằng chứng
                 </div>
             );
           })()}
@@ -895,9 +896,9 @@ function MonitorPageContent() {
         {/* 2. Comparison */}
         <div className="flex-1 flex gap-4 lg:gap-8">
           <div className="flex-1 space-y-3 min-w-0">
-            <h4 className="text-xs font-bold text-[#f59e0b] uppercase tracking-wider flex items-center gap-2">
+            <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wider flex items-center gap-2">
               <div
-                className={`w-2 h-2 rounded-full ${currentDetection ? "bg-[#f59e0b] animate-pulse" : "bg-muted"}`}
+                className={`w-2 h-2 rounded-full ${currentDetection ? "bg-amber-500 animate-pulse" : "bg-muted"}`}
               />
               Kết quả AI
             </h4>
@@ -940,7 +941,7 @@ function MonitorPageContent() {
                 })()}
               </div>
               <div className="flex items-center gap-2 min-w-0">
-                <Palette fontSize="small" className="text-muted-foreground flex-shrink-0" />
+                <Palette className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                 <div className="min-w-0">
                   <span className="block text-[10px] text-muted-foreground">
                     Màu xe
@@ -953,9 +954,8 @@ function MonitorPageContent() {
                 </div>
               </div>
               <div className="flex items-center gap-2 min-w-0">
-                <TireRepair
-                  fontSize="small"
-                  className="text-muted-foreground flex-shrink-0"
+                <CircleDashed
+                  className="w-4 h-4 text-muted-foreground flex-shrink-0"
                 />
                 <div className="min-w-0">
                   <span className="block text-[10px] text-muted-foreground">
@@ -976,9 +976,9 @@ function MonitorPageContent() {
           >
             <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
               {currentDetection?.matched ? (
-                <DriveEta className="text-green-400" fontSize="small" />
+                <Car className="w-4 h-4 text-green-400" />
               ) : (
-                <Warning className="text-amber-400" fontSize="small" />
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
               )}
               Dữ liệu đăng ký
             </h4>
@@ -1013,7 +1013,7 @@ function MonitorPageContent() {
                       const min = (baseline * 0.95).toFixed(2);
                       const max = (baseline * 1.05).toFixed(2);
                       return (
-                        <p className="text-sm font-mono text-[#f59e0b]">
+                        <p className="text-sm font-mono text-amber-500">
                           {min} - {max} m³
                         </p>
                       );
@@ -1039,7 +1039,7 @@ function MonitorPageContent() {
                         const min = (baseline * 0.95).toFixed(2);
                         const max = (baseline * 1.05).toFixed(2);
                         return (
-                        <p className="text-sm font-mono text-[#f59e0b]">
+                        <p className="text-sm font-mono text-amber-500">
                             {min} - {max} m³
                         </p>
                         );
@@ -1053,45 +1053,36 @@ function MonitorPageContent() {
 
         {/* 3. Actions */}
         <div className="w-48 flex flex-col justify-center gap-3 border-l border-border pl-6">
-          <button
+          <Button
             onClick={handleConfirm}
             disabled={!currentDetection}
-            className={`flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 border ${
-              currentDetection
-                ? "bg-green-600 hover:bg-green-500 text-white border-green-500 shadow-lg shadow-green-900/20"
-                : "bg-muted text-muted-foreground border-border cursor-not-allowed"
-            }`}
+            variant="success"
+            className="flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 text-white shadow-lg"
           >
-            <CheckCircle fontSize="small" />
+            <CheckCircle className="w-4 h-4" />
             Xác nhận
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={openEditModal}
             disabled={!currentDetection}
-            className={`flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 border ${
-              currentDetection
-                ? "bg-amber-600 hover:bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-900/20"
-                : "bg-muted text-muted-foreground border-border cursor-not-allowed"
-            }`}
+            variant="warning"
+            className="flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 text-white shadow-lg"
           >
-            <Edit fontSize="small" />
+            <Pencil className="w-4 h-4" />
             Sửa thông tin
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleReject}
             disabled={!currentDetection}
-            className={`flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 border ${
-              currentDetection
-                ? "bg-red-600 hover:bg-red-500 text-white border-red-500 shadow-lg shadow-red-900/20"
-                : "bg-muted text-muted-foreground border-border cursor-not-allowed"
-            }`}
+            variant="destructive"
+            className="flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 text-white shadow-lg"
           >
-            <Cancel fontSize="small" />
+            <XCircle className="w-4 h-4" />
             Từ chối
-          </button>
+          </Button>
         </div>
       </div>
-
+      
       <EditModal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}

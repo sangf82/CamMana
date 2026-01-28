@@ -1,8 +1,9 @@
 import React from "react";
-import { GridView, CropFree, PhotoCamera, ControlCamera } from "@mui/icons-material";
+import { LayoutGrid, Scan, Camera, Move, Info } from "lucide-react";
 import VideoPlayer from "../../../components/features/monitoring/VideoPlayer";
 import { toast } from "sonner";
 import { StreamingLoader } from "@/components/ui/loading-spinner";
+import { Button } from "@/components/ui/button";
 
 interface Camera {
   id: string | number;
@@ -36,7 +37,7 @@ interface CameraGridProps {
 }
 
 
-export default function CameraGrid({
+function CameraGrid({
   viewMode,
   setViewMode,
   currentGate,
@@ -55,40 +56,44 @@ export default function CameraGrid({
       {/* Controls Bar */}
       <div className="flex items-center justify-between bg-card border border-border px-2 py-1 rounded-lg">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-[#f59e0b] px-1 uppercase tracking-wide">
+          <span className="text-xs font-bold text-amber-500 px-1 uppercase tracking-wide">
             {currentGate ? `GIÁM SÁT: ${currentGate}` : "CHỌN CỔNG ĐỂ XEM"}
           </span>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <button
+          <Button
             onClick={() => setViewMode("focus")}
-            className={`p-1.5 rounded transition-colors ${
+            variant="ghost"
+            size="icon"
+            className={`h-8 w-8 rounded transition-colors ${
               viewMode === "focus"
-                ? "bg-accent text-white"
+                ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-muted"
             }`}
             title="Chế độ Tập trung"
           >
-            <CropFree className="text-[#f59e0b]" />
-          </button>
-          <button
+            <Scan className="w-5 h-5 text-amber-500" />
+          </Button>
+          <Button
             onClick={() => setViewMode("grid")}
-            className={`p-1.5 rounded transition-colors ${
+            variant="ghost"
+            size="icon"
+            className={`h-8 w-8 rounded transition-colors ${
               viewMode === "grid"
-                ? "bg-accent text-white"
+                ? "bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-muted"
             }`}
             title="Chế độ Lưới"
           >
-            <GridView className="text-[#f59e0b]" />
-          </button>
+            <LayoutGrid className="w-5 h-5 text-amber-500" />
+          </Button>
         </div>
       </div>
 
       {/* Videos */}
       <div
-        className={`flex-1 min-h-0 bg-zinc-950 rounded-lg overflow-hidden p-1 ${
+        className={`flex-1 min-h-0 bg-background rounded-lg overflow-hidden p-1 ${
           viewMode === "grid"
             ? "grid grid-cols-2 grid-rows-2 gap-2"
             : "flex gap-2"
@@ -101,8 +106,8 @@ export default function CameraGrid({
               return (
                 <div
                   key={cam?.id || `empty-${idx}`}
-                  className={`relative bg-zinc-900 rounded-xl border-2 transition-all duration-300 overflow-hidden shadow-inner ${
-                    cam ? "border-border/40 hover:border-[#f59e0b]/50 hover:shadow-[#f59e0b]/5" : "border-dashed border-border/20"
+                  className={`relative bg-muted rounded-xl border-2 transition-all duration-300 overflow-hidden shadow-inner ${
+                    cam ? "border-border/40 hover:border-amber-500/50 hover:shadow-amber-500/5" : "border-dashed border-border/20"
                   }`}
                 >
                   {cam ? (
@@ -120,7 +125,7 @@ export default function CameraGrid({
                     </>
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground/30">
-                      <PhotoCamera className="mb-2 opacity-10" fontSize="large" />
+                      <Camera className="mb-2 w-8 h-8 opacity-10" />
                       <span className="text-[10px] font-medium uppercase tracking-widest">Trống {idx + 1}</span>
                     </div>
                   )}
@@ -129,12 +134,12 @@ export default function CameraGrid({
             })}
           </>
         ) : !currentGate ? (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900/50 border-2 border-dashed border-border/20 rounded-xl text-muted-foreground/50">
+          <div className="w-full h-full flex flex-col items-center justify-center bg-muted/50 border-2 border-dashed border-border/20 rounded-xl text-muted-foreground/50">
             <p className="text-sm font-medium">Vui lòng chọn Cổng để bắt đầu giám sát</p>
           </div>
         ) : filteredCameras.length === 0 ? (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900/50 border-2 border-dashed border-border/20 rounded-xl text-muted-foreground/50">
-            <PhotoCamera className="text-5xl mb-4 opacity-10" />
+          <div className="w-full h-full flex flex-col items-center justify-center bg-muted/50 border-2 border-dashed border-border/20 rounded-xl text-muted-foreground/50">
+            <Camera className="w-12 h-12 mb-4 opacity-10" />
             <p className="text-sm font-medium uppercase tracking-wider">Chưa có camera tại {currentGate}</p>
           </div>
         ) : (
@@ -159,7 +164,7 @@ export default function CameraGrid({
                     <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-[0.15em] mb-1">
                       Camera
                     </span>
-                    <span className="text-sm font-black text-[#f59e0b] truncate" title={mainCamera.name}>
+                    <span className="text-sm font-black text-amber-500 truncate" title={mainCamera.name}>
                       {mainCamera.name || "N/A"}
                     </span>
                   </div>
@@ -191,7 +196,7 @@ export default function CameraGrid({
                         mainCamera.type.split(",").map((fid) => (
                           <span
                             key={fid}
-                            className="px-1.5 py-0.5 bg-[#f59e0b]/10 text-[#f59e0b] border border-[#f59e0b]/20 rounded-md text-[9px] font-black uppercase tracking-tighter"
+                            className="px-1.5 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-md text-[9px] font-black uppercase tracking-tighter"
                           >
                             {fid.replace("_detect", "").toUpperCase()}
                           </span>
@@ -207,20 +212,22 @@ export default function CameraGrid({
 
                 <div className="flex items-center gap-3 ml-4 shrink-0">
                   {/* PTZ Button */}
-                  <button
+                  <Button
                     onClick={onPtzClick}
-                    className={`flex items-center gap-2 px-4 py-2 text-xs font-black rounded-lg transition-all duration-200 uppercase tracking-wider ${
+                    variant={isPtzActive ? "default" : "secondary"}
+                    size="sm"
+                    className={`gap-2 font-black uppercase tracking-wider ${
                       isPtzActive 
-                        ? "bg-blue-600 text-white shadow-lg shadow-blue-900/40 translate-y-[-1px]" 
-                        : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white"
+                        ? "bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-900/40" 
+                        : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                     }`}
                   >
-                    <ControlCamera sx={{ fontSize: 16 }} />
+                    <Move className="w-4 h-4" />
                     PTZ
-                  </button>
+                  </Button>
 
                   {/* Capture Button */}
-                  <button
+                  <Button
                     onClick={async () => {
                       const activeId = getActiveId(mainCamera);
                       if (!activeId) return;
@@ -246,11 +253,12 @@ export default function CameraGrid({
                         toast.error("Lỗi khi chụp ảnh");
                       }
                     }}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#f59e0b] text-black font-black text-xs rounded-lg hover:bg-[#f59e0b]/90 transition-all duration-200 shadow-lg shadow-[#f59e0b]/20 hover:shadow-[#f59e0b]/30 uppercase tracking-widest active:scale-95"
+                    className="gap-2 bg-amber-500 text-black font-black hover:bg-amber-500/90 shadow-lg shadow-amber-500/20 uppercase tracking-widest"
+                    size="sm"
                   >
-                    <PhotoCamera sx={{ fontSize: 18 }} />
+                    <Camera className="w-4.5 h-4.5" />
                     Chụp ảnh
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -260,3 +268,5 @@ export default function CameraGrid({
     </div>
   );
 }
+
+export default React.memo(CameraGrid);

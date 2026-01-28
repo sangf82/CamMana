@@ -1,24 +1,23 @@
 import React, { useEffect, useCallback, useState } from "react";
 import {
-  EventNote,
-  ToggleOn,
-  ToggleOff,
+  FileText,
+  ToggleRight,
+  ToggleLeft,
   PlayCircle,
-  ControlCamera,
-  ArrowUpward,
-  ArrowDownward,
-  ArrowBack,
-  ArrowForward,
-  Close,
-  Speed,
-} from "@mui/icons-material";
+  Move,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  X,
+  Gauge,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import LogList, { LogEntry } from "./LogList";
 
-interface LogEntry {
-  time: string;
-  message: string;
-  type: "info" | "success" | "warning" | "error";
-}
+
 
 interface EventLogProps {
   logs: LogEntry[];
@@ -139,22 +138,24 @@ export default function EventLog({
       <div className="p-3 border-b border-border bg-muted/20 font-semibold text-sm flex items-center justify-between">
         <div className="flex items-center gap-2">
           {showPtzPanel ? (
-            <ControlCamera fontSize="small" className="text-blue-500" />
+            <Move className="w-4 h-4 text-blue-500" />
           ) : (
-            <EventNote fontSize="small" className="text-[#f59e0b]" />
+            <FileText className="w-4 h-4 text-amber-500" />
           )}
           {showPtzPanel ? "Điều khiển PTZ" : "Nhật ký Sự kiện"}
         </div>
         
         {/* Cancel button for PTZ panel */}
         {showPtzPanel && (
-          <button
+          <Button
             onClick={onClosePtz}
-            className="p-1 hover:bg-red-500/20 text-red-400 hover:text-red-300 rounded-full transition-colors"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 text-red-400 hover:text-red-300 hover:bg-red-500/20"
             title="Đóng PTZ"
           >
-            <Close fontSize="small" />
-          </button>
+            <X className="w-4 h-4" />
+          </Button>
         )}
       </div>
 
@@ -172,11 +173,11 @@ export default function EventLog({
                   onMouseLeave={stopPtz}
                   className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
                     activeKey === "ArrowUp" 
-                      ? "bg-[#f59e0b] text-black scale-95" 
-                      : "bg-muted hover:bg-[#f59e0b] hover:text-black active:scale-95"
+                      ? "bg-amber-500 text-black scale-95" 
+                      : "bg-muted hover:bg-amber-500 hover:text-black active:scale-95"
                   }`}
                 >
-                  <ArrowUpward />
+                  <ArrowUp className="w-6 h-6" />
                 </button>
                 <div />
 
@@ -186,14 +187,14 @@ export default function EventLog({
                   onMouseLeave={stopPtz}
                   className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
                     activeKey === "ArrowLeft" 
-                      ? "bg-[#f59e0b] text-black scale-95" 
-                      : "bg-muted hover:bg-[#f59e0b] hover:text-black active:scale-95"
+                      ? "bg-amber-500 text-black scale-95" 
+                      : "bg-muted hover:bg-amber-500 hover:text-black active:scale-95"
                   }`}
                 >
-                  <ArrowBack />
+                  <ArrowLeft className="w-6 h-6" />
                 </button>
                 <div className="aspect-square bg-muted/20 rounded-lg flex items-center justify-center border border-border/30">
-                  <ControlCamera className="text-muted-foreground/50" />
+                  <Move className="w-6 h-6 text-muted-foreground/50" />
                 </div>
                 <button
                   onMouseDown={() => sendPtzCommand("right")}
@@ -201,11 +202,11 @@ export default function EventLog({
                   onMouseLeave={stopPtz}
                   className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
                     activeKey === "ArrowRight" 
-                      ? "bg-[#f59e0b] text-black scale-95" 
-                      : "bg-muted hover:bg-[#f59e0b] hover:text-black active:scale-95"
+                      ? "bg-amber-500 text-black scale-95" 
+                      : "bg-muted hover:bg-amber-500 hover:text-black active:scale-95"
                   }`}
                 >
-                  <ArrowForward />
+                  <ArrowRight className="w-6 h-6" />
                 </button>
 
                 <div />
@@ -215,11 +216,11 @@ export default function EventLog({
                   onMouseLeave={stopPtz}
                   className={`aspect-square rounded-lg transition-colors flex items-center justify-center shadow-sm border border-border/50 ${
                     activeKey === "ArrowDown" 
-                      ? "bg-[#f59e0b] text-black scale-95" 
-                      : "bg-muted hover:bg-[#f59e0b] hover:text-black active:scale-95"
+                      ? "bg-amber-500 text-black scale-95" 
+                      : "bg-muted hover:bg-amber-500 hover:text-black active:scale-95"
                   }`}
                 >
-                  <ArrowDownward />
+                  <ArrowDown className="w-6 h-6" />
                 </button>
                 <div />
              </div>
@@ -228,13 +229,13 @@ export default function EventLog({
           {/* Speed Control Slider */}
           <div className="bg-muted/30 rounded-lg p-3 mt-4">
             <div className="flex items-center gap-3">
-              <Speed className="text-[#f59e0b] text-sm flex-shrink-0" />
+              <Gauge className="text-amber-500 w-4 h-4 flex-shrink-0" />
               <div className="flex-1 relative h-6 flex items-center">
                 {/* Track background */}
                 <div className="absolute inset-x-0 h-1 bg-muted-foreground/30 rounded-full" />
                 {/* Filled track */}
                 <div 
-                  className="absolute left-0 h-1 bg-[#f59e0b] rounded-full transition-all"
+                  className="absolute left-0 h-1 bg-amber-500 rounded-full transition-all"
                   style={{ width: `${((ptzSpeed - 10) / 90) * 100}%` }}
                 />
                 {/* Range input */}
@@ -249,11 +250,11 @@ export default function EventLog({
                 />
                 {/* Custom thumb */}
                 <div 
-                  className="absolute w-4 h-4 bg-[#f59e0b] rounded-full shadow-lg border-2 border-background cursor-pointer pointer-events-none transition-all hover:scale-110"
+                  className="absolute w-4 h-4 bg-amber-500 rounded-full shadow-lg border-2 border-background cursor-pointer pointer-events-none transition-all hover:scale-110"
                   style={{ left: `calc(${((ptzSpeed - 10) / 90) * 100}% - 8px)` }}
                 />
               </div>
-              <div className="bg-[#f59e0b] text-black text-xs font-bold px-2 py-1 rounded-md min-w-[42px] text-center flex-shrink-0">
+              <div className="bg-amber-500 text-black text-xs font-bold px-2 py-1 rounded-md min-w-[42px] text-center flex-shrink-0">
                 {ptzSpeed}%
               </div>
             </div>
@@ -268,30 +269,8 @@ export default function EventLog({
         </div>
       ) : (
         /* Event Log */
-        <div className="flex-1 overflow-y-auto p-2 font-mono text-xs space-y-1">
-          {logs.length === 0 && (
-            <div className="text-center text-muted-foreground italic text-[10px] py-4 opacity-50">
-              Chưa có sự kiện nào
-            </div>
-          )}
-          {logs.map((log, i) => (
-            <div
-              key={i}
-              className={`p-2 rounded border border-border/50 animate-in fade-in slide-in-from-right-2 duration-300 ${
-                log.type === "success"
-                  ? "bg-green-500/10 text-green-400"
-                  : log.type === "warning"
-                  ? "bg-amber-500/10 text-amber-400"
-                  : log.type === "error"
-                  ? "bg-red-500/10 text-red-400"
-                  : "bg-muted/30 text-muted-foreground"
-              }`}
-            >
-              <span className="text-[10px] opacity-60">{log.time}</span>{" "}
-              {log.message}
-            </div>
-          ))}
-        </div>
+        /* Event Log */
+        <LogList logs={logs} />
       )}
 
       {/* CONTROL PANEL */}
@@ -300,45 +279,43 @@ export default function EventLog({
           <span className="text-xs font-semibold text-muted-foreground">
             Tự động phát hiện
           </span>
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setIsAutoDetect(!isAutoDetect)}
-            className={`flex items-center gap-1 transition-colors ${
-              isAutoDetect ? "text-[#f59e0b]" : "text-muted-foreground"
+            className={`flex items-center gap-1 transition-colors h-8 px-2 ${
+              isAutoDetect ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground"
             }`}
           >
             <span className="text-[10px] font-bold">
               {isAutoDetect ? "ON" : "OFF"}
             </span>
             {isAutoDetect ? (
-              <ToggleOn fontSize="large" />
+              <ToggleRight className="w-5 h-5" />
             ) : (
-              <ToggleOff fontSize="large" />
+              <ToggleLeft className="w-5 h-5" />
             )}
-          </button>
+          </Button>
         </div>
 
-        <button
+        <Button
           onClick={handleManualDetection}
           disabled={isProcessing || !currentGate}
-          className={`w-full py-2 rounded text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 ${
-            isProcessing
-              ? "bg-muted text-muted-foreground cursor-not-allowed"
-              : "bg-secondary hover:bg-secondary/80 text-secondary-foreground border border-border/50"
-          }`}
-          title="Kích hoạt phát hiện thủ công"
+          className="w-full"
+          variant={isProcessing ? "secondary" : "default"}
         >
           {isProcessing ? (
             <>
-              <div className="w-4 h-4 border-2 border-[#f59e0b] border-t-transparent rounded-full animate-spin" />
+              <Loader2 className="w-4 h-4 mr-2 animate-spin text-amber-500" />
               ĐANG XỬ LÝ...
             </>
           ) : (
             <>
-              <PlayCircle fontSize="small" />
+              <PlayCircle className="w-4 h-4 mr-2" />
               KÍCH HOẠT THỦ CÔNG
             </>
           )}
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
-
-import { Edit, Delete } from '@mui/icons-material'
+import { Pencil, Trash } from 'lucide-react'
+import { Button } from "@/components/ui/button"
 
 export interface Vehicle {
   id: number | string
@@ -45,18 +45,22 @@ export default function VehicleTable({ data, loading, onEdit, onDelete }: Vehicl
       width: '100px',
       render: (row: Vehicle) => (
         <div className="flex gap-2">
-          <button 
+          <Button
             onClick={(e) => { e.stopPropagation(); onEdit(row) }}
-            className="p-1 text-[#f59e0b] hover:bg-[#f59e0b]/10 rounded transition-colors"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-amber-500 hover:text-amber-600 hover:bg-amber-500/10"
           >
-            <Edit fontSize="small" />
-          </button>
-          <button 
+            <Pencil className="w-4 h-4" />
+          </Button>
+          <Button
              onClick={(e) => { e.stopPropagation(); onDelete(row.id) }}
-             className="p-1 text-red-500 hover:bg-red-500/10 rounded transition-colors"
+             variant="ghost"
+             size="icon"
+             className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
           >
-            <Delete fontSize="small" />
-          </button>
+            <Trash className="w-4 h-4" />
+          </Button>
         </div>
       )
     }

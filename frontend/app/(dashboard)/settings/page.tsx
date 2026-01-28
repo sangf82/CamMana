@@ -279,10 +279,10 @@ export default function SettingsPage() {
         </p>
       </div>
       
-      {/* 2x2 Window Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* 2x2/4x1 Window Layout */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 auto-rows-fr">
           {/* 1. User Info Panel */}
-          <Card className="border-border shadow-md overflow-hidden flex flex-col h-[300px]">
+          <Card className="border-border shadow-md overflow-hidden flex flex-col h-full min-h-[300px]">
             <div className="h-24 bg-gradient-to-r from-amber-500/20 to-amber-500/5 relative shrink-0">
                 <div className="absolute -bottom-8 left-8">
                     <div className="w-16 h-16 rounded-2xl bg-amber-500 flex items-center justify-center text-zinc-950 text-xl font-black shadow-xl border-4 border-background">
@@ -327,7 +327,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* 2. PC Info Panel */}
-          <Card className="bg-card border-border shadow-md h-[300px] flex flex-col">
+          <Card className="bg-card border-border shadow-md flex flex-col h-full min-h-[300px]">
             <CardHeader className="py-4 px-6 border-b border-border/50 bg-muted/20 shrink-0">
                 <CardTitle className="text-[10px] font-semibold flex items-center gap-2 uppercase tracking-[0.2em] text-foreground">
                     <Monitor className="h-4 w-4 text-amber-500" />
@@ -363,7 +363,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* 3. Theme Panel */}
-          <Card className="shadow-md border-border h-[200px] flex flex-col">
+          <Card className="shadow-md border-border flex flex-col h-full min-h-[300px]">
             <CardHeader className="py-3 px-6 border-b border-border/50 bg-muted/20 shrink-0">
               <CardTitle className="text-[10px] font-semibold flex items-center gap-2 uppercase tracking-[0.2em] text-foreground">
                 {isDark ? <Moon className="h-4 w-4 text-amber-500" /> : <Sun className="h-4 w-4 text-amber-500" />}
@@ -395,7 +395,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* 4. Sync Panel */}
-          <Card className="shadow-md border-border h-[200px] flex flex-col">
+          <Card className="shadow-md border-border flex flex-col h-full min-h-[300px]">
             <CardHeader className="py-3 px-6 border-b border-border/50 bg-muted/20 shrink-0">
               <CardTitle className="text-[10px] font-semibold flex items-center justify-between gap-2 uppercase tracking-[0.2em] text-foreground">
                 <div className="flex items-center gap-2">

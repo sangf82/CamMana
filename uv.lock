@@ -137,6 +137,11 @@ dev = [
     { name = "pyinstaller" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pyinstaller" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aiofiles", specifier = ">=24.0.0" },
@@ -164,6 +169,9 @@ requires-dist = [
     { name = "zeroconf", specifier = ">=0.148.0" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pyinstaller", specifier = ">=6.18.0" }]
 
 [[package]]
 name = "certifi"

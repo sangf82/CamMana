@@ -94,11 +94,26 @@ class Settings(BaseSettings):
     
     @property
     def project_root(self) -> Path:
-        """Path to project root directory."""
+        """Path to project root directory.
+        
+        In production, backend runs from .venv/Scripts/python.exe
+        so we need to go up 2 levels to get to CamMana folder.
+        We detect production by checking if .venv exists in parent folders.
+        """
+        backend_parent = self.backend_dir.parent
+        
+        # Check if running from a .venv (production subprocess)
+        # The path would be like: CamMana/.venv/Scripts/python.exe
+        # and backend_dir would be CamMana/backend
+        if (backend_parent / ".venv" / "Scripts" / "python.exe").exists():
+            return backend_parent
+        
+        # Check frozen state (though in new strategy, backend isn't frozen)
         if getattr(sys, 'frozen', False):
-            # Running as compiled executable
             return Path(sys.executable).parent
-        return self.backend_dir.parent
+        
+        # Development mode
+        return backend_parent
     
     @property
     def data_root(self) -> Path:
