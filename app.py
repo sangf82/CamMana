@@ -50,14 +50,24 @@ def setup_logging():
 
 
 def is_production_mode() -> bool:
-    """Detect if running in production mode (frozen exe or built assets exists)"""
+    """Detect if running in production mode"""
     if "--prod" in sys.argv: return True
     if "--dev" in sys.argv: return False
-    # Check if we are running as an executable or if we are in the dev source tree
-    is_source_tree = (Path(__file__).parent / "pyproject.toml").exists()
-    if is_source_tree: return False
     
-    return getattr(sys, 'frozen', False) or hasattr(sys, 'nuitka_binary') or (get_resource_path("frontend/out")).exists()
+    # 1. Check if built assets exist (Primary indicator for production)
+    if (get_resource_path("frontend/out")).exists():
+        return True
+        
+    # 2. Check for compiled environment
+    if getattr(sys, 'frozen', False) or hasattr(sys, 'nuitka_binary'):
+        return True
+        
+    # 3. If in source tree with pyproject.toml and no assets, default to dev
+    is_source_tree = (Path(__file__).parent / "pyproject.toml").exists()
+    if is_source_tree: 
+        return False
+    
+    return True # Default to prod if unsure
 
 def get_assets_dir() -> Path:
     """Get assets directory - priority to packed assets in production"""
@@ -272,20 +282,39 @@ class BackendManager(QObject):
         env = os.environ.copy()
         env.update({"PYTHONPATH": str(APP_DIR), "PYTHONDONTWRITEBYTECODE": "1"})
         
-        # When compiled, we call ourselves with --backend
-        # When in dev, we can still use the flag for consistency
+        # Đảm bảo thư mục log tồn tại
+        log_dir = APP_DIR / "database" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        backend_log = log_dir / "backend_errors.log"
+
         cmd = [str(python_exe), "--backend"]
-        
         logging.info(f"Starting backend process: {' '.join(cmd)}")
-        self.process_manager.spawn(args=cmd, cwd=str(APP_DIR), env=env)
-    
+        
+        # Chạy backend và chuyển hướng lỗi ra file để debug
+        try:
+            with open(backend_log, "a", encoding="utf-8") as f:
+                f.write(f"\n--- Process Started at {datetime.now()} ---\n")
+            
+            # Sử dụng log file cho stderr để không bị mất thông tin khi lỗi
+            flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            proc = subprocess.Popen(
+                cmd, cwd=str(APP_DIR), env=env, 
+                stdout=subprocess.DEVNULL, 
+                stderr=open(backend_log, "a", encoding="utf-8"),
+                creationflags=flags | subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+            self.process_manager._processes.append(proc)
+        except Exception as e:
+            logging.error(f"Failed to spawn backend: {e}")
+            raise
+
     def _start_frontend_dev(self):
         frontend_dir = APP_DIR / "frontend"
         if not (frontend_dir / "node_modules").exists():
             subprocess.run(["npm", "install"], cwd=str(frontend_dir), shell=True, capture_output=True)
         self.process_manager.spawn(args=["npm", "run", "dev"], cwd=str(frontend_dir), shell=True)
-    
-    def _wait_for_port(self, port: int, timeout: int = 45) -> bool:
+
+    def _wait_for_port(self, port: int, timeout: int = 60) -> bool:
         start = time.time()
         while time.time() - start < timeout:
             if check_port(port): return True

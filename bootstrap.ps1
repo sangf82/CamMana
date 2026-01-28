@@ -154,38 +154,47 @@ if (!(Test-Path $TargetDir)) {
 }
 Set-Location $TargetDir
 
-# 5. THIẾT LẬP MÔI TRƯỜNG PYTHON
+# 5. THIẾT LẬP MÔI TRƯỜNG PYTHON & CẤU HÌNH
 Write-Step "Đang cấu hình môi trường Python (uv sync)..."
-Write-Host "Quá trình này có thể mất vài phút để tải Python và các thư viện cần thiết." -ForegroundColor Gray
 try {
-    # uv sync sẽ tự tải Python đúng phiên bản nếu chưa có
+    # Tạo file .env nếu chưa có (Rất quan trọng cho Backend)
+    if (!(Test-Path ".env") -and (Test-Path ".env.example")) {
+        Write-Host "📝 Tạo file .env từ mẫu..." -ForegroundColor Gray
+        Copy-Item ".env.example" ".env"
+    }
+
     & uv sync
-    Write-Success "Cấu hình Python thành công."
+    Write-Success "Cấu hình Python và môi trường thành công."
 } catch {
     Write-Error-Custom "Lỗi khi đồng bộ môi trường: $_"
     exit 1
 }
 
-# 6. THIẾT LẬP FRONTEND (Nếu cần thiết)
+# 6. THIẾT LẬP FRONTEND
 if (Test-Path "frontend") {
-    Write-Step "Đang kiểm tra Frontend..."
-    if (!(Test-Path "frontend/node_modules")) {
-        Write-Host "Đang cài đặt node_modules..." -ForegroundColor Gray
-        try {
-            Set-Location "frontend"
-            & npm install
+    Write-Step "Đang cài đặt và đóng gói Frontend (Production)..."
+    try {
+        Set-Location "frontend"
+        if (Get-Command npm -ErrorAction SilentlyContinue) {
+            Write-Host "📦 Cài đặt thư viện..." -ForegroundColor Gray
+            & npm install --no-audit --no-fund
+            
+            Write-Host "🏗️ Đang biên dịch frontend (Build)..." -ForegroundColor Gray
+            & npm run build
+            
             Set-Location ".."
-            Write-Success "Đã cài đặt dependencies cho Frontend."
-        } catch {
-            Write-Warning "Lỗi khi cài đặt Frontend dependencies. Có thể bỏ qua nếu bạn dùng bản build sẵn."
+            Write-Success "Frontend đã được đóng gói sẵn sàng."
+        } else {
+            Write-Warning "Không tìm thấy 'npm', bỏ qua bước build frontend."
             Set-Location ".."
         }
-    } else {
-        Write-Success "Frontend đã sẵn sàng."
+    } catch {
+        Write-Warning "Lỗi khi build Frontend: $_"
+        Set-Location ".."
     }
 }
 
 # 7. CHẠY ỨNG DỤNG
-Write-Step "Hoàn tất! Đang khởi động CamMana..."
+Write-Step "Hoàn tất! Đang khởi động CamMana (Production Mode)..."
 Write-Host "----------------------------------------------------" -ForegroundColor Gray
-& uv run python app.py
+& uv run python app.py --prod
