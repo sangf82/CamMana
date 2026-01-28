@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $OutputEncoding = [System.Text.Encoding]::UTF8
-$Version = "v2.1.0"
+$Version = "v2.2.0"
 
 # --- HELPER FUNCTIONS ---
 function Write-Step ([string]$msg) {
@@ -65,15 +65,19 @@ Write-Host @"
 Write-Step "Đang khởi tạo môi trường làm việc..."
 if ($PWD.Path -like "*system32*") { Set-Location $HOME }
 
-# Logic xác định thư mục dự án thông minh
+# Logic xác định thư mục dự án thông minh (NGĂN CHẶN LỒNG NHAU)
 $ProjectName = "CamMana"
+$CurrentFolder = $PWD.Path -split "\\" | Select-Object -Last 1
+
 if (Test-Path "pyproject.toml") {
+    # Nếu có pyproject.toml ở đây, ta đang ở ĐÚNG gốc dự án
     $TargetDir = "."
-} elseif (Test-Path $ProjectName) {
-    Set-Location $ProjectName
-    if (Test-Path "pyproject.toml") { $TargetDir = "." } else { $TargetDir = $ProjectName }
-    Set-Location ".."
+    Write-Success "Đã xác định thư mục dự án tại: $($PWD.Path)"
+} elseif ($CurrentFolder -eq $ProjectName) {
+    # Nếu tên folder là CamMana nhưng chưa có file, có thể là folder trống
+    $TargetDir = "."
 } else {
+    # Nếu đang ở ngoài (như Desktop hay Downloads), ta mới cần tạo folder CamMana
     $TargetDir = $ProjectName
 }
 

@@ -179,11 +179,12 @@ class BootstrapManager(QObject):
     def _bootstrap(self):
         try:
             if not self.is_frozen:
-                logging.info("Dev mode: skipping bootstrap")
+                # Nếu chạy qua 'uv run' hoặc python trực tiếp, môi trường đã được uv quản lý
+                logging.info("Environment managed by external runner (uv/python)")
                 self.finished.emit(); return
             
             if self.is_compiled:
-                logging.info("Nuitka standalone: environment is native, skipping bootstrap")
+                logging.info("Native binary: skipping environment setup")
                 self.finished.emit(); return
 
             venv_path, pyproject_path = APP_DIR / ".venv", APP_DIR / "pyproject.toml"
@@ -290,17 +291,19 @@ class BackendManager(QObject):
         cmd = [str(python_exe), "--backend"]
         logging.info(f"Starting backend process: {' '.join(cmd)}")
         
-        # Chạy backend và chuyển hướng lỗi ra file để debug
+        # Chạy backend và chuyển hướng cả stdout/stderr ra file để debug
         try:
             with open(backend_log, "a", encoding="utf-8") as f:
-                f.write(f"\n--- Process Started at {datetime.now()} ---\n")
+                f.write(f"\n--- [BACKEND START] {datetime.now()} ---\n")
             
-            # Sử dụng log file cho stderr để không bị mất thông tin khi lỗi
+            # Mở file log ở chế độ append cho cả stdout và stderr
+            log_file = open(backend_log, "a", encoding="utf-8")
+            
             flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
             proc = subprocess.Popen(
                 cmd, cwd=str(APP_DIR), env=env, 
-                stdout=subprocess.DEVNULL, 
-                stderr=open(backend_log, "a", encoding="utf-8"),
+                stdout=log_file, 
+                stderr=log_file,
                 creationflags=flags | subprocess.CREATE_NEW_PROCESS_GROUP
             )
             self.process_manager._processes.append(proc)
