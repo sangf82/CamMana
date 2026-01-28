@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $OutputEncoding = [System.Text.Encoding]::UTF8
-$Version = "v2.5.0"
+$Version = "v2.5.1"
 
 # --- HELPER FUNCTIONS ---
 function Write-Step ([string]$msg) {
@@ -123,7 +123,7 @@ if ($TargetDir -ne ".") {
                 if (Get-Command git -ErrorAction SilentlyContinue) {
                     git fetch --quiet
                     $Local = git rev-parse HEAD
-                    $Remote = git rev-parse @{u}
+                    $Remote = git rev-parse '@{u}'
                     if ($Local -ne $Remote) {
                         Write-Warning "Phát hiện phiên bản mới. Đang cập nhật..."
                         git pull --quiet
@@ -164,7 +164,7 @@ if ($TargetDir -ne ".") {
         try {
             git fetch --quiet
             $Local = git rev-parse HEAD
-            $Remote = git rev-parse @{u}
+            $Remote = git rev-parse '@{u}'
             if ($Local -ne $Remote) {
                 Write-Warning "Phát hiện phiên bản mới tại gốc. Đang cập nhật..."
                 git pull --quiet
