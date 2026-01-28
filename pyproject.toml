@@ -46,7 +46,9 @@ allow-direct-references = true
 
 [dependency-groups]
 dev = [
+    "nuitka>=2.8.10",
     "pyinstaller>=6.18.0",
+    "zstandard>=0.25.0",
 ]
 
 [project.scripts]

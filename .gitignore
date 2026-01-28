@@ -1,7 +1,6 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
-build/
 dist/
 wheels/
 *.egg-info
@@ -16,7 +15,7 @@ node_modules/
 .agent
 .github
 
-# Database
+# Database/Storage
 *.jpg
 *.csv
 database/captured_img/*
@@ -24,11 +23,14 @@ database/car_history/*
 database/csv_data/*
 database/report/*
 database/sync_config.json
+database/logs/*
 
-# Production files
-CamMana.spec
-requirements-build.txt
-build
-dist
+# Production/Build Artifacts
+production/build/
+production/output/
+production/*.exe
+CamMana_Setup.exe
+frontend/out/
 *.spec
-product/*
+app.build/
+app.dist/
