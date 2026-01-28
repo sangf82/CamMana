@@ -1,10 +1,6 @@
-# CamMana Windows Bootstrap Script
-# Mục tiêu: Thiết lập môi trường từ con số 0 và chạy ứng dụng CamMana.
-# Cách dùng: Mở PowerShell và dán:
-# irm https://raw.githubusercontent.com/sangf82/CamMana/master/bootstrap.ps1 | iex
-
 $ErrorActionPreference = "Stop"
 $OutputEncoding = [System.Text.Encoding]::UTF8
+$Version = "v2.1.0"
 
 # --- HELPER FUNCTIONS ---
 function Write-Step ([string]$msg) {
@@ -25,16 +21,33 @@ function Write-Error-Custom ([string]$msg) {
 
 function Refresh-Path {
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-    $PossiblePaths = @(
-        "$HOME\.local\bin",
-        "$env:APPDATA\uv\bin",
-        "$env:ProgramFiles\nodejs",
-        "$env:ProgramFiles\Git\cmd"
-    )
+    $PossiblePaths = @("$HOME\.local\bin", "$env:APPDATA\uv\bin", "$env:ProgramFiles\nodejs", "$env:ProgramFiles\Git\cmd")
     foreach ($p in $PossiblePaths) {
-        if (Test-Path $p) {
-            if ($env:Path -notlike "*$p*") { $env:Path += ";$p" }
+        if (Test-Path $p) { if ($env:Path -notlike "*$p*") { $env:Path += ";$p" } }
+    }
+}
+
+# --- 0. KIỂM TRA QUYỀN CHẠY SCRIPT (Execution Policy) ---
+$Policy = Get-ExecutionPolicy
+if ($Policy -eq "Restricted" -or $Policy -eq "Undefined") {
+    Write-Host "****************************************************" -ForegroundColor Yellow
+    Write-Host "*                                                  *" -ForegroundColor Yellow
+    Write-Host "* 🔥 CẦN CẤP QUYỀN CHẠY SCRIPT ĐỂ TIẾP TỤC         *" -ForegroundColor Yellow
+    Write-Host "*                                                  *" -ForegroundColor Yellow
+    Write-Host "****************************************************" -ForegroundColor Yellow
+    Write-Host "`nHiện tại máy bạn đang chặn chạy script PowerShell ($Policy)." -ForegroundColor White
+    $Choice = Read-Host "Bạn có muốn cấp quyền (RemoteSigned) để cài đặt ứng dụng không? (Y/N)"
+    if ($Choice -eq "Y" -or $Choice -eq "y") {
+        try {
+            # Thiết lập cho CurrentUser để không cần quyền Admin cao nhất
+            Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+            Write-Success "Đã cập nhật ExecutionPolicy thành RemoteSigned."
+        } catch {
+            Write-Error-Custom "Không thể thay đổi quyền. Vui lòng chạy PowerShell với quyền 'Run as Administrator'."
+            exit 1
         }
+    } else {
+        Write-Warning "Đã từ chối cấp quyền. Quá trình cài đặt Frontend có thể sẽ thất bại."
     }
 }
 
@@ -43,173 +56,100 @@ Write-Host @"
 *                                                  *
 *       CAMMANA - HỆ THỐNG QUẢN LÝ CAMERA          *
 *           BOOTSTRAP & AUTO-INSTALLER             *
+*                Phiên bản: $Version               *
 *                                                  *
 ****************************************************
 "@ -ForegroundColor Magenta
 
 # 1. CHUẨN BỊ MÔI TRƯỜNG & DỌN DẸP
 Write-Step "Đang khởi tạo môi trường làm việc..."
+if ($PWD.Path -like "*system32*") { Set-Location $HOME }
 
-# Đảm bảo chạy ở thư mục an toàn (Tránh chạy trong system32)
-if ($PWD.Path -like "*system32*") {
-    Set-Location $HOME
-}
-Write-Host "📂 Thư mục làm việc: $($PWD.Path)" -ForegroundColor Gray
-
-# Dọn dẹp tệp tin ZIP và thư mục cũ sót lại từ các lần chạy trước
-$OldFiles = Get-ChildItem -Path "." -Filter "CamMana*" -File
-$OldDirs = Get-ChildItem -Path "." -Filter "CamMana-*" -Directory
-
-if ($OldFiles -or $OldDirs) {
-    Write-Host "🧹 Đang dọn dẹp các tệp tin/thư mục cũ..." -ForegroundColor Gray
-    $OldFiles | Remove-Item -Force -ErrorAction SilentlyContinue
-    $OldDirs | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-}
-
-# KIỂM TRA QUYỀN ADMIN (Tùy chọn nhưng khuyến khích cho winget)
-$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Warning "Ứng dụng đang chạy không có quyền Admin. Một số tác vụ cài đặt có thể yêu cầu quyền này."
-}
-
-# 2. CÀI ĐẶT CÁC CÔNG CỤ CẦN THIẾT (uv, Git, Node.js)
-Write-Step "Kiểm tra và cài đặt các công cụ hệ thống..."
-
-# Cài đặt uv
-if (!(Get-Command uv -ErrorAction SilentlyContinue)) {
-    Write-Host "Đang cài đặt uv..." -ForegroundColor Gray
-    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-}
-
-# Cài đặt Git (Bắt buộc để clone repo)
-if (!(Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Host "Git chưa có. Đang cài đặt Git qua winget..." -ForegroundColor Gray
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        try {
-            winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements
-            Write-Success "Đã cài đặt Git."
-        } catch {
-            Write-Error-Custom "Không thể cài đặt Git qua winget."
-        }
-    } else {
-        Write-Warning "Không tìm thấy winget để cài đặt Git."
-    }
-}
-
-# Cài đặt Node.js
-if (!(Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Host "Đang cài đặt Node.js qua winget..." -ForegroundColor Gray
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        try {
-            winget install OpenJS.NodeJS --source winget --accept-source-agreements --accept-package-agreements
-            Write-Success "Đã cài đặt Node.js."
-        } catch {
-            Write-Warning "Lỗi cài đặt Node.js."
-        }
-    }
-}
-
-# Cập nhật lại Path để nhận diện các công cụ vừa cài
-Refresh-Path
-
-# Kiểm tra lại Git sau khi cài đặt
-if (!(Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Warning "Git vẫn chưa khả dụng. Sẽ thử dùng phương pháp tải ZIP nếu cần."
-} else {
-    Write-Success "Các công cụ hệ thống đã sẵn sàng."
-}
-
-# 4. TẢI MÃ NGUỒN
-Write-Step "Đang tải mã nguồn ứng dụng..."
-$RepoUrl = "https://github.com/sangf82/CamMana.git"
+# Logic xác định thư mục dự án thông minh
 $ProjectName = "CamMana"
-
-# Kiểm tra xem có đang đứng trong thư mục CamMana không để tránh clone lồng
-if ($PWD.Path -split "\\" | Select-Object -Last 1 | Where-Object { $_ -eq $ProjectName }) {
-    if (Test-Path "pyproject.toml") {
-        Write-Success "Bạn đang đứng trong thư mục dự án. Bỏ qua bước Clone."
-        $TargetDir = "."
-    } else {
-        $TargetDir = $ProjectName
-    }
+if (Test-Path "pyproject.toml") {
+    $TargetDir = "."
+} elseif (Test-Path $ProjectName) {
+    Set-Location $ProjectName
+    if (Test-Path "pyproject.toml") { $TargetDir = "." } else { $TargetDir = $ProjectName }
+    Set-Location ".."
 } else {
     $TargetDir = $ProjectName
 }
 
+# Dọn dẹp tệp tin ZIP cũ
+Get-ChildItem -Path "." -Filter "CamMana*.zip" -File | Remove-Item -Force -ErrorAction SilentlyContinue
+
+# 2. CÀI ĐẶT CÔNG CỤ (uv, Git, Node.js)
+Write-Step "Kiểm tra và cài đặt công cụ hệ thống..."
+if (!(Get-Command uv -ErrorAction SilentlyContinue)) {
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+}
+if (!(Get-Command git -ErrorAction SilentlyContinue)) {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements
+    }
+}
+if (!(Get-Command node -ErrorAction SilentlyContinue)) {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        winget install OpenJS.NodeJS --source winget --accept-source-agreements --accept-package-agreements
+    }
+}
+Refresh-Path
+
+# 4. TẢI MÃ NGUỒN
+Write-Step "Đang tải mã nguồn ứng dụng..."
+$RepoUrl = "https://github.com/sangf82/CamMana.git"
+
 if ($TargetDir -ne ".") {
     if (Test-Path $TargetDir) {
         Write-Warning "Thư mục $TargetDir đã tồn tại. Đang dọn dẹp..."
-        try {
-            Remove-Item -Recurse -Force $TargetDir
-        } catch {
-            $TargetDir = "$TargetDir-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-        }
+        Remove-Item -Recurse -Force $TargetDir -ErrorAction SilentlyContinue
     }
-
     if (Get-Command git -ErrorAction SilentlyContinue) {
-        Write-Host "Đang thực hiện Git Clone từ: $RepoUrl" -ForegroundColor Gray
         git clone --depth 1 $RepoUrl $TargetDir
     } else {
-        Write-Warning "Không tìm thấy Git. Dùng ZIP..."
-        $BaseUrl = $RepoUrl.Replace(".git", "")
-        $ZipFile = "CamMana.zip"
-        $ZipUrl = "$BaseUrl/archive/refs/heads/master.zip"
-        Invoke-WebRequest -Uri $ZipUrl -OutFile $ZipFile
-        Expand-Archive -Path $ZipFile -DestinationPath "." -Force
-        $ExtractedDir = Get-ChildItem -Directory | Where-Object { $_.Name -like "CamMana-*" } | Select-Object -First 1
-        if ($ExtractedDir) { Rename-Item -Path $ExtractedDir.FullName -NewName $TargetDir }
-        Remove-Item $ZipFile
+        Write-Warning "Không có Git, tải ZIP..."
+        $ZipUrl = "https://github.com/sangf82/CamMana/archive/refs/heads/master.zip"
+        Invoke-WebRequest -Uri $ZipUrl -OutFile "CamMana.zip"
+        Expand-Archive -Path "CamMana.zip" -DestinationPath "." -Force
+        $ExtDir = Get-ChildItem -Directory | Where-Object { $_.Name -like "CamMana-*" } | Select-Object -First 1
+        if ($ExtDir) { Rename-Item -Path $ExtDir.FullName -NewName $TargetDir }
+        Remove-Item "CamMana.zip"
     }
+    Set-Location $TargetDir
 }
 
-if (!(Test-Path $TargetDir)) {
-    Write-Error-Custom "Không thể xác định thư mục nguồn."
-    exit 1
-}
-if ($TargetDir -ne ".") { Set-Location $TargetDir }
-
-# 5. THIẾT LẬP MÔI TRƯỜNG PYTHON & CẤU HÌNH
-Write-Step "Đang cấu hình môi trường Python (uv sync)..."
-try {
-    if (!(Test-Path ".env") -and (Test-Path ".env.example")) {
-        Write-Host "📝 Tạo file .env từ mẫu..." -ForegroundColor Gray
-        Copy-Item ".env.example" ".env"
-    }
-    & uv sync
-    Write-Success "Cấu hình Python thành công."
-} catch {
-    Write-Error-Custom "Lỗi đồng bộ môi trường: $_"
-    exit 1
-}
+# 5. THIẾT LẬP MÔI TRƯỜNG PYTHON
+Write-Step "Đang cấu hình Python (uv sync)..."
+if (!(Test-Path ".env") -and (Test-Path ".env.example")) { Copy-Item ".env.example" ".env" }
+& uv sync
+Write-Success "Môi trường Python đã sẵn sàng."
 
 # 6. THIẾT LẬP FRONTEND
 if (Test-Path "frontend") {
     Write-Step "Đang cấu hình Frontend..."
-    # Nếu đã có thư mục 'out', tức là đã build rồi, có thể bỏ qua để tiết kiệm thời gian
     if (Test-Path "frontend/out") {
-        Write-Success "Đã tìm thấy bản build sẵn. Bỏ qua bước đóng gói."
+        Write-Success "Đã có bản build sẵn."
     } else {
         try {
             Set-Location "frontend"
-            # Sử dụng npm.cmd để tránh lỗi Execution Policy của PowerShell
-            $npm = if (Get-Command npm.cmd -ErrorAction SilentlyContinue) { "npm.cmd" } else { "npm" }
-            
+            # Cách gọi npm an toàn nhất để tránh lỗi Execution Policy
             Write-Host "📦 Cài đặt thư viện..." -ForegroundColor Gray
-            & $npm install --no-audit --no-fund
+            cmd /c "npm install --no-audit --no-fund"
             
             Write-Host "🏗️ Đang biên dịch frontend..." -ForegroundColor Gray
-            & $npm run build
+            cmd /c "npm run build"
             
             Set-Location ".."
-            Write-Success "Frontend đã sẵn sàng."
+            Write-Success "Frontend đã hoàn tất."
         } catch {
-            Write-Warning "Lỗi khi build Frontend: $_"
+            Write-Warning "Lỗi build Frontend: $_"
             Set-Location ".."
         }
     }
 }
 
 # 7. CHẠY ỨNG DỤNG
-Write-Step "Hoàn tất! Đang khởi động CamMana (Production Mode)..."
-Write-Host "----------------------------------------------------" -ForegroundColor Gray
+Write-Step "Khởi động CamMana (Production Mode)..."
 & uv run python app.py --prod
