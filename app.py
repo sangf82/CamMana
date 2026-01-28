@@ -261,7 +261,8 @@ class BackendManager(QObject):
             self._start_backend(python_exe)
             
             # Chờ backend sẵn sàng với thông tin lỗi chi tiết nếu thất bại
-            status = self._wait_for_port(self.PORT, timeout=90)
+            # Tăng lên 300 giây (5 phút) cho các máy yếu hoặc lần đầu tải AI models
+            status = self._wait_for_port(self.PORT, timeout=300)
             if not status:
                 # Tìm nguyên nhân lỗi từ file log
                 error_msg = "Backend timeout (Port 8000)"
@@ -364,9 +365,15 @@ def main():
     # Handle backend process mode
     if "--backend" in sys.argv:
         try:
-            from backend.server import app as fastapi_app
+            from backend.server import app as fastapi_app, initialize_backend
             import uvicorn
+            
+            # Khởi tạo các dịch vụ ngầm (Scheduler, Sync, v.v.)
+            print("[cam_mana] Initializing backend services...")
+            initialize_backend()
+            
             # Ưu tiên sử dụng 127.0.0.1 để tránh vấn đề phân giải localhost
+            print("[cam_mana] Starting Uvicorn server...")
             uvicorn.run(fastapi_app, host="127.0.0.1", port=8000, log_level="info", access_log=False)
         except Exception as e:
             import traceback
