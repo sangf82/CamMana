@@ -1,83 +1,191 @@
 # CamMana Windows Bootstrap Script
-# Usage: irm <RAW_GIST_URL> | iex
+# Mục tiêu: Thiết lập môi trường từ con số 0 và chạy ứng dụng CamMana.
+# Cách dùng: Mở PowerShell và dán:
+# irm https://raw.githubusercontent.com/sangf82/CamMana/master/bootstrap.ps1 | iex
 
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop"
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
-Write-Host "🚀 Starting CamMana Remote Bootstrap..." -ForegroundColor Cyan
+# --- HELPER FUNCTIONS ---
+function Write-Step ([string]$msg) {
+    Write-Host "`n🚀 $msg" -ForegroundColor Cyan
+}
 
-# 1. CLEANUP
+function Write-Success ([string]$msg) {
+    Write-Host "✅ $msg" -ForegroundColor Green
+}
+
+function Write-Warning ([string]$msg) {
+    Write-Host "⚠️ $msg" -ForegroundColor Yellow
+}
+
+function Write-Error-Custom ([string]$msg) {
+    Write-Host "❌ $msg" -ForegroundColor Red
+}
+
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $PossiblePaths = @(
+        "$HOME\.local\bin",
+        "$env:APPDATA\uv\bin",
+        "$env:ProgramFiles\nodejs",
+        "$env:ProgramFiles\Git\cmd"
+    )
+    foreach ($p in $PossiblePaths) {
+        if (Test-Path $p) {
+            if ($env:Path -notlike "*$p*") { $env:Path += ";$p" }
+        }
+    }
+}
+
+Write-Host @"
+****************************************************
+*                                                  *
+*       CAMMANA - HỆ THỐNG QUẢN LÝ CAMERA          *
+*           BOOTSTRAP & AUTO-INSTALLER             *
+*                                                  *
+****************************************************
+"@ -ForegroundColor Magenta
+
+# 1. CHUẨN BỊ MÔI TRƯỜNG & DỌN DẸP
+Write-Step "Đang khởi tạo môi trường làm việc..."
+
+# Đảm bảo chạy ở thư mục an toàn (Tránh chạy trong system32)
+if ($PWD.Path -like "*system32*") {
+    Set-Location $HOME
+}
+Write-Host "📂 Thư mục làm việc: $($PWD.Path)" -ForegroundColor Gray
+
+# Dọn dẹp tệp tin ZIP và thư mục cũ sót lại từ các lần chạy trước
+$OldFiles = Get-ChildItem -Path "." -Filter "CamMana*" -File
+$OldDirs = Get-ChildItem -Path "." -Filter "CamMana-*" -Directory
+
+if ($OldFiles -or $OldDirs) {
+    Write-Host "🧹 Đang dọn dẹp các tệp tin/thư mục cũ..." -ForegroundColor Gray
+    $OldFiles | Remove-Item -Force -ErrorAction SilentlyContinue
+    $OldDirs | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# KIỂM TRA QUYỀN ADMIN (Tùy chọn nhưng khuyến khích cho winget)
+$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Warning "Ứng dụng đang chạy không có quyền Admin. Một số tác vụ cài đặt có thể yêu cầu quyền này."
+}
+
+# 2. CÀI ĐẶT CÁC CÔNG CỤ CẦN THIẾT (uv, Git, Node.js)
+Write-Step "Kiểm tra và cài đặt các công cụ hệ thống..."
+
+# Cài đặt uv
+if (!(Get-Command uv -ErrorAction SilentlyContinue)) {
+    Write-Host "Đang cài đặt uv..." -ForegroundColor Gray
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+}
+
+# Cài đặt Git (Bắt buộc để clone repo)
+if (!(Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Host "Git chưa có. Đang cài đặt Git qua winget..." -ForegroundColor Gray
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        try {
+            winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements
+            Write-Success "Đã cài đặt Git."
+        } catch {
+            Write-Error-Custom "Không thể cài đặt Git qua winget."
+        }
+    } else {
+        Write-Warning "Không tìm thấy winget để cài đặt Git."
+    }
+}
+
+# Cài đặt Node.js
+if (!(Get-Command node -ErrorAction SilentlyContinue)) {
+    Write-Host "Đang cài đặt Node.js qua winget..." -ForegroundColor Gray
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        try {
+            winget install OpenJS.NodeJS --source winget --accept-source-agreements --accept-package-agreements
+            Write-Success "Đã cài đặt Node.js."
+        } catch {
+            Write-Warning "Lỗi cài đặt Node.js."
+        }
+    }
+}
+
+# Cập nhật lại Path để nhận diện các công cụ vừa cài
+Refresh-Path
+
+# Kiểm tra lại Git sau khi cài đặt
+if (!(Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Warning "Git vẫn chưa khả dụng. Sẽ thử dùng phương pháp tải ZIP nếu cần."
+} else {
+    Write-Success "Các công cụ hệ thống đã sẵn sàng."
+}
+
+# 4. TẢI MÃ NGUỒN
+Write-Step "Đang tải mã nguồn ứng dụng..."
 $TargetDir = "CamMana"
+$RepoUrl = "https://github.com/sangf82/CamMana.git"
+
 if (Test-Path $TargetDir) {
-    Write-Host "🧹 Removing old version of $TargetDir..." -ForegroundColor Yellow
+    Write-Warning "Thư mục $TargetDir đã tồn tại. Đang dọn dẹp..."
     try {
         Remove-Item -Recurse -Force $TargetDir
     } catch {
-        Write-Host "⚠️ Could not remove $TargetDir completely. It might be in use." -ForegroundColor Red
+        $TargetDir = "$TargetDir-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
     }
 }
-
-# 2. Dependency Check: UV
-if (!(Get-Command uv -ErrorAction SilentlyContinue)) {
-    Write-Host "📦 Installing 'uv'..." -ForegroundColor Green
-    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-    $env:Path += ";$HOME\.local\bin"
-    # Try to find the actual path if the above guess is wrong
-    $uvPath = Join-Path $HOME ".local/bin"
-    if (Test-Path $uvPath) { $env:Path += ";$uvPath" }
-}
-
-# 3. Dependency Check: Node.js
-if (!(Get-Command node -ErrorAction SilentlyContinue)) {
-    Write-Host "📦 Attempting to install Node.js via winget..." -ForegroundColor Green
-    winget install OpenJS.NodeJS --source winget --accept-source-agreements --accept-package-agreements
-    # Update Path for current session
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
-}
-
-# 4. Get Source Code
-$RepoUrl = "https://github.com/sangf82/CamMana"
-$ZipUrl = "$RepoUrl/archive/refs/heads/master.zip"
-$ZipFile = "CamMana.zip"
-
-Write-Host "📥 Getting source code..." -ForegroundColor Cyan
 
 if (Get-Command git -ErrorAction SilentlyContinue) {
-    Write-Host "📡 Cloning via Git..." -ForegroundColor Gray
-    git clone --depth 1 "$RepoUrl.git"
+    Write-Host "Đang thực hiện Git Clone từ: $RepoUrl" -ForegroundColor Gray
+    git clone --depth 1 $RepoUrl $TargetDir
 } else {
-    Write-Host "📦 Git not found. Downloading ZIP..." -ForegroundColor Yellow
+    Write-Warning "Không tìm thấy Git. Đang dùng phương thức tải ZIP dự phòng..."
+    $BaseUrl = $RepoUrl.Replace(".git", "")
+    $ZipFile = "CamMana.zip"
+    $ZipUrl = "$BaseUrl/archive/refs/heads/master.zip"
     Invoke-WebRequest -Uri $ZipUrl -OutFile $ZipFile
     Expand-Archive -Path $ZipFile -DestinationPath "." -Force
-    
-    # GitHub ZIPs extract to "RepoName-BranchName" (e.g. CamMana-master)
     $ExtractedDir = Get-ChildItem -Directory | Where-Object { $_.Name -like "CamMana-*" } | Select-Object -First 1
-    if ($ExtractedDir) {
-        Rename-Item -Path $ExtractedDir.FullName -NewName $TargetDir
-    }
+    if ($ExtractedDir) { Rename-Item -Path $ExtractedDir.FullName -NewName $TargetDir }
     Remove-Item $ZipFile
 }
 
 if (!(Test-Path $TargetDir)) {
-    Write-Host "❌ Failed to obtain source code." -ForegroundColor Red
-    exit
+    Write-Error-Custom "Không thể tải mã nguồn."
+    exit 1
 }
 Set-Location $TargetDir
 
-# 5. Setup Python
-Write-Host "🐍 Syncing Python environment..." -ForegroundColor Green
-# Ensure uv is in path for this session if just installed
-$env:Path += ";$HOME\.local\bin"
-uv sync
-
-# 6. Setup Frontend
-if (Test-Path "frontend") {
-    Write-Host "⚛️ Installing Frontend dependencies..." -ForegroundColor Green
-    Set-Location "frontend"
-    # Ensure npm is available in this session
-    npm install
-    Set-Location ".."
+# 5. THIẾT LẬP MÔI TRƯỜNG PYTHON
+Write-Step "Đang cấu hình môi trường Python (uv sync)..."
+Write-Host "Quá trình này có thể mất vài phút để tải Python và các thư viện cần thiết." -ForegroundColor Gray
+try {
+    # uv sync sẽ tự tải Python đúng phiên bản nếu chưa có
+    & uv sync
+    Write-Success "Cấu hình Python thành công."
+} catch {
+    Write-Error-Custom "Lỗi khi đồng bộ môi trường: $_"
+    exit 1
 }
 
-# 7. Launch
-Write-Host "✨ Setup complete. Launching CamMana..." -ForegroundColor Cyan
-uv run python app.py
+# 6. THIẾT LẬP FRONTEND (Nếu cần thiết)
+if (Test-Path "frontend") {
+    Write-Step "Đang kiểm tra Frontend..."
+    if (!(Test-Path "frontend/node_modules")) {
+        Write-Host "Đang cài đặt node_modules..." -ForegroundColor Gray
+        try {
+            Set-Location "frontend"
+            & npm install
+            Set-Location ".."
+            Write-Success "Đã cài đặt dependencies cho Frontend."
+        } catch {
+            Write-Warning "Lỗi khi cài đặt Frontend dependencies. Có thể bỏ qua nếu bạn dùng bản build sẵn."
+            Set-Location ".."
+        }
+    } else {
+        Write-Success "Frontend đã sẵn sàng."
+    }
+}
+
+# 7. CHẠY ỨNG DỤNG
+Write-Step "Hoàn tất! Đang khởi động CamMana..."
+Write-Host "----------------------------------------------------" -ForegroundColor Gray
+& uv run python app.py
