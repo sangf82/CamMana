@@ -1,9 +1,21 @@
+#!/usr/bin/env python
+"""
+CamMana Production Build Script
+
+Usage:
+  uv run python production/build.py              # Full clean build
+  uv run python production/build.py --incremental # Incremental build (faster)
+  uv run python production/build.py --frontend   # Frontend only
+  uv run python production/build.py --backend    # Backend only
+"""
 
 import os
 import sys
 import shutil
 import subprocess
+import time
 from pathlib import Path
+from datetime import datetime
 
 # Paths
 ROOT_DIR = Path(__file__).parent.parent.resolve()
@@ -14,21 +26,74 @@ ASSETS_DIR = PROD_DIR / "assets"
 ISS_CONFIG = PROD_DIR / "config" / "installer.iss"
 FRONTEND_DIR = ROOT_DIR / "frontend"
 
-def run_cmd(cmd, cwd=None):
-    """Run a command with clear logging"""
-    cwd_str = f" in {cwd}" if cwd else ""
-    print(f"🚀 Running: {' '.join(cmd) if isinstance(cmd, list) else cmd}{cwd_str}")
-    subprocess.run(cmd, cwd=str(cwd) if cwd else None, shell=True, check=True)
+# Parse arguments
+INCREMENTAL = "--incremental" in sys.argv or "-i" in sys.argv
+FRONTEND_ONLY = "--frontend" in sys.argv
+BACKEND_ONLY = "--backend" in sys.argv
 
-def clean():
-    """Clean build artifacts and old setup files"""
-    print("🧹 Cleaning build directories and old setup files...")
+# Detect CPU cores for optimal parallelization
+CPU_CORES = os.cpu_count() or 8
+NUITKA_JOBS = min(CPU_CORES, 16)  # Use all cores up to 16
+
+# Build start time
+BUILD_START = time.time()
+
+
+def elapsed() -> str:
+    """Get elapsed time since build start"""
+    secs = int(time.time() - BUILD_START)
+    mins, secs = divmod(secs, 60)
+    return f"{mins:02d}:{secs:02d}"
+
+
+def log(msg: str, level: str = "info"):
+    """Print formatted log messages"""
+    icons = {
+        "info": "[INFO]",
+        "success": "[ OK ]",
+        "warning": "[WARN]",
+        "error": "[FAIL]",
+        "step": "[====]",
+        "dim": "[....]",
+    }
+    icon = icons.get(level, "[INFO]")
+    print(f"[{elapsed()}] {icon} {msg}")
+
+
+def header(title: str):
+    """Print a section header"""
+    print()
+    print("=" * 60)
+    print(f"  {title}")
+    print("=" * 60)
+    print()
+
+
+def run_cmd(cmd, cwd=None, check=True, silent=False):
+    """Run a command with logging"""
+    if not silent:
+        cmd_str = ' '.join(str(c) for c in cmd) if isinstance(cmd, list) else str(cmd)
+        log(f"Running: {cmd_str[:60]}...", "dim")
+    result = subprocess.run(cmd, cwd=str(cwd) if cwd else None, shell=True)
+    if check and result.returncode != 0:
+        raise RuntimeError(f"Command failed (exit {result.returncode})")
+    return result
+
+
+def clean(incremental: bool = False):
+    """Clean build artifacts"""
+    if incremental:
+        log("Incremental mode - keeping Nuitka cache", "info")
+        return
     
-    # Remove final setup from root to avoid version confusion
-    root_setup = ROOT_DIR / "CamMana_Setup.exe"
-    if root_setup.exists():
-        root_setup.unlink()
-        print(f"🗑️ Deleted old {root_setup.name}")
+    log("Cleaning previous build artifacts...", "step")
+    
+    for f in [ROOT_DIR / "CamMana_Setup.exe", PROD_DIR / "dist"]:
+        if f.exists():
+            if f.is_dir():
+                shutil.rmtree(f)
+            else:
+                f.unlink()
 
     for d in [BUILD_DIR, OUTPUT_DIR]:
         if d.exists():
@@ -36,122 +101,234 @@ def clean():
         d.mkdir(parents=True, exist_ok=True)
     
     # Clean pycache
-    print("🧹 Cleaning __pycache__...")
+    count = 0
     for p in ROOT_DIR.rglob("__pycache__"):
         shutil.rmtree(p, ignore_errors=True)
+        count += 1
+    
+    log(f"Cleaned {count} cache directories", "success")
 
-def build_frontend():
-    """Build React frontend to static files"""
-    print("📦 Building React Frontend...")
+
+def build_frontend(force: bool = False):
+    """Build React frontend"""
+    log("Building React Frontend...", "step")
+    out_dir = FRONTEND_DIR / "out"
+    
+    if not force and out_dir.exists() and (out_dir / "index.html").exists():
+        log("Frontend already built (use --frontend to rebuild)", "info")
+        return
+    
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
+    
     if not (FRONTEND_DIR / "node_modules").exists():
-        run_cmd(["npm", "install"], cwd=FRONTEND_DIR)
-    run_cmd(["npm", "run", "build"], cwd=FRONTEND_DIR)
+        log("Installing npm dependencies...", "info")
+        run_cmd(["npm", "install"], cwd=FRONTEND_DIR, silent=True)
+    
+    run_cmd(["npm", "run", "build"], cwd=FRONTEND_DIR, silent=True)
+    log("Frontend build complete", "success")
+
 
 def compile_nuitka():
-    """Compile Python to a single native binary using Nuitka"""
-    print("⚙️ Compiling Backend with Nuitka (this may take a few minutes)...")
+    """Compile Python to standalone using Nuitka"""
+    log("Compiling with Nuitka...", "step")
+    log(f"Using {NUITKA_JOBS} parallel workers (detected {CPU_CORES} CPU cores)", "info")
     
-    # Nuitka command
-    # --onefile creates a single executable
-    # --include-data-dir embeds our assets and frontend
-    # --remove-output cleans up the massive amount of C source files after build
+    # Nuitka command - optimized for speed and size
     nuitka_cmd = [
         sys.executable, "-m", "nuitka",
-        "--onefile",
+        "--standalone",
+        # Data files
         f"--include-data-dir={FRONTEND_DIR / 'out'}=frontend/out",
         f"--include-data-dir={ASSETS_DIR}=assets",
-        f"--include-data-dir={ROOT_DIR / 'backend'}=backend",
-        f"--include-data-file={ROOT_DIR / 'pyproject.toml'}=pyproject.toml",
+        # Windows
         "--windows-console-mode=disable",
+        f"--windows-icon-from-ico={ASSETS_DIR / 'icon.ico'}",
+        # Plugins
         "--plugin-enable=pyside6",
-        "--output-dir={}".format(BUILD_DIR),
-        "--output-filename=CamMana",
-        "--remove-output",
+        # Output
+        f"--output-dir={BUILD_DIR}",
         "--assume-yes-for-downloads",
+        # Progress display
         "--show-progress",
-        "--quiet",
-        # Speed up & Bloat reduction
-        "--jobs=20",
+        "--show-memory",
+        # Performance - use all available cores
+        f"--jobs={NUITKA_JOBS}",
+        # === EXCLUDE UNUSED PACKAGES ===
         "--noinclude-setuptools-mode=nofollow",
         "--noinclude-pytest-mode=nofollow",
         "--noinclude-unittest-mode=nofollow",
         "--noinclude-IPython-mode=nofollow",
+        "--nofollow-import-to=torch",
+        "--nofollow-import-to=torchvision",
+        "--nofollow-import-to=ultralytics",
+        "--nofollow-import-to=tkinter",
+        "--nofollow-import-to=scipy",
+        "--nofollow-import-to=notebook",
+        "--nofollow-import-to=jupyter",
+        # Entry
         str(ROOT_DIR / "app.py")
     ]
-    run_cmd(nuitka_cmd)
     
-    # Move the final EXE to production/CamMana.exe
-    built_exe = BUILD_DIR / "CamMana.exe"
-    target_exe = PROD_DIR / "CamMana.exe"
+    print()
+    log("Phase 1/3: Python optimization...", "info")
     
-    if built_exe.exists():
-        if target_exe.exists():
-            target_exe.unlink()
-        shutil.move(str(built_exe), str(target_exe))
-        print(f"✅ Executable saved to: {target_exe}")
+    # Run with real-time output
+    process = subprocess.Popen(
+        nuitka_cmd, 
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.STDOUT,
+        text=True, 
+        shell=True, 
+        bufsize=1
+    )
+    
+    errors = []
+    last_phase = ""
+    modules_done = 0
+    
+    for line in iter(process.stdout.readline, ''):
+        if not line:
+            break
+        line = line.rstrip()
+        
+        # Track phases
+        if "Completed Python level" in line:
+            print()
+            log("Phase 2/3: Generating C code...", "info")
+            last_phase = "c_gen"
+        elif "Running C compilation" in line:
+            print()
+            log("Phase 3/3: Compiling C code...", "info")
+            last_phase = "c_compile"
+        elif "Backend C:" in line:
+            # Show C compilation progress
+            print(f"\r         {line.strip()}", end="", flush=True)
+        elif "Optimizing module" in line:
+            # Count modules
+            modules_done += 1
+            if modules_done % 50 == 0:
+                print(f"\r         Optimized {modules_done} modules...", end="", flush=True)
+        elif "error:" in line.lower() and "torch" not in line.lower():
+            errors.append(line)
+            print(f"\n[ERROR] {line}")
+        elif "warning:" in line.lower() and any(kw in line.lower() for kw in ["missing", "failed"]):
+            print(f"\n[WARN] {line}")
+    
+    print()  # New line after progress
+    process.wait()
+    
+    if process.returncode != 0:
+        header("BUILD FAILED")
+        if errors:
+            for e in errors[:5]:
+                log(e, "error")
+        log("Try: uv sync && uv run python production/build.py", "info")
+        raise RuntimeError("Nuitka compilation failed")
+    
+    log(f"Optimized {modules_done} modules", "success")
+    
+    # Move output
+    dist = BUILD_DIR / "app.dist"
+    target = PROD_DIR / "dist"
+    
+    if dist.exists():
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.move(str(dist), str(target))
+        
+        src = target / "app.exe"
+        dst = target / "CamMana.exe"
+        if src.exists():
+            if dst.exists():
+                dst.unlink()
+            src.rename(dst)
+        
+        size_mb = dst.stat().st_size / 1024 / 1024
+        log(f"Executable created: CamMana.exe ({size_mb:.1f} MB)", "success")
     else:
-        # Check if it was created in a subdir for some reason
-        possible_nested = BUILD_DIR / "app.dist" / "CamMana.exe"
-        if possible_nested.exists():
-             if target_exe.exists(): target_exe.unlink()
-             shutil.move(str(possible_nested), str(target_exe))
-             print(f"✅ Executable saved to: {target_exe}")
+        raise RuntimeError("Build output not found")
+
 
 def package_inno():
-    """Package the compiled app into a setup.exe using Inno Setup"""
-    print("🛠️ Packaging with Inno Setup...")
+    """Create installer with Inno Setup"""
+    log("Creating Windows installer...", "step")
     
-    # Check for ISCC (Inno Setup Compiler) in common locations
-    search_paths = [
+    iscc = None
+    for p in [
         shutil.which("iscc"),
         Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe"),
         Path(r"C:\Program Files\Inno Setup 6\ISCC.exe"),
-        Path(r"C:\Program Files (x86)\Inno Setup 5\ISCC.exe"), # Fallback to v5
-        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Inno Setup 6" / "ISCC.exe",
-        Path(os.environ.get("ProgramW6432", r"C:\Program Files")) / "Inno Setup 6" / "ISCC.exe"
-    ]
-    
-    iscc = None
-    for p in search_paths:
+    ]:
         if p and Path(p).exists():
             iscc = p
             break
-        
-    if not iscc:
-        print("❌ ISCC.exe (Inno Setup) not found. Skipping auto-packaging.")
-        print(f"👉 Please install Inno Setup 6 and run '{ISS_CONFIG}' manually.")
-        return
-
-    # Inno Setup command
-    # We pass the OutputDir via command line to keep the .iss file clean
-    iscc_cmd = [
-        str(iscc),
-        f"/O{OUTPUT_DIR}",
-        str(ISS_CONFIG)
-    ]
     
-    try:
-        run_cmd(iscc_cmd)
-        
-        # Move final setup to root for convenience
-        setup_exe = OUTPUT_DIR / "CamMana_Setup.exe"
-        if setup_exe.exists():
-            shutil.copy2(setup_exe, ROOT_DIR / "CamMana_Setup.exe")
-            print(f"✅ Success! Installer created: {ROOT_DIR / 'CamMana_Setup.exe'}")
-    except Exception as e:
-        print(f"⚠️ Inno Setup failed: {e}")
-        print("Note: The standalone EXE in 'production/CamMana.exe' is still valid.")
+    if not iscc:
+        log("Inno Setup not found - skipping installer", "warning")
+        log("Install from: https://jrsoftware.org/isdl.php", "info")
+        return
+    
+    result = run_cmd([str(iscc), f"/O{OUTPUT_DIR}", str(ISS_CONFIG)], check=False, silent=True)
+    if result.returncode == 0:
+        src = OUTPUT_DIR / "CamMana_Setup.exe"
+        if src.exists():
+            shutil.copy2(src, ROOT_DIR / "CamMana_Setup.exe")
+            size_mb = src.stat().st_size / 1024 / 1024
+            log(f"Installer created: CamMana_Setup.exe ({size_mb:.1f} MB)", "success")
+    else:
+        log("Inno Setup packaging failed", "error")
+
 
 def main():
+    mode = "INCREMENTAL" if INCREMENTAL else "FULL"
+    if FRONTEND_ONLY:
+        mode = "FRONTEND ONLY"
+    elif BACKEND_ONLY:
+        mode = "BACKEND ONLY"
+    
+    header(f"CamMana Production Build [{mode}]")
+    
+    print(f"  Started at: {datetime.now().strftime('%H:%M:%S')}")
+    print(f"  CPU cores:  {CPU_CORES} (using {NUITKA_JOBS} workers)")
+    print()
+    
     try:
-        clean()
-        build_frontend()
-        compile_nuitka()
-        package_inno()
-        print("\n🎉 Build process completed successfully.")
+        if FRONTEND_ONLY:
+            build_frontend(force=True)
+        else:
+            clean(incremental=INCREMENTAL)
+            if not BACKEND_ONLY:
+                build_frontend()
+            compile_nuitka()
+            package_inno()
+        
+        # Summary
+        total_time = int(time.time() - BUILD_START)
+        mins, secs = divmod(total_time, 60)
+        
+        header("BUILD SUCCESSFUL")
+        
+        dist_exe = PROD_DIR / "dist" / "CamMana.exe"
+        setup_exe = ROOT_DIR / "CamMana_Setup.exe"
+        
+        print(f"  Total time: {mins}m {secs}s")
+        print()
+        if dist_exe.exists():
+            size = dist_exe.stat().st_size / 1024 / 1024
+            print(f"  Standalone: {dist_exe}")
+            print(f"              Size: {size:.1f} MB")
+        if setup_exe.exists():
+            size = setup_exe.stat().st_size / 1024 / 1024
+            print(f"  Installer:  {setup_exe}")
+            print(f"              Size: {size:.1f} MB")
+        print()
+            
     except Exception as e:
-        print(f"\n❌ Build failed: {e}")
+        print()
+        log(f"Build failed: {e}", "error")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

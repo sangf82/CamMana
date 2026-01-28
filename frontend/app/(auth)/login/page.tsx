@@ -23,7 +23,7 @@ export default function LoginPage() {
 
   const fetchSyncStatus = async () => {
     try {
-        const res = await fetch("http://127.0.0.1:8000/api/sync/status");
+        const res = await fetch("/api/sync/status");
         if (res.ok) setSyncStatus(await res.json());
     } catch (e) {}
   };
@@ -31,7 +31,7 @@ export default function LoginPage() {
   const startDiscovery = async () => {
     setIsScanning(true);
     try {
-        const res = await fetch("http://127.0.0.1:8000/api/sync/discover");
+        const res = await fetch("/api/sync/discover");
         if (res.ok) {
             const rawList = await res.json();
             // Parse cleaner names from Zeroconf format
@@ -94,7 +94,7 @@ export default function LoginPage() {
         params.append('remote_url', url);
         params.append('is_destination', 'false');
         
-        const res = await fetch(`http://127.0.0.1:8000/api/sync/configure?${params.toString()}`, {
+        const res = await fetch(`/api/sync/configure?${params.toString()}`, {
             method: 'POST'
         });
         
@@ -118,7 +118,7 @@ export default function LoginPage() {
 
   const useAsMaster = async () => {
     try {
-        const res = await fetch(`http://127.0.0.1:8000/api/sync/configure?is_destination=true`, {
+        const res = await fetch(`/api/sync/configure?is_destination=true`, {
             method: 'POST'
         });
         if (res.ok) {
@@ -142,7 +142,7 @@ export default function LoginPage() {
       formData.append("username", username);
       formData.append("password", password);
 
-      const response = await fetch("http://127.0.0.1:8000/api/user/login", {
+      const response = await fetch("/api/user/login", {
         method: "POST",
         body: formData,
       });
