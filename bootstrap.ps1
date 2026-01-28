@@ -109,46 +109,97 @@ if (!(Get-Command node -ErrorAction SilentlyContinue)) {
 }
 Refresh-Path
 
-# 4. TẢI MÃ NGUỒN
+# 4. CHUẨN BỊ MÃ NGUỒN
 Write-Step "Đang chuẩn bị mã nguồn..."
 $RepoUrl = "https://github.com/sangf82/CamMana.git"
+$NeedsUpdate = $false
 
 if ($TargetDir -ne ".") {
     if (Test-Path $TargetDir) {
-        Write-Warning "Dọn dẹp thư mục cũ..."
-        Remove-Item -Recurse -Force $TargetDir -ErrorAction SilentlyContinue
-    }
-    if (Get-Command git -ErrorAction SilentlyContinue) {
-        git clone --depth 1 $RepoUrl $TargetDir
+        if (Test-Path (Join-Path $TargetDir ".git")) {
+            Write-Host "🔄 Thư mục dự án đã tồn tại. Đang kiểm tra cập nhật..." -ForegroundColor Gray
+            Set-Location $TargetDir
+            try {
+                if (Get-Command git -ErrorAction SilentlyContinue) {
+                    git fetch --quiet
+                    $Local = git rev-parse HEAD
+                    $Remote = git rev-parse @{u}
+                    if ($Local -ne $Remote) {
+                        Write-Warning "Phát hiện phiên bản mới. Đang cập nhật..."
+                        git pull --quiet
+                        $NeedsUpdate = $true
+                    } else {
+                        Write-Success "Phiên bản hiện tại đã là mới nhất."
+                    }
+                }
+            } catch {
+                Write-Warning "Không thể kiểm tra cập nhật tự động (Lỗi Git). Tiếp tục với bản hiện có."
+            }
+        } else {
+            Write-Warning "Thư mục đã tồn tại nhưng không phải Git repo. Đang dọn dẹp để cài mới..."
+            Remove-Item -Recurse -Force $TargetDir -ErrorAction SilentlyContinue
+            git clone --depth 1 $RepoUrl $TargetDir
+            $NeedsUpdate = $true
+            Set-Location $TargetDir
+        }
     } else {
-        Write-Warning "Không có Git, tải ZIP..."
-        Invoke-WebRequest -Uri "https://github.com/sangf82/CamMana/archive/refs/heads/master.zip" -OutFile "src.zip"
-        Expand-Archive -Path "src.zip" -DestinationPath "." -Force
-        $ExtDir = Get-ChildItem -Directory | Where-Object { $_.Name -like "CamMana-*" } | Select-Object -First 1
-        if ($ExtDir) { Rename-Item -Path $ExtDir.FullName -NewName $TargetDir }
-        Remove-Item "src.zip"
+        Write-Host "📦 Cài đặt mới dự án..." -ForegroundColor Gray
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+            git clone --depth 1 $RepoUrl $TargetDir
+        } else {
+            Write-Warning "Không có Git, tải ZIP..."
+            Invoke-WebRequest -Uri "https://github.com/sangf82/CamMana/archive/refs/heads/master.zip" -OutFile "src.zip"
+            Expand-Archive -Path "src.zip" -DestinationPath "." -Force
+            $ExtDir = Get-ChildItem -Directory | Where-Object { $_.Name -like "CamMana-*" } | Select-Object -First 1
+            if ($ExtDir) { Rename-Item -Path $ExtDir.FullName -NewName $TargetDir }
+            Remove-Item "src.zip"
+        }
+        $NeedsUpdate = $true
+        Set-Location $TargetDir
     }
-    Set-Location $TargetDir
+} else {
+    # Đang đứng tại gốc dự án
+    if (Test-Path ".git") {
+        Write-Host "🔄 Kiểm tra cập nhật tại gốc..." -ForegroundColor Gray
+        try {
+            git fetch --quiet
+            $Local = git rev-parse HEAD
+            $Remote = git rev-parse @{u}
+            if ($Local -ne $Remote) {
+                Write-Warning "Phát hiện phiên bản mới tại gốc. Đang cập nhật..."
+                git pull --quiet
+                $NeedsUpdate = $true
+            }
+        } catch { }
+    }
 }
 
 # 5. THIẾT LẬP PYTHON
 Write-Step "Đang đồng bộ môi trường Python..."
 if (!(Test-Path ".env") -and (Test-Path ".env.example")) { Copy-Item ".env.example" ".env" }
-& uv sync
-Write-Success "Python đã sẵn sàng."
+
+# Nếu có cập nhật hoặc chưa có venv, chạy sync
+if ($NeedsUpdate -or !(Test-Path ".venv")) {
+    & uv sync
+    Write-Success "Đã đồng bộ Python hoàn tất."
+} else {
+    Write-Host "✅ Môi trường Python đã sẵn sàng (bỏ qua sync)." -ForegroundColor Gray
+}
 
 # 6. THIẾT LẬP FRONTEND (BUILD PROD)
 if (Test-Path "frontend") {
     Write-Step "Đang đóng gói Frontend..."
     try {
         Set-Location "frontend"
-        if (!(Test-Path "out")) {
-            Write-Host "📦 Đang cài đặt và build (lần đầu)..." -ForegroundColor Gray
+        $IsBuildExists = Test-Path "out"
+        
+        if ($NeedsUpdate -or !$IsBuildExists) {
+            Write-Host "📦 Đang cài đặt node_modules và build..." -ForegroundColor Gray
             cmd /c "npm install --no-audit --no-fund"
             cmd /c "npm run build"
             Write-Success "Đóng gói Frontend thành công."
         } else {
-            Write-Success "Đã có sẵn bản build."
+            Write-Success "Đã có sẵn bản build (bỏ qua npm build)."
         }
         Set-Location ".."
     } catch {
