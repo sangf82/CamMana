@@ -82,10 +82,10 @@ async def proxy_get(
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.get(url, headers=headers)
             if response.status_code == 200:
-                logger.info(f"[Proxy] Connection Successful: {url}")
+                logger.info(f"[Proxy GET] Success: {url}")
                 return response.json()
             else:
-                logger.warning(f"[Proxy] Master returned error {response.status_code} for {url}")
+                logger.warning(f"[Proxy GET] Master returned {response.status_code} for {url}. Result=None.")
                 return None
                 
     except httpx.ConnectTimeout:
@@ -119,9 +119,10 @@ async def proxy_post(
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(url, json=data, headers=headers)
             if response.status_code in (200, 201):
+                logger.info(f"[Proxy POST] Success: {url}")
                 return response.json()
             else:
-                logger.warning(f"Proxy POST {url} returned status {response.status_code}")
+                logger.warning(f"[Proxy POST] Master returned {response.status_code} for {url}. Body: {response.text[:100]}")
                 return None
     except Exception as e:
         logger.error(f"Proxy POST failed for {endpoint}: {e}")
@@ -148,9 +149,10 @@ async def proxy_put(
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.put(url, json=data, headers=headers)
             if response.status_code == 200:
+                logger.info(f"[Proxy PUT] Success: {url}")
                 return response.json()
             else:
-                logger.warning(f"Proxy PUT {url} returned status {response.status_code}")
+                logger.warning(f"[Proxy PUT] Master returned {response.status_code} for {url}. Body: {response.text[:100]}")
                 return None
     except Exception as e:
         logger.error(f"Proxy PUT failed for {endpoint}: {e}")

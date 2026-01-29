@@ -1056,8 +1056,7 @@ function MonitorPageContent() {
           <Button
             onClick={handleConfirm}
             disabled={!currentDetection}
-            variant="success"
-            className="flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 text-white shadow-lg"
+            className="flex-1 py-2.5 font-bold rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 bg-[#00C853] hover:bg-[#00E676] text-white shadow-lg border-none"
           >
             <CheckCircle className="w-4 h-4" />
             Xác nhận
@@ -1065,8 +1064,7 @@ function MonitorPageContent() {
           <Button
             onClick={openEditModal}
             disabled={!currentDetection}
-            variant="warning"
-            className="flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 text-white shadow-lg"
+            className="flex-1 py-2.5 font-bold rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 bg-[#FFD600] hover:bg-[#FFEA00] text-black shadow-lg border-none"
           >
             <Pencil className="w-4 h-4" />
             Sửa thông tin
@@ -1074,8 +1072,7 @@ function MonitorPageContent() {
           <Button
             onClick={handleReject}
             disabled={!currentDetection}
-            variant="destructive"
-            className="flex-1 py-2.5 font-medium rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 text-white shadow-lg"
+            className="flex-1 py-2.5 font-bold rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 bg-[#D50000] hover:bg-[#FF1744] text-white shadow-lg border-none"
           >
             <XCircle className="w-4 h-4" />
             Từ chối

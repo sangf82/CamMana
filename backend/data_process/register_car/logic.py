@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 import logging
+import asyncio
 
 from backend.config import DATA_DIR
 
@@ -61,7 +62,7 @@ class RegisteredCarLogic:
                 self._write_csv(self.current_file, [])
                 logger.info(f"Created new empty file {self.current_file.name}")
 
-        limit_date = datetime.now() - timedelta(days=2)
+        limit_date = datetime.now() - timedelta(days=30)
         for f in DATA_DIR.glob(f"{self.FILE_PREFIX}*.csv"):
             d = self._get_file_date(f.name)
             if d and d.date() < limit_date.date():
@@ -121,15 +122,33 @@ class RegisteredCarLogic:
         
         current_data.append(new_car)
         self._write_csv(self.current_file, current_data)
-        
         # Sync Hook
         try:
             from backend.sync_process.sync.logic import sync_logic
-            import asyncio
             asyncio.create_task(sync_logic.broadcast_change("registered_car", "create", new_car))
-        except: pass
+        except Exception as e:
+            logger.error(f"Failed to sync registered_car create: {e}")
+            pass
             
         return new_car
+
+    def save_car(self, car_data: Dict[str, Any]) -> Dict[str, str]:
+        """Save a car. Update if ID exists, otherwise update by plate, otherwise add."""
+        car_id = car_data.get('car_id')
+        if car_id:
+            updated = self.update_car(car_id, car_data)
+            if updated:
+                return updated
+        
+        # Try finding by plate
+        current_data = self._read_csv()
+        norm_plate = self.normalize_plate(car_data.get('car_plate', ''))
+        for car in current_data:
+            if self.normalize_plate(car['car_plate']) == norm_plate:
+                return self.update_car(car['car_id'], car_data)
+                
+        # Not found, add new
+        return self.add_car(car_data)
 
     def update_car(self, car_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str, str]]:
         current_data = self._read_csv()
@@ -152,9 +171,10 @@ class RegisteredCarLogic:
             # Sync Hook
             try:
                 from backend.sync_process.sync.logic import sync_logic
-                import asyncio
                 asyncio.create_task(sync_logic.broadcast_change("registered_car", "update", updated_car))
-            except: pass
+            except Exception as e:
+                logger.error(f"Failed to sync registered_car update: {e}")
+                pass
                 
             return updated_car
         return None
@@ -170,9 +190,10 @@ class RegisteredCarLogic:
             # Sync Hook
             try:
                 from backend.sync_process.sync.logic import sync_logic
-                import asyncio
                 asyncio.create_task(sync_logic.broadcast_change("registered_car", "delete", {"car_id": car_id}))
-            except: pass
+            except Exception as e:
+                logger.error(f"Failed to sync registered_car delete: {e}")
+                pass
                 
             return True
         return False

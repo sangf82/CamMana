@@ -170,8 +170,8 @@ export default function VehicleDetailDialog({
              </div>
              
              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Biển số <span className="text-red-500">*</span></label>
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-muted-foreground uppercase">Biển số <span className="text-red-500">*</span></label>
                     <div className="relative">
                         <input 
                             className="w-full p-2.5 bg-background border border-border rounded focus:border-[#f59e0b] focus:ring-0 outline-none font-sans text-md"
@@ -183,8 +183,8 @@ export default function VehicleDetailDialog({
                     </div>
                 </div>
                 
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Loại xe <span className="text-red-500">*</span></label>
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-muted-foreground uppercase">Loại xe <span className="text-red-500">*</span></label>
                     <input 
                         className="w-full p-2.5 bg-background border border-border rounded focus:border-[#f59e0b] focus:ring-0 outline-none font-sans text-md"
                         value={editingItem?.truckModel || ''}
@@ -196,8 +196,8 @@ export default function VehicleDetailDialog({
              </div>
 
               <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Màu xe <span className="text-red-500">*</span></label>
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-muted-foreground uppercase">Màu xe <span className="text-red-500">*</span></label>
                     <input 
                         className="w-full p-2.5 bg-background border border-border rounded focus:border-[#f59e0b] focus:ring-0 outline-none font-sans text-md"
                         value={editingItem?.color || ''}
@@ -206,8 +206,8 @@ export default function VehicleDetailDialog({
                         placeholder="Ví dụ: Trắng, Xanh..."
                     />
                 </div>
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Số bánh <span className="text-red-500">*</span></label>
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-muted-foreground uppercase">Số bánh <span className="text-red-500">*</span></label>
                     <div className="relative flex items-center bg-background border border-border rounded focus-within:border-[#f59e0b] transition-all w-full">
                         <input 
                             className="w-full p-2.5 pr-14 bg-transparent border-none focus:ring-0 outline-none font-mono text-md text-center"
@@ -221,8 +221,8 @@ export default function VehicleDetailDialog({
                 </div>
               </div>
 
-              <div className="space-y-2">
-                  <label className="text-sm font-medium text-muted-foreground">Thể tích tiêu chuẩn (m³)</label>
+              <div className="space-y-1">
+                  <label className="text-xs font-bold text-muted-foreground uppercase">Thể tích tiêu chuẩn (m³)</label>
                   <div className="flex items-center">
                       <div className="flex-1">
                           <input 
@@ -260,8 +260,8 @@ export default function VehicleDetailDialog({
              </div>
 
              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Nhà thầu / Chủ xe</label>
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-muted-foreground uppercase">Nhà thầu / Chủ xe</label>
                     <input 
                         className="w-full p-2.5 bg-background border border-border rounded focus:border-[#f59e0b] focus:ring-0 outline-none font-sans text-md"
                         value={editingItem?.contractor || ''}
@@ -270,8 +270,8 @@ export default function VehicleDetailDialog({
                     />
                 </div>
 
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Ngày đăng ký</label>
+                <div className="space-y-1">
+                    <label className="text-xs font-bold text-muted-foreground uppercase">Ngày đăng ký</label>
                     <input 
                         type="date"
                         className="w-full p-2.5 bg-background border border-border rounded focus:border-primary focus:ring-1 focus:ring-primary outline-none font-sans text-md appearance-none [color-scheme:dark]"

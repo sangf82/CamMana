@@ -56,6 +56,9 @@ class SyncLogic:
         Get the best local IP address for advertising.
         Prioritizes physical network interfaces over VPN/virtual ones.
         """
+        # Skip these common virtual/VPN prefixes
+        blocked_prefixes = ('172.', '10.244.', '169.254.', '100.') # 100.x is Tailscale
+        
         # Method 1: Use UDP socket trick (works when internet is available)
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -63,8 +66,7 @@ class SyncLogic:
             try:
                 s.connect(("8.8.8.8", 80))
                 ip = s.getsockname()[0]
-                # Skip APIPA addresses (169.254.x.x)
-                if not ip.startswith("169.254."):
+                if not any(ip.startswith(pref) for pref in blocked_prefixes):
                     return ip
             finally:
                 s.close()
@@ -90,12 +92,15 @@ class SyncLogic:
             
             found_ips = []
             for section in output.split("\n\n"):
+                # Skip sections with "Virtual", "Docker", "vEthernet", "Tailscale"
+                if any(word in section.lower() for word in ["virtual", "docker", "vethernet", "tailscale"]):
+                    continue
+                    
                 for pattern, priority in priority_patterns:
                     match = re.search(pattern, section, re.DOTALL | re.IGNORECASE)
                     if match:
                         ip = match.group(1)
-                        # Skip APIPA and loopback
-                        if not ip.startswith("169.254.") and ip != "127.0.0.1":
+                        if not any(ip.startswith(pref) for pref in blocked_prefixes) and ip != "127.0.0.1":
                             found_ips.append((priority, ip))
             
             if found_ips:
@@ -109,7 +114,7 @@ class SyncLogic:
             hostname = socket.gethostname()
             ips = socket.gethostbyname_ex(hostname)[2]
             for ip in ips:
-                if not ip.startswith("169.254.") and ip != "127.0.0.1":
+                if not any(ip.startswith(pref) for pref in blocked_prefixes) and ip != "127.0.0.1":
                     return ip
         except:
             pass
@@ -231,8 +236,13 @@ class SyncLogic:
             from backend.data_process.register_car.logic import RegisteredCarLogic
             reg_logic = RegisteredCarLogic()
             if payload.action in ("create", "update"):
-                reg_logic.add_car(data)
+                reg_logic.save_car(data)
                 return True
+            elif payload.action == "delete":
+                car_id = data.get("car_id")
+                if car_id:
+                    reg_logic.delete_car(car_id)
+                    return True
                 
         elif payload.type == "user":
             from backend.data_process.user.logic import UserLogic
@@ -245,7 +255,48 @@ class SyncLogic:
                 if username:
                     user_logic.delete_user(username)
                     return True
-        
+
+        elif payload.type == "camera":
+            from backend.camera.logic import CameraLogic
+            cam_logic = CameraLogic()
+            if payload.action in ("create", "update"):
+                cam_logic.save_camera(data)
+                return True
+            elif payload.action == "delete":
+                cam_id = data.get("cam_id")
+                if cam_id:
+                    cam_logic.delete_camera(cam_id)
+                    return True
+
+        elif payload.type == "location":
+            from backend.data_process.location.logic import LocationLogic
+            loc_logic = LocationLogic()
+            if payload.action in ("create", "update"):
+                loc_logic.save_location(data)
+                return True
+            elif payload.action == "delete":
+                loc_id = data.get("id")
+                if loc_id:
+                    loc_logic.delete_location(loc_id)
+                    return True
+
+        elif payload.type == "camera_type":
+            from backend.data_process.camera_type.logic import CameraTypeLogic
+            type_logic = CameraTypeLogic()
+            if payload.action in ("create", "update"):
+                type_logic.save_camera_type(data)
+                return True
+            elif payload.action == "delete":
+                type_id = data.get("id")
+                if type_id:
+                    type_logic.delete_type(type_id)
+                    return True
+
+        elif payload.type == "system_config":
+            from backend.data_process.storage_config import save_system_config
+            if payload.action == "update":
+                save_system_config(data)
+                return True
         return False
 
     async def broadcast_change(
@@ -275,7 +326,7 @@ class SyncLogic:
             return False
             
         try:
-            async with httpx.AsyncClient(timeout=1.0) as client:
+            async with httpx.AsyncClient(timeout=5.0) as client:
                 url = self.remote_url.rstrip('/')
                 response = await client.post(
                     f"{url}/api/sync/receive",
@@ -292,3 +343,5 @@ class SyncLogic:
             self.zc.close()
         except:
             pass
+# Global singleton instance
+sync_logic = SyncLogic()

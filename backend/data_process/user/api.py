@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 import httpx
@@ -162,8 +162,17 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
 
 
 @user_router.get("", response_model=List[User])
-async def list_users(current_user: User = Depends(get_current_user)):
-    """List all users (admin only)."""
+async def list_users(request: Request, current_user: User = Depends(get_current_user)):
+    """List all users (admin only). Proxies to Master in Client mode."""
+    # Proxy to master if in client mode
+    from backend.sync_process.sync.proxy import is_client_mode, proxy_get
+    if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
+        logger.info("[User] Client mode: Proxying list_users to Master")
+        result = await proxy_get("/api/user", token=token)
+        if result is not None:
+             return result
+
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Permission denied")
     
@@ -172,8 +181,17 @@ async def list_users(current_user: User = Depends(get_current_user)):
 
 
 @user_router.delete("/{username}")
-async def delete_user(username: str, current_user: User = Depends(get_current_user)):
-    """Delete a user (admin only)."""
+async def delete_user(request: Request, username: str, current_user: User = Depends(get_current_user)):
+    """Delete a user (admin only). Proxies to Master in Client mode."""
+    from backend.sync_process.sync.proxy import is_client_mode, proxy_delete
+    if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
+        logger.info(f"[User] Client mode: Proxying delete_user({username}) to Master")
+        success = await proxy_delete(f"/api/user/{username}", token=token)
+        if success:
+            return {"message": "User deleted"}
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Permission denied")
     if username == "admin":
@@ -187,11 +205,21 @@ async def delete_user(username: str, current_user: User = Depends(get_current_us
 
 @user_router.put("/{username}", response_model=User)
 async def update_user(
+    request: Request,
     username: str, 
     update_in: UserUpdate, 
     current_user: User = Depends(get_current_user)
 ):
-    """Update a user (admin only)."""
+    """Update a user (admin only). Proxies to Master in Client mode."""
+    from backend.sync_process.sync.proxy import is_client_mode, proxy_put
+    if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
+        logger.info(f"[User] Client mode: Proxying update_user({username}) to Master")
+        result = await proxy_put(f"/api/user/{username}", update_in.model_dump(exclude_unset=True), token=token)
+        if result is not None:
+             return result
+        raise HTTPException(status_code=503, detail="Cannot connect to master node")
+
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Permission denied")
         

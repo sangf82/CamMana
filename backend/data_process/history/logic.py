@@ -54,8 +54,8 @@ class HistoryLogic:
             self._write_csv(self.current_file, [])
             logger.info(f"Created new history file {self.current_file.name}")
 
-        # 2. Cleanup old files
-        limit_date = datetime.now() - timedelta(hours=48)
+        # 2. Cleanup old files (30 days)
+        limit_date = datetime.now() - timedelta(days=30)
         
         for f in DATA_DIR.glob(f"{self.FILE_PREFIX}*.csv"):
             d = self._get_file_date(f.name)
@@ -160,10 +160,19 @@ class HistoryLogic:
 
     def add_record(self, record_data: Dict[str, Any]) -> Dict[str, str]:
         """
-        Add a new record to today's history.
+        Add a new record to history. Uses date from data if provided, else today.
         """
         self.refresh_state()
-        current_data = self._read_csv()
+        
+        # Determine target file based on date in data
+        date_str = record_data.get("date")
+        if date_str:
+            target_file = DATA_DIR / f"{self.FILE_PREFIX}{date_str}.csv"
+        else:
+            target_file = self.current_file
+            date_str = self.today
+            
+        current_data = self._read_csv(target_file)
         
         # If folder_path is not provided, maybe create it?
         # The caller (Workflow) usually orchestrates creation. 
@@ -191,14 +200,18 @@ class HistoryLogic:
         clean_record = {k: new_record.get(k, "") for k in self.HEADERS}
         
         current_data.append(clean_record)
-        self._write_csv(self.current_file, current_data)
+        self._write_csv(target_file, current_data)
         
         # Sync Hook
         try:
             from backend.sync_process.sync.logic import sync_logic
             import asyncio
-            asyncio.create_task(sync_logic.broadcast_change("history", "create", clean_record))
-        except: pass
+            sync_payload = clean_record.copy()
+            sync_payload["date"] = date_str  # Crucial for cross-node sync
+            asyncio.create_task(sync_logic.broadcast_change("history", "create", sync_payload))
+        except Exception as e:
+            logger.error(f"Failed to sync history create: {e}")
+            pass
             
         return clean_record
 
@@ -233,8 +246,12 @@ class HistoryLogic:
                 try:
                     from backend.sync_process.sync.logic import sync_logic
                     import asyncio
-                    asyncio.create_task(sync_logic.broadcast_change("history", "update", updated_rec))
-                except: pass
+                    sync_payload = updated_rec.copy()
+                    sync_payload["date"] = d  # Crucial for cross-node sync
+                    asyncio.create_task(sync_logic.broadcast_change("history", "update", sync_payload))
+                except Exception as e:
+                    logger.error(f"Failed to sync history update: {e}")
+                    pass
                     
                 return updated_rec
                 
@@ -331,7 +348,9 @@ class HistoryLogic:
         Save/Overwrite a record. If ID exists, update it. Otherwise add it.
         """
         rec_id = record_data.get("id")
-        if rec_id and self.update_record(rec_id, record_data, date_str):
+        target_date = date_str or record_data.get("date")
+        
+        if rec_id and self.update_record(rec_id, record_data, target_date):
             return True
         return self.add_record(record_data)
 

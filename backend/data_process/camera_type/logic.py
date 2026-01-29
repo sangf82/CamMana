@@ -1,5 +1,6 @@
 import csv
 import uuid
+import asyncio
 import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Any
@@ -64,7 +65,23 @@ class CameraTypeLogic:
         current = self._read_csv()
         current.append(new_type)
         self._write_csv(current)
+        
+        # Sync Hook
+        try:
+            from backend.sync_process.sync.logic import sync_logic
+            asyncio.create_task(sync_logic.broadcast_change("camera_type", "create", new_type))
+        except: pass
+            
         return new_type
+
+    def save_camera_type(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Save a camera type. Update if ID exists, otherwise add."""
+        type_id = data.get('id')
+        if type_id:
+            updated = self.update_type(type_id, data)
+            if updated:
+                return updated
+        return self.add_type(data)
 
     def update_type(self, id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         current = self._read_csv()
@@ -89,6 +106,12 @@ class CameraTypeLogic:
                 CameraDataSync.sync_camtype_name(old_name, new_name)
                 logger.info(f"Camera type '{old_name}' -> '{new_name}': synced to cameras")
             
+            # Sync Hook
+            try:
+                from backend.sync_process.sync.logic import sync_logic
+                asyncio.create_task(sync_logic.broadcast_change("camera_type", "update", updated))
+            except: pass
+            
             return updated
         return None
 
@@ -111,6 +134,12 @@ class CameraTypeLogic:
             if type_name:
                 CameraDataSync.remove_camtype_references(type_name)
                 logger.info(f"Camera type '{type_name}' deleted: cleared from cameras")
+            
+            # Sync Hook
+            try:
+                from backend.sync_process.sync.logic import sync_logic
+                asyncio.create_task(sync_logic.broadcast_change("camera_type", "delete", {"id": id}))
+            except: pass
             
             return True
         return False

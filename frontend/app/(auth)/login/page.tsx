@@ -19,12 +19,17 @@ export default function LoginPage() {
   const [discoveryList, setDiscoveryList] = useState<any[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [syncStatus, setSyncStatus] = useState<any>(null);
+  const [pcLocalInfo, setPcLocalInfo] = useState<any>(null);
   const router = useRouter();
 
   const fetchSyncStatus = async () => {
     try {
         const res = await fetch("/api/sync/status");
         if (res.ok) setSyncStatus(await res.json());
+        
+        // Also fetch local system info for networking status
+        const infoRes = await fetch("/api/system/info");
+        if (infoRes.ok) setPcLocalInfo(await infoRes.json());
     } catch (e) {}
   };
 
@@ -107,7 +112,18 @@ export default function LoginPage() {
         }
     } catch (e: any) {
         if (e.name === 'TimeoutError' || e.name === 'AbortError') {
-            toast.error(`Không thể kết nối: Hết thời gian chờ (${displayName || url})`);
+            toast.error(
+                <div className="flex flex-col gap-1">
+                    <p className="font-bold">Hết thời gian chờ ({displayName || url})</p>
+                    <p className="text-[10px] opacity-80 leading-tight">
+                        Kiểm tra Master PC: <br/>
+                        1. Đã mở app? <br/>
+                        2. Network là "Private" (Cá nhân)? <br/>
+                        3. Đã nhấn "MỞ FIREWALL" trên máy Master?
+                    </p>
+                </div>, 
+                { duration: 6000 }
+            );
         } else {
             toast.error(`Lỗi kết nối: ${e.message || 'Không xác định'}`);
         }
@@ -127,6 +143,25 @@ export default function LoginPage() {
             fetchSyncStatus();
         }
     } catch (e) {}
+  };
+
+  const handleOpenLocalFirewall = async () => {
+    setIsScanning(true);
+    try {
+        const res = await fetch('/api/system/firewall/open', {
+            method: 'POST'
+        });
+        const data = await res.json();
+        if (data.success) {
+            toast.success("Đã mở Firewall trên máy này!");
+        } else {
+            toast.error(data.message || "Lỗi khi mở Firewall");
+        }
+    } catch (e) {
+        toast.error("Lỗi kết nối đến server nội bộ");
+    } finally {
+        setIsScanning(false);
+    }
   };
 
   useEffect(() => {
@@ -297,6 +332,40 @@ export default function LoginPage() {
                         <p className="text-[10px] opacity-60">Kết nối dữ liệu từ Master</p>
                     </div>
                 </button>
+            </div>
+
+            {/* Network Profile Status */}
+            <div className="flex items-center justify-between px-1">
+                <div className="flex flex-col">
+                    <span className="text-[10px] text-zinc-500 uppercase font-black">Mạng của máy hiện tại:</span>
+                    <span className="text-[11px] font-mono text-zinc-300">{pcLocalInfo?.ip_address || "---"}</span>
+                </div>
+                <div className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                    pcLocalInfo?.network_category === 'Private' 
+                    ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
+                    : 'bg-red-500/10 text-red-500 border border-red-500/20 animate-pulse'
+                }`}>
+                    {pcLocalInfo?.network_category || "ĐANG KIỂM TRA..."}
+                </div>
+            </div>
+
+            {/* Firewall Tip / Local Open */}
+            <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/10 space-y-2">
+                <div className="flex items-start gap-2 text-[10px] text-amber-500 font-bold uppercase tracking-wider">
+                    <ShieldCheck size={14} className="mt-0.5" />
+                    <span>Mẹo: Lỗi kết nối thường do Firewall</span>
+                </div>
+                <p className="text-[10px] text-zinc-400 leading-relaxed italic">
+                    Nếu bạn muốn máy này làm <span className="text-zinc-200 font-bold">PC Chủ (Master)</span>, hãy đảm bảo cổng 8000 đã được mở.
+                </p>
+                <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-7 w-full text-[10px] font-bold border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
+                    onClick={handleOpenLocalFirewall}
+                >
+                    MỞ FIREWALL TRÊN MÁY NÀY
+                </Button>
             </div>
 
             <div className="space-y-3">

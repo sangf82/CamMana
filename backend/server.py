@@ -77,8 +77,16 @@ def create_app() -> FastAPI:
         allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
-        allow_headers=["*"]
+        allow_headers=["*", "Access-Control-Allow-Private-Network"],
     )
+
+    # Private Network Access (PNA) Support
+    @app.middleware("http")
+    async def add_pna_header(request, call_next):
+        response = await call_next(request)
+        if request.method == "OPTIONS":
+            response.headers["Access-Control-Allow-Private-Network"] = "true"
+        return response
     
     # Include routers
     app.include_router(camera_router)

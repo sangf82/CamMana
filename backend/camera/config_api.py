@@ -3,7 +3,7 @@ from backend import data_process
 from backend.data_process.location.logic import LocationLogic
 from backend.data_process.user.api import get_current_user
 from backend.schemas import User as UserSchema
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Response, Request
 from fastapi.responses import JSONResponse
 from backend.sync_process.sync.proxy import is_client_mode, proxy_get, proxy_post
 import logging
@@ -14,9 +14,17 @@ config_router = APIRouter(prefix="/api/cameras", tags=["configuration"])
 
 # Location Tags and Detection Config
 @config_router.get("/locations/grouped")
-async def get_cameras_grouped_by_tag(user: UserSchema = Depends(get_current_user)):
-    """Get cameras grouped by their location tags"""
+async def get_cameras_grouped_by_tag(request: Request, user: UserSchema = Depends(get_current_user)):
+    """Get cameras grouped by their location tags. Proxies to Master when in Client mode."""
     try:
+        # Proxy to master if in client mode
+        if is_client_mode():
+            token = request.headers.get("authorization", "").replace("Bearer ", "")
+            logger.info("Client mode: Fetching grouped cameras from master")
+            result = await proxy_get("/api/cameras/locations/grouped", token=token)
+            if result is not None:
+                return result
+
         from backend.workflow.config import group_cameras_by_tag
         cameras = data_process.get_cameras_config()
         # Use new LocationLogic
@@ -37,9 +45,17 @@ async def get_cameras_grouped_by_tag(user: UserSchema = Depends(get_current_user
         return JSONResponse(status_code=500, content={"detail": str(e)})
 
 @config_router.get("/locations/tags/{tag}/config")
-async def get_tag_detection_config(tag: str, user: UserSchema = Depends(get_current_user)):
-    """Get detection configuration for a specific location tag"""
+async def get_tag_detection_config(request: Request, tag: str, user: UserSchema = Depends(get_current_user)):
+    """Get detection configuration for a specific location tag. Proxies to Master when in Client mode."""
     try:
+        # Proxy to master if in client mode
+        if is_client_mode():
+            token = request.headers.get("authorization", "").replace("Bearer ", "")
+            logger.info(f"Client mode: Fetching detection config for {tag} from master")
+            result = await proxy_get(f"/api/cameras/locations/tags/{tag}/config", token=token)
+            if result is not None:
+                return result
+
         from backend.workflow.config import get_location_strategy
         config = get_location_strategy(tag)
         return {
@@ -54,13 +70,14 @@ async def get_tag_detection_config(tag: str, user: UserSchema = Depends(get_curr
         return JSONResponse(status_code=500, content={"detail": str(e)})
 
 @config_router.get("/locations")
-async def get_locations_alias(user: UserSchema = Depends(get_current_user)):
+async def get_locations_alias(request: Request, user: UserSchema = Depends(get_current_user)):
     """Alias for locations list to match frontend expectations. Proxies to Master when in Client mode."""
     try:
         # Proxy to master if in client mode
         if is_client_mode():
+            token = request.headers.get("authorization", "").replace("Bearer ", "")
             logger.info("Client mode: Fetching locations from master (alias)")
-            result = await proxy_get("/api/cameras/locations")
+            result = await proxy_get("/api/cameras/locations", token=token)
             if result is not None:
                 if user.role == "admin" or user.allowed_gates == "*":
                     return result
@@ -79,15 +96,16 @@ async def get_locations_alias(user: UserSchema = Depends(get_current_user)):
         return JSONResponse(status_code=500, content={"detail": str(e)})
 
 @config_router.post("/locations")
-async def add_location_alias(loc: dict, user: UserSchema = Depends(get_current_user)):
+async def add_location_alias(request: Request, loc: dict, user: UserSchema = Depends(get_current_user)):
     """Alias for adding location to match frontend expectations. Proxies to Master when in Client mode."""
     if user.role != 'admin':
         return JSONResponse(status_code=403, content={"detail": "Permission denied"})
     try:
         # Proxy to master if in client mode
         if is_client_mode():
+            token = request.headers.get("authorization", "").replace("Bearer ", "")
             logger.info("Client mode: Adding location via master (alias)")
-            result = await proxy_post("/api/cameras/locations", loc)
+            result = await proxy_post("/api/cameras/locations", loc, token=token)
             if result is not None:
                 return result
             return JSONResponse(status_code=503, content={"detail": "Cannot connect to master node"})
@@ -99,13 +117,14 @@ async def add_location_alias(loc: dict, user: UserSchema = Depends(get_current_u
         return JSONResponse(status_code=400, content={"detail": str(e)})
 
 @config_router.get("/types")
-async def get_types_alias(user: UserSchema = Depends(get_current_user)):
+async def get_types_alias(request: Request, user: UserSchema = Depends(get_current_user)):
     """Alias for camera types list to match frontend expectations. Proxies to Master when in Client mode."""
     try:
         # Proxy to master if in client mode
         if is_client_mode():
+            token = request.headers.get("authorization", "").replace("Bearer ", "")
             logger.info("Client mode: Fetching camera types from master (alias)")
-            result = await proxy_get("/api/cameras/types")
+            result = await proxy_get("/api/cameras/types", token=token)
             if result is not None:
                 return result
         
@@ -115,13 +134,14 @@ async def get_types_alias(user: UserSchema = Depends(get_current_user)):
         return JSONResponse(status_code=500, content={"detail": str(e)})
 
 @config_router.get("/saved")
-async def get_saved_cameras_alias(user: UserSchema = Depends(get_current_user)):
+async def get_saved_cameras_alias(request: Request, user: UserSchema = Depends(get_current_user)):
     """Alias for saved cameras list to match frontend expectations. Proxies to Master when in Client mode."""
     try:
         # Proxy to master if in client mode
         if is_client_mode():
+            token = request.headers.get("authorization", "").replace("Bearer ", "")
             logger.info("Client mode: Fetching saved cameras from master (alias)")
-            result = await proxy_get("/api/cameras/saved")
+            result = await proxy_get("/api/cameras/saved", token=token)
             if result is not None:
                 return result
         
@@ -131,9 +151,17 @@ async def get_saved_cameras_alias(user: UserSchema = Depends(get_current_user)):
         return JSONResponse(status_code=500, content={"detail": str(e)})
 
 @config_router.get("/locations/tags/all/configs")
-async def get_all_tag_configs(user: UserSchema = Depends(get_current_user)):
-    """Get detection configurations for all location tags"""
+async def get_all_tag_configs(request: Request, user: UserSchema = Depends(get_current_user)):
+    """Get detection configurations for all location tags. Proxies to Master when in Client mode."""
     try:
+        # Proxy to master if in client mode
+        if is_client_mode():
+            token = request.headers.get("authorization", "").replace("Bearer ", "")
+            logger.info("Client mode: Fetching all tag configs from master")
+            result = await proxy_get("/api/cameras/locations/tags/all/configs", token=token)
+            if result is not None:
+                return result
+
         from backend.workflow.config import LOCATION_STRATEGIES, LocationTag
         
         configs = {}
