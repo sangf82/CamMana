@@ -16,7 +16,7 @@ LOGS_DIR = config.LOGS_DIR
 _write_lock = threading.RLock()
 
 # CSV Headers - All data types
-CAMERA_HEADERS = ['id', 'name', 'ip', 'port', 'onvif_port', 'rtsp_port', 'transport_mode', 'channel_id', 'stream_type', 'username', 'password', 'location', 'type', 'status', 'tag', 'brand', 'cam_id', 'location_id']
+CAMERA_HEADERS = ['id', 'name', 'ip', 'onvif_port', 'rtsp_port', 'transport_mode', 'channel_id', 'stream_type', 'username', 'password', 'location', 'type', 'status', 'brand', 'location_id']
 
 REGISTERED_CAR_HEADERS = ['id', 'plate_number', 'owner', 'model', 'color', 'notes', 'created_at', 'box_dimensions', 'standard_volume']
 

@@ -24,9 +24,22 @@ class CameraLogic:
                  writer = csv.DictWriter(f, fieldnames=self.HEADERS)
                  writer.writeheader()
         else:
-            # Simple check if migration needed or headers match
-            # For now, append to existing if valid
-            pass
+            # Check for header updates (Migration)
+            try:
+                with open(self.file_path, 'r', encoding='utf-8') as f:
+                    reader = csv.reader(f)
+                    try:
+                        current_headers = next(reader)
+                    except StopIteration:
+                        current_headers = []
+                
+                # If headers differ (added or removed), migrate
+                if set(self.HEADERS) != set(current_headers):
+                    logger.info("Migrating cameras.csv schema...")
+                    data = self._read_csv() # Reads safely with current schema
+                    self._write_csv(data) # Writes with NEW (self.HEADERS) schema
+            except Exception as e:
+                logger.error(f"Error checking/migrating CSV schema: {e}")
 
     def _read_csv(self) -> List[Dict[str, Any]]:
         if not self.file_path.exists(): return []

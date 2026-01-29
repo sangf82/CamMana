@@ -45,10 +45,10 @@ interface Camera {
   password?: string;
   brand?: string;
   cam_id?: string;
-  onvif_port?: number;
-  rtsp_port?: number;
+  onvif_port?: number | null;
+  rtsp_port?: number | null;
   transport_mode?: string;
-  channel_id?: number;
+  channel_id?: number | null;
   stream_type?: string;
 }
 
@@ -232,7 +232,7 @@ export default function CamerasPage() {
       password: "",
       brand: "",
       cam_id: "",
-      onvif_port: 80,
+      onvif_port: undefined,
       rtsp_port: 554,
       transport_mode: "tcp",
       channel_id: undefined,
@@ -979,7 +979,7 @@ export default function CamerasPage() {
                       placeholder="Mặc định: 80, 8000, 8899..."
                       value={editingItem?.onvif_port ?? ""}
                       onChange={(e) =>
-                        setEditingItem((p) => ({ ...p!, onvif_port: e.target.value ? parseInt(e.target.value) : undefined }))
+                        setEditingItem((p) => ({ ...p!, onvif_port: e.target.value ? parseInt(e.target.value) : null }))
                       }
                     />
                   </div>
@@ -1042,7 +1042,7 @@ export default function CamerasPage() {
                     placeholder="Chỉ dùng khi kết nối qua đầu ghi/NVR"
                     value={editingItem?.channel_id ?? ""}
                     onChange={(e) =>
-                      setEditingItem((p) => ({ ...p!, channel_id: e.target.value ? parseInt(e.target.value) : undefined }))
+                      setEditingItem((p) => ({ ...p!, channel_id: e.target.value ? parseInt(e.target.value) : null }))
                     }
                   />
                   <p className="text-[9px] text-muted-foreground italic">

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
 from fastapi.responses import StreamingResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Optional, Dict, Any, Union
 import asyncio
 import logging
@@ -37,6 +37,19 @@ class CameraBase(BaseModel):
     type: Optional[str] = ""
     brand: Optional[str] = ""
     tag: Optional[str] = ""
+    
+    @field_validator('port', 'onvif_port', 'rtsp_port', 'channel_id', 'transport_mode', 'stream_type', mode='before')
+    @classmethod
+    def handle_advanced_defaults(cls, v, info):
+        if v == '' or v is None:
+            # Fields that MUST have defaults in data
+            if info.field_name == 'port': return 80
+            if info.field_name == 'rtsp_port': return 554
+            if info.field_name == 'transport_mode': return 'tcp'
+            if info.field_name == 'stream_type': return 'main'
+            # Optional fields
+            return None
+        return v
 
 class CameraUpdate(BaseModel):
     name: Optional[str] = None
@@ -54,6 +67,18 @@ class CameraUpdate(BaseModel):
     type: Optional[str] = None
     brand: Optional[str] = None
     tag: Optional[str] = None
+    
+    @field_validator('port', 'onvif_port', 'rtsp_port', 'channel_id', 'transport_mode', 'stream_type', mode='before')
+    @classmethod
+    def handle_advanced_defaults(cls, v, info):
+        if v == '' or v is None:
+            # If manually cleared in UI (sent as "" or null), restore defaults for core fields
+            if info.field_name == 'port': return 80
+            if info.field_name == 'rtsp_port': return 554
+            if info.field_name == 'transport_mode': return 'tcp'
+            if info.field_name == 'stream_type': return 'main'
+            return None
+        return v
 
 from backend.data_process.camera_type.logic import CameraTypeLogic
 
@@ -259,8 +284,12 @@ async def connect_camera(request: Request, cam_id: str, user: UserSchema = Depen
         "ptz": PTZController(conn)
     }
     
-    # Update status in CSV
-    logic.update_camera(cam_id, {'status': 'Online'})
+    # Update status and save detected onvif_port (if auto-detected)
+    update_data = {'status': 'Online'}
+    if res.get('mode') == 'Auto-detect' and res.get('onvif_port'):
+        update_data['onvif_port'] = res['onvif_port']
+        logger.info(f"Auto-detected ONVIF port {res['onvif_port']} for camera {cam_id}, saving to configuration")
+    logic.update_camera(cam_id, update_data)
     
     return {"success": True, "details": res}
 
