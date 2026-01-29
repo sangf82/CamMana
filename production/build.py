@@ -7,6 +7,7 @@ Usage:
   uv run python production/build.py --incremental # Incremental build (faster)
   uv run python production/build.py --frontend   # Frontend only
   uv run python production/build.py --backend    # Backend only
+  uv run python production/build.py --clean      # Manual cleanup only
 """
 
 import os
@@ -32,10 +33,11 @@ FRONTEND_DIR = ROOT_DIR / "frontend"
 INCREMENTAL = "--incremental" in sys.argv or "-i" in sys.argv
 FRONTEND_ONLY = "--frontend" in sys.argv
 BACKEND_ONLY = "--backend" in sys.argv
+CLEAN_ONLY = "--clean" in sys.argv
 
 # Detect CPU cores for optimal parallelization
 CPU_CORES = os.cpu_count() or 8
-NUITKA_JOBS = min(CPU_CORES, 16)  # Use all cores up to 16
+NUITKA_JOBS = max(1, min(CPU_CORES - 2, 16))  # Leave some breathing room
 
 # Build start time
 BUILD_START = time.time()
@@ -51,14 +53,15 @@ def elapsed() -> str:
 def log(msg: str, level: str = "info"):
     """Print formatted log messages"""
     icons = {
-        "info": "[INFO]",
-        "success": "[ OK ]",
-        "warning": "[WARN]",
-        "error": "[FAIL]",
-        "step": "[====]",
-        "dim": "[....]",
+        "info": "💡",
+        "success": "✅",
+        "warning": "⚠️",
+        "error": "❌",
+        "step": "🚀",
+        "dim": "⚙️",
     }
-    icon = icons.get(level, "[INFO]")
+    icon = icons.get(level, "🔹")
+    # Clean output with icons
     print(f"[{elapsed()}] {icon} {msg}")
 
 
@@ -82,25 +85,32 @@ def run_cmd(cmd, cwd=None, check=True, silent=False):
     return result
 
 
-def clean(incremental: bool = False):
+def clean(incremental: bool = False, create_dirs: bool = True):
     """Clean build artifacts"""
     if incremental:
         log("Incremental mode - keeping Nuitka cache", "info")
         return
     
-    log("Cleaning previous build artifacts...", "step")
+    log("Full Build Refresh: Cleaning all artifacts...", "step")
     
-    for f in [ROOT_DIR / "CamMana_Setup.exe", PROD_DIR / "dist"]:
+    # In FULL build, we clean EVERYTHING including the build cache for a true refresh
+    targets = [
+        ROOT_DIR / "CamMana_Setup.exe", 
+        PROD_DIR / "dist",
+        BUILD_DIR,
+        OUTPUT_DIR
+    ]
+    
+    for f in targets:
         if f.exists():
             if f.is_dir():
-                shutil.rmtree(f)
+                shutil.rmtree(f, ignore_errors=True)
             else:
-                f.unlink()
+                f.unlink(missing_ok=True)
 
-    for d in [BUILD_DIR, OUTPUT_DIR]:
-        if d.exists():
-            shutil.rmtree(d)
-        d.mkdir(parents=True, exist_ok=True)
+    if create_dirs:
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        BUILD_DIR.mkdir(parents=True, exist_ok=True)
     
     # Clean pycache
     count = 0
@@ -108,7 +118,7 @@ def clean(incremental: bool = False):
         shutil.rmtree(p, ignore_errors=True)
         count += 1
     
-    log(f"Cleaned {count} cache directories", "success")
+    log(f"Pre-flight cleanup done ({count} pycache dirs removed)", "success")
 
 
 def build_frontend(force: bool = False):
@@ -151,31 +161,48 @@ def compile_nuitka():
         # Output
         f"--output-dir={BUILD_DIR}",
         "--assume-yes-for-downloads",
-        # Progress display
-        "--show-progress",
         "--show-memory",
-        # Performance - use all available cores
         f"--jobs={NUITKA_JOBS}",
-        # === EXCLUDE UNUSED PACKAGES ===
+        # === PERFORMANCE OPTIMIZATIONS ===
+        "--lto=no",              # Disable Link Time Optimization for much faster builds
+        "--no-pyi-file",         # Don't spend time parsing .pyi files
+        
+        # === EXCLUDE UNUSED PACKAGES AND BLOAT ===
         "--noinclude-setuptools-mode=nofollow",
         "--noinclude-pytest-mode=nofollow",
         "--noinclude-unittest-mode=nofollow",
         "--noinclude-IPython-mode=nofollow",
+        
+        # Block heavy libraries from being followed recursively (they take ages)
         "--nofollow-import-to=torch",
         "--nofollow-import-to=torchvision",
         "--nofollow-import-to=ultralytics",
         "--nofollow-import-to=tkinter",
         "--nofollow-import-to=scipy",
+        "--nofollow-import-to=numba",
+        "--nofollow-import-to=docutils",
         "--nofollow-import-to=notebook",
         "--nofollow-import-to=jupyter",
+        "--nofollow-import-to=pandas.tests",
+        "--nofollow-import-to=pandas.plotting",
+        "--nofollow-import-to=numpy.tests",
+        "--nofollow-import-to=numpy.f2py",
+        "--nofollow-import-to=matplotlib.tests",
+        "--nofollow-import-to=matplotlib.sphinxext",
+        "--nofollow-import-to=matplotlib.backends.test_backends",
+        "--nofollow-import-to=matplotlib.sample_data",
+        "--nofollow-import-to=matplotlib.backends.qt_editor",
+        
         # Entry
         str(ROOT_DIR / "app.py")
     ]
     
     print()
     log("Phase 1/3: Python optimization...", "info")
+    log("Scanning project dependencies... (This can take 15-30 mins for 100k+ files)", "dim")
     
-    # Run with real-time output
+    # Add show progress back
+    nuitka_cmd.insert(10, "--show-progress")
     process = subprocess.Popen(
         nuitka_cmd, 
         stdout=subprocess.PIPE, 
@@ -237,12 +264,11 @@ def compile_nuitka():
                 pbar.n = total_pct
                 pbar.set_description(f"Phase 1/3: Optimizing ({done}/{total})")
                 pbar.refresh()
-        
+            
         elif "error:" in clean_line.lower() and "torch" not in clean_line.lower():
             errors.append(clean_line)
         elif "warning:" in clean_line.lower() and any(kw in clean_line.lower() for kw in ["missing", "failed"]):
-            # We can log warnings to tqdm.write to avoid breaking the bar
-            tqdm.write(f"[{elapsed()}] [WARN] {clean_line}")
+            tqdm.write(f"[{elapsed()}] ⚠️  {clean_line}")
     
     pbar.n = 100
     pbar.set_description("Compilation Finished")
@@ -297,8 +323,8 @@ def package_inno():
             break
     
     if not iscc:
-        log("Inno Setup not found - skipping installer", "warning")
-        log("Install from: https://jrsoftware.org/isdl.php", "info")
+        # Silently skip if not found, just a small status info
+        log("Inno Setup not found - installer skipped (Install it to create .exe setup)", "dim")
         return
     
     result = run_cmd([str(iscc), f"/O{OUTPUT_DIR}", str(ISS_CONFIG)], check=False, silent=True)
@@ -313,16 +339,23 @@ def package_inno():
 
 
 def main():
-    mode = "INCREMENTAL" if INCREMENTAL else "FULL"
-    if FRONTEND_ONLY:
-        mode = "FRONTEND ONLY"
-    elif BACKEND_ONLY:
-        mode = "BACKEND ONLY"
+    mode = "FULL"
+    if INCREMENTAL: mode = "INCREMENTAL"
+    elif FRONTEND_ONLY: mode = "FRONTEND ONLY"
+    elif BACKEND_ONLY: mode = "BACKEND ONLY"
+    elif CLEAN_ONLY: mode = "CLEANUP"
     
     header(f"CamMana Production Build [{mode}]")
     
+    if CLEAN_ONLY:
+        clean(incremental=False, create_dirs=False)
+        log("Cleanup finished successfully (Build folders removed)", "success")
+        return
+
     print(f"  Started at: {datetime.now().strftime('%H:%M:%S')}")
     print(f"  CPU cores:  {CPU_CORES} (using {NUITKA_JOBS} workers)")
+    print("  💡 Tip: Disable Antivirus for the build folder to speed up Phase 3.")
+    print("  💡 Tip: Install 'ccache' to make incremental builds instant.")
     print()
     
     try:

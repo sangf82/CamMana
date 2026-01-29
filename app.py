@@ -215,7 +215,8 @@ class BackendManager(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.process_manager = ProcessManager()
-        self.is_frozen, self.is_production = getattr(sys, 'frozen', False), is_production_mode()
+        self.is_frozen = getattr(sys, 'frozen', False) or hasattr(sys, '__compiled__') or hasattr(sys, 'nuitka_binary')
+        self.is_production = is_production_mode()
     
     def start(self):
         threading.Thread(target=self._start_servers, name="BackendStartThread", daemon=True).start()
@@ -224,17 +225,24 @@ class BackendManager(QObject):
         try:
             self.status_changed.emit("Khởi động hệ thống...")
             
-            # Detect the executable to use for backend
+            # Detect the executable to use for backend (the "python" runner)
             if self.is_frozen:
                 # In a bundle, use the binary itself (Nuitka/PyInstaller)
                 onefile_exe = os.environ.get("NUITKA_ONEFILE_BINARY")
-                python_exe = Path(onefile_exe) if onefile_exe else Path(sys.executable)
+                python_exe = Path(onefile_exe) if (onefile_exe and Path(onefile_exe).exists()) else Path(sys.executable)
+                
+                # Manual fallback check: if for some reason sys.executable is wrong or not found
+                if not python_exe.exists():
+                    for name in ["CamMana.exe", "app.exe", "python.exe"]:
+                        alt = APP_DIR / name
+                        if alt.exists(): python_exe = alt; break
             else:
-                # In development
+                # In development, use the current python interpreter
                 python_exe = Path(sys.executable)
             
             if not python_exe.exists():
-                self.error.emit(f"Python executable not found: {python_exe}"); return
+                details = f"EXE: {sys.executable}\nDIR: {APP_DIR}\nFROZEN: {self.is_frozen}"
+                self.error.emit(f"Không tìm thấy trình chạy (Runner not found):\n{python_exe}\n\n{details}"); return
             
             self._start_backend(python_exe)
             status = self._wait_for_port(self.PORT, timeout=300)
