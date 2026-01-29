@@ -200,29 +200,25 @@ if ($TargetDir -ne ".") {
 Write-Step "Đang đồng bộ môi trường Python..."
 if (!(Test-Path ".env") -and (Test-Path ".env.example")) { Copy-Item ".env.example" ".env" }
 
-# Nếu có cập nhật hoặc chưa có venv, chạy sync
-if ($NeedsUpdate -or !(Test-Path ".venv")) {
-    & uv sync
-    Write-Success "Đã đồng bộ Python hoàn tất."
-} else {
-    Write-Host "✅ Môi trường Python đã sẵn sàng (bỏ qua sync)." -ForegroundColor Gray
-}
+# Always sync to ensure dependencies are up-to-date
+Write-Host "📦 Đang đồng bộ dependencies Python..." -ForegroundColor Gray
+& uv sync
+Write-Success "Đã đồng bộ Python hoàn tất."
 
 # 6. THIẾT LẬP FRONTEND (BUILD PROD)
 if (Test-Path "frontend") {
     Write-Step "Đang đóng gói Frontend..."
     try {
         Set-Location "frontend"
-        $IsBuildExists = Test-Path "out"
         
-        if ($NeedsUpdate -or !$IsBuildExists) {
-            Write-Host "📦 Đang cài đặt node_modules và build..." -ForegroundColor Gray
-            cmd /c "npm install --no-audit --no-fund"
-            cmd /c "npm run build"
-            Write-Success "Đóng gói Frontend thành công."
-        } else {
-            Write-Success "Đã có sẵn bản build (bỏ qua npm build)."
-        }
+        # Always install and build to ensure updates are applied
+        Write-Host "📦 Đang cài đặt node_modules..." -ForegroundColor Gray
+        cmd /c "npm install --no-audit --no-fund"
+        
+        Write-Host "🔨 Đang build Frontend..." -ForegroundColor Gray
+        cmd /c "npm run build"
+        Write-Success "Đóng gói Frontend thành công."
+        
         Set-Location ".."
     } catch {
         Write-Warning "Lỗi build Frontend: $_"
