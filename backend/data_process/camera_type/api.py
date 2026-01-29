@@ -23,22 +23,24 @@ router = APIRouter(prefix="/api/camera_types", tags=["Camera Types"])
 logic = CameraTypeLogic()
 
 @router.get("")
-async def get_types():
+async def get_types(request: Request):
     """Get all camera types. Proxies to Master when in Client mode."""
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info("Client mode: Fetching camera types from master")
-        result = await proxy_get("/api/camera_types")
+        result = await proxy_get("/api/camera_types", token=token)
         if result is not None:
             return result
     
     return logic.get_types()
 
 @router.post("")
-async def add_type(cam_type: CameraTypeBase):
+async def add_type(request: Request, cam_type: CameraTypeBase):
     """Add a new camera type. Proxies to Master when in Client mode."""
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info("Client mode: Adding camera type via master")
-        result = await proxy_post("/api/camera_types", cam_type.dict())
+        result = await proxy_post("/api/camera_types", cam_type.dict(), token=token)
         if result is not None:
             return result
         raise HTTPException(status_code=503, detail="Cannot connect to master node")
@@ -46,11 +48,12 @@ async def add_type(cam_type: CameraTypeBase):
     return logic.add_type(cam_type.dict())
 
 @router.put("/{id}")
-async def update_type(id: str, cam_type: CameraTypeUpdate):
+async def update_type(request: Request, id: str, cam_type: CameraTypeUpdate):
     """Update a camera type. Proxies to Master when in Client mode."""
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info(f"Client mode: Updating camera type {id} via master")
-        result = await proxy_put(f"/api/camera_types/{id}", cam_type.dict(exclude_unset=True))
+        result = await proxy_put(f"/api/camera_types/{id}", cam_type.dict(exclude_unset=True), token=token)
         if result is not None:
             return result
         raise HTTPException(status_code=503, detail="Cannot connect to master node")
@@ -61,11 +64,12 @@ async def update_type(id: str, cam_type: CameraTypeUpdate):
     return updated
 
 @router.delete("/{id}")
-async def delete_type(id: str):
+async def delete_type(request: Request, id: str):
     """Delete a camera type. Proxies to Master when in Client mode."""
     if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
         logger.info(f"Client mode: Deleting camera type {id} via master")
-        success = await proxy_delete(f"/api/camera_types/{id}")
+        success = await proxy_delete(f"/api/camera_types/{id}", token=token)
         if success:
             return {"message": "Deleted successfully"}
         raise HTTPException(status_code=503, detail="Cannot connect to master node")

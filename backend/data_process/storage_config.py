@@ -28,10 +28,10 @@ router = APIRouter(prefix="/api/system-config", tags=["System Config"])
 
 class DataExpirySettings(BaseModel):
     """Data expiry settings."""
-    registered_cars_days: int = 2
-    history_days: int = 2
-    reports_days: int = 2
-    car_history_days: int = 2
+    registered_cars_days: int = 30
+    history_days: int = 30
+    reports_days: int = 30
+    car_history_days: int = 30
     auto_cleanup_enabled: bool = True
 
 
@@ -58,9 +58,10 @@ def load_system_config() -> dict:
             "last_update": None
         },
         "data_expiry": {
-            "registered_cars_days": 2,
-            "history_days": 2,
-            "reports_days": 2,
+            "registered_cars_days": 30,
+            "history_days": 30,
+            "reports_days": 30,
+            "car_history_days": 30,
             "auto_cleanup_enabled": True
         }
     }
@@ -83,9 +84,10 @@ def load_expiry_config() -> dict:
     """Load data expiry configuration."""
     config = load_system_config()
     return config.get("data_expiry", {
-        "registered_cars_days": 2,
-        "history_days": 2,
-        "reports_days": 2,
+        "registered_cars_days": 30,
+        "history_days": 30,
+        "reports_days": 30,
+        "car_history_days": 30,
         "auto_cleanup_enabled": True
     })
 
@@ -116,10 +118,10 @@ async def get_data_expiry_settings():
 
 @router.post("/data-expiry")
 async def update_data_expiry_settings(
-    registered_cars_days: int = Query(2, ge=1, le=365, description="Days to keep registered cars data"),
-    history_days: int = Query(2, ge=1, le=365, description="Days to keep history data"),
-    reports_days: int = Query(2, ge=1, le=365, description="Days to keep reports"),
-    car_history_days: int = Query(2, ge=1, le=365, description="Days to keep car history images"),
+    registered_cars_days: int = Query(30, ge=1, le=365, description="Days to keep registered cars data"),
+    history_days: int = Query(30, ge=1, le=365, description="Days to keep history data"),
+    reports_days: int = Query(30, ge=1, le=365, description="Days to keep reports"),
+    car_history_days: int = Query(30, ge=1, le=365, description="Days to keep car history images"),
     auto_cleanup_enabled: bool = Query(True, description="Enable auto cleanup")
 ):
     """Update data expiry settings."""
@@ -160,7 +162,7 @@ async def manual_cleanup_expired_data():
         today = datetime.now().date()
         
         # Clean up registered_cars CSV files
-        reg_days = expiry_config.get("registered_cars_days", 2)
+        reg_days = expiry_config.get("registered_cars_days", 30)
         for csv_file in settings.data_dir.glob("registered_cars_*.csv"):
             try:
                 date_str = csv_file.stem.split("_")[-1]  # registered_cars_DD-MM-YYYY
@@ -172,7 +174,7 @@ async def manual_cleanup_expired_data():
                 pass
         
         # Clean up history CSV files
-        history_days = expiry_config.get("history_days", 2)
+        history_days = expiry_config.get("history_days", 30)
         for csv_file in settings.data_dir.glob("history_*.csv"):
             try:
                 date_str = csv_file.stem.split("_")[-1]
@@ -184,7 +186,7 @@ async def manual_cleanup_expired_data():
                 pass
         
         # Clean up report JSON files
-        reports_days = expiry_config.get("reports_days", 2)
+        reports_days = expiry_config.get("reports_days", 30)
         for report_file in settings.report_dir.glob("report_*.json"):
             try:
                 date_str = report_file.stem.split("_")[-1]
@@ -196,7 +198,7 @@ async def manual_cleanup_expired_data():
                 pass
         
         # Clean up car_history folders
-        car_history_days = expiry_config.get("car_history_days", 2)
+        car_history_days = expiry_config.get("car_history_days", 30)
         for date_folder in settings.car_history_dir.iterdir():
             if date_folder.is_dir():
                 try:

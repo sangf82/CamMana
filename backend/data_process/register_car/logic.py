@@ -62,7 +62,7 @@ class RegisteredCarLogic:
                 self._write_csv(self.current_file, [])
                 logger.info(f"Created new empty file {self.current_file.name}")
 
-        limit_date = datetime.now() - timedelta(days=2)
+        limit_date = datetime.now() - timedelta(days=30)
         for f in DATA_DIR.glob(f"{self.FILE_PREFIX}*.csv"):
             d = self._get_file_date(f.name)
             if d and d.date() < limit_date.date():
