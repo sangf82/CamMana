@@ -265,48 +265,57 @@ export default function CamerasPage() {
     e.preventDefault();
     if (!editingItem) return;
 
-    const isNew = !editingItem.id;
-    const camToSave = {
-      ...editingItem,
-      id: isNew ? Date.now() : editingItem.id,
-    };
+    // Use explicit check: id of 0 or falsy means new camera
+    const isNew = !editingItem.id || editingItem.id === 0;
+    
+    // For new cameras, don't send a fake ID - let backend generate UUID
+    const camToSave = isNew 
+      ? { ...editingItem, id: undefined }
+      : { ...editingItem };
 
-    if (isNew) setData((prev) => [camToSave, ...prev]);
-    else
+    // Optimistic update for existing cameras only
+    if (!isNew) {
       setData((prev) =>
-        prev.map((item) => (item.id === camToSave.id ? camToSave : item)),
+        prev.map((item) => (item.id === camToSave.id ? { ...camToSave, id: camToSave.id! } as Camera : item)),
       );
+    }
 
     setIsCamDialogOpen(false);
     setEditingItem(null);
 
     // Use PUT for updates, POST for new cameras
     const token = localStorage.getItem('token');
-    const promise = isNew
-      ? fetch("/api/cameras", {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify(camToSave),
-        })
-      : fetch(`/api/cameras/${camToSave.id}`, {
-          method: "PUT",
-          headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify(camToSave),
-        });
+    try {
+      const response = isNew
+        ? await fetch("/api/cameras", {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify(camToSave),
+          })
+        : await fetch(`/api/cameras/${camToSave.id}`, {
+            method: "PUT",
+            headers: { 
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
+            body: JSON.stringify(camToSave),
+          });
 
-    toast.promise(promise, {
-      loading: isNew ? "Đang thêm camera..." : "Đang lưu camera...",
-      success: isNew ? "Đã thêm camera mới" : "Đã cập nhật camera",
-      error: "Lỗi khi lưu camera",
-    });
-    await promise;
-    fetchInitialData();
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ detail: "Unknown error" }));
+        throw new Error(err.detail || "Failed to save camera");
+      }
+
+      toast.success(isNew ? "Đã thêm camera mới" : "Đã cập nhật camera");
+      fetchInitialData(); // Only refresh on success
+    } catch (error: any) {
+      toast.error(error.message || "Lỗi khi lưu camera");
+      // Revert optimistic update by refreshing
+      fetchInitialData();
+    }
   };
 
   // --- 4. Location Handlers ---
