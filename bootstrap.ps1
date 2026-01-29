@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $OutputEncoding = [System.Text.Encoding]::UTF8
-$Version = "v2.5.1"
+$Version = "v2.5.2"
 
 # --- HELPER FUNCTIONS ---
 function Write-Step ([string]$msg) {
