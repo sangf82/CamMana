@@ -50,18 +50,24 @@ else:
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def setup_logging():
-    log_dir = APP_DIR / "database" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / f"cammana_{datetime.now().strftime('%Y-%m-%d')}.log"
-    
-    handler = TimedRotatingFileHandler(
-        str(log_file), when="midnight", interval=1, backupCount=30, encoding="utf-8"
-    )
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[handler, logging.StreamHandler(sys.stdout)]
-    )
+    """Initialize centralized logging with separate log files for app, backend, and frontend."""
+    try:
+        from backend.logging_config import init_all_loggers
+        init_all_loggers()
+    except ImportError:
+        # Fallback if logging_config not available
+        log_dir = APP_DIR / "database" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / f"cammana_{datetime.now().strftime('%Y-%m-%d')}.log"
+        
+        handler = TimedRotatingFileHandler(
+            str(log_file), when="midnight", interval=1, backupCount=30, encoding="utf-8"
+        )
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s",
+            handlers=[handler, logging.StreamHandler(sys.stdout)]
+        )
 
 
 def is_production_mode() -> bool:
@@ -301,9 +307,32 @@ class BackendManager(QObject):
 
     def _start_frontend_dev(self):
         frontend_dir = APP_DIR / "frontend"
+        log_dir = APP_DIR / "database" / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        frontend_log = log_dir / f"frontend_{datetime.now().strftime('%Y-%m-%d')}.log"
+        
         if not (frontend_dir / "node_modules").exists():
             subprocess.run(["npm", "install"], cwd=str(frontend_dir), shell=True, capture_output=True)
-        self.process_manager.spawn(args=["npm", "run", "dev"], cwd=str(frontend_dir), shell=True)
+        
+        # Log frontend output to file
+        try:
+            with open(frontend_log, "a", encoding="utf-8") as f:
+                f.write(f"\n--- [FRONTEND DEV START] {datetime.now()} ---\n")
+            log_file = open(frontend_log, "a", encoding="utf-8")
+            flags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+            proc = subprocess.Popen(
+                ["npm", "run", "dev"], 
+                cwd=str(frontend_dir), 
+                shell=True,
+                stdout=log_file, 
+                stderr=log_file,
+                creationflags=flags
+            )
+            self.process_manager._processes.append(proc)
+        except Exception as e:
+            logging.error(f"Failed to spawn frontend dev server: {e}")
+            # Fallback to original method
+            self.process_manager.spawn(args=["npm", "run", "dev"], cwd=str(frontend_dir), shell=True)
 
     def _wait_for_port(self, port: int, timeout: int = 60) -> bool:
         start = time.time()

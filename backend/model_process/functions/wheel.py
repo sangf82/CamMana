@@ -59,5 +59,6 @@ class WheelDetector:
             return {"detected": False, "wheel_count_total": 0}
             
         except Exception as e:
-            logger.error(f"Wheel Detection Error: {e}")
-            return {"detected": False, "error": str(e)}
+            error_msg = str(e) if str(e) else f"{type(e).__name__}: No details"
+            logger.error(f"Wheel Detection Error: {error_msg}", exc_info=True)
+            return {"detected": False, "error": error_msg}

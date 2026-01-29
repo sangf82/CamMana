@@ -2,6 +2,7 @@
 import os
 import sys
 import shutil
+import logging
 from datetime import datetime
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
@@ -9,6 +10,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+
+# Initialize backend logging first
+from backend.logging_config import setup_backend_logging, get_logger
+setup_backend_logging()
+logger = get_logger(__name__)
 
 # Import settings first
 from backend.settings import settings
@@ -167,28 +173,23 @@ def initialize_backend():
         
         def daily_report_job():
             today = datetime.now().strftime("%d-%m-%Y")
-            print(f"[cam_mana] Auto-generating daily report for {today}...")
+            logger.info(f"Auto-generating daily report for {today}...")
             ReportLogic().generate_report(today)
             
         scheduler = BackgroundScheduler()
         scheduler.add_job(daily_report_job, 'cron', hour=22, minute=0)
         scheduler.start()
-        print("[cam_mana] Daily report scheduler started (at 22:00)")
+        logger.info("Daily report scheduler started (at 22:00)")
         
         # Start Background Image Scheduler (every 1 hour)
         from backend.model_process.utils.background import background_manager
         background_manager.start_scheduler()
-        print("[cam_mana] Background image scheduler started (every 1 hour)")
+        logger.info("Background image scheduler started (every 1 hour)")
         
         # Initialize History logic (daily rotation & cleanup)
         from backend.data_process.history.logic import HistoryLogic
         HistoryLogic()
-        print("[cam_mana] History logic initialized")
-        
-        # Sync camera data with locations and camera types
-        from backend.data_process._sync import CameraDataSync
-        from backend.data_process.location.logic import LocationLogic
-        from backend.data_process.camera_type.logic import CameraTypeLogic
+        logger.info("History logic initialized")
         
         # Sync camera data with locations and camera types
         from backend.data_process._sync import CameraDataSync
@@ -202,17 +203,17 @@ def initialize_backend():
                 camtypes = CameraTypeLogic().get_types()
                 result = CameraDataSync.full_sync(locations, camtypes)
                 if result['locations'] > 0 or result['types'] > 0:
-                    print(f"[cam_mana] Synced cameras: {result['locations']} locations, {result['types']} types")
+                    logger.info(f"Synced cameras: {result['locations']} locations, {result['types']} types")
             except Exception as e:
-                print(f"[cam_mana] Background sync warning: {e}")
+                logger.warning(f"Background sync warning: {e}")
 
         # Run sync in background thread
         sync_thread = threading.Thread(target=run_sync, daemon=True)
         sync_thread.start()
-        print("[cam_mana] Camera sync started in background")
+        logger.info("Camera sync started in background")
         
     except Exception as e:
-        print(f"[cam_mana] Warning: Failed to initialize backend services: {e}")
+        logger.warning(f"Failed to initialize backend services: {e}")
 
 
 def run_server(host: str = None, port: int = None, reload: bool = None):
@@ -242,9 +243,9 @@ def run_server(host: str = None, port: int = None, reload: bool = None):
     initialize_backend()
     
     try:
-        print(f"[cam_mana] Starting backend on {host}:{port}...")
+        logger.info(f"Starting backend on {host}:{port}...")
         if reload:
-            print("[cam_mana] Hot-reload enabled (DEBUG mode)")
+            logger.info("Hot-reload enabled (DEBUG mode)")
         
         if reload:
             # Use string reference for reload mode
@@ -263,7 +264,7 @@ def run_server(host: str = None, port: int = None, reload: bool = None):
         pass
     finally:
         clean_pycache()
-        print("[cam_mana] Shutdown complete.")
+        logger.info("Shutdown complete.")
 
 
 if __name__ == "__main__":
