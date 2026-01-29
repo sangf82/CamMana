@@ -132,10 +132,21 @@ def check_firewall_status():
         )
         icmp_exists = "Rule Name:" in icmp_result.stdout
         
-        # 3. Check Network Profile
-        ps_profile = 'Get-NetConnectionProfile -InterfaceAlias Wi-Fi -ErrorAction SilentlyContinue | Select-Object -ExpandProperty NetworkCategory'
+        # 3. Check Network Profile (check all adapters, prefer the non-Public one)
+        ps_profile = 'Get-NetConnectionProfile | Select-Object -ExpandProperty NetworkCategory'
         profile_result = subprocess.run(["powershell", "-Command", ps_profile], capture_output=True, text=True, timeout=5)
-        network_category = profile_result.stdout.strip() or "Unknown"
+        categories = [c.strip() for c in profile_result.stdout.strip().split('\n') if c.strip()]
+        # Prefer Private > DomainAuthenticated > Public > Unknown
+        if 'Private' in categories:
+            network_category = 'Private'
+        elif 'DomainAuthenticated' in categories:
+            network_category = 'DomainAuthenticated'
+        elif 'Public' in categories:
+            network_category = 'Public'
+        elif categories:
+            network_category = categories[0]
+        else:
+            network_category = 'Unknown'
 
         return {
             "supported": True,
@@ -177,8 +188,8 @@ def open_firewall():
         # 3. Add ICMP (Ping) rule
         New-NetFirewallRule -DisplayName 'CamMana Ping' -Direction Inbound -Protocol ICMPv4 -Action Allow -Profile Any
         
-        # 4. Set Network Profile to Private
-        Get-NetConnectionProfile -InterfaceAlias Wi-Fi -ErrorAction SilentlyContinue | Set-NetConnectionProfile -NetworkCategory Private -ErrorAction SilentlyContinue
+        # 4. Set Network Profile to Private (for ALL adapters)
+        Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private -ErrorAction SilentlyContinue
         """
         
         # Wrap in Start-Process for elevation
