@@ -15,7 +15,8 @@ import {
   AccountCircle,
   Construction,
   LiveTv,
-  Tune
+  Tune,
+  Assignment
 } from '@mui/icons-material'
 
 interface MenuItem {
@@ -47,6 +48,11 @@ const STATIC_MENU_ITEMS: MenuItem[] = [
     title: 'Báo cáo',
     href: '/reports',
     icon: Assessment
+  },
+  {
+    title: 'Nhật ký',
+    href: '/logs',
+    icon: Assignment
   }
 ]
 
@@ -58,9 +64,52 @@ export default function Sidebar() {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   
+  // Resizable Sidebar State
+  const [sidebarWidth, setSidebarWidth] = useState(256) // Default 256px (w-64)
+  const [isResizing, setIsResizing] = useState(false)
+  
   // Dynamic Locations State
   const [monitorSubItems, setMonitorSubItems] = useState<{ title: string; href: string; tag?: string }[]>([])
   const [userData, setUserData] = useState<{username: string, role: string, full_name?: string} | null>(null)
+
+  // Drag handlers
+  const startResizing = (e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsResizing(true)
+  }
+
+  const stopResizing = () => {
+    setIsResizing(false)
+  }
+
+  const resizeSidebar = (e: MouseEvent) => {
+    if (isResizing && !isCollapsed) {
+      const newWidth = e.clientX
+      if (newWidth >= 250 && newWidth <= 400) {
+        setSidebarWidth(newWidth)
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (isResizing) {
+        window.addEventListener('mousemove', resizeSidebar)
+        window.addEventListener('mouseup', stopResizing)
+        document.body.style.cursor = 'col-resize'
+        document.body.style.userSelect = 'none'
+    } else {
+        window.removeEventListener('mousemove', resizeSidebar)
+        window.removeEventListener('mouseup', stopResizing)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+    }
+    return () => {
+        window.removeEventListener('mousemove', resizeSidebar)
+        window.removeEventListener('mouseup', stopResizing)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+    }
+  }, [isResizing])
 
   // Load user data
   useEffect(() => {
@@ -70,7 +119,18 @@ export default function Sidebar() {
             setUserData(JSON.parse(savedUser));
         } catch (e) {}
     }
+    const savedWidth = localStorage.getItem('sidebar_width');
+    if (savedWidth) {
+        const w = parseInt(savedWidth)
+        if (w >= 250 && w <= 400) setSidebarWidth(w)
+    }
   }, []);
+
+  useEffect(() => {
+    if (!isCollapsed) {
+        localStorage.setItem('sidebar_width', sidebarWidth.toString());
+    }
+  }, [sidebarWidth, isCollapsed]);
 
   // Load Locations for Sidebar
   useEffect(() => {
@@ -157,8 +217,18 @@ export default function Sidebar() {
 
   return (
     <aside 
-        className={`${isCollapsed ? 'w-16' : 'w-64'} h-full bg-sidebar border-r border-sidebar-border flex flex-col shrink-0 transition-all duration-300 overflow-x-hidden`}
+        style={{ width: isCollapsed ? 64 : sidebarWidth }}
+        className={`h-full bg-sidebar border-r border-sidebar-border flex flex-col shrink-0 overflow-x-hidden relative group/sidebar
+          ${!isResizing ? 'transition-[width] duration-300' : 'select-none'}
+        `}
     >
+      {/* Resize Handle */}
+      {!isCollapsed && (
+        <div 
+          onMouseDown={startResizing}
+          className={`absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-primary/40 transition-colors z-50 ${isResizing ? 'bg-primary' : ''}`}
+        />
+      )}
       {/* Branding */}
       <div className={`h-16 flex items-center border-b border-sidebar-border relative ${isCollapsed ? 'justify-center px-0' : 'justify-between pl-6 pr-2'}`}>
         {!isCollapsed && (
@@ -225,7 +295,7 @@ export default function Sidebar() {
                 
                 {/* Submenu */}
                 {!isCollapsed && openMenus.includes(item.title) && (
-                  <div className="ml-4 pl-4 border-l border-sidebar-border space-y-1 mt-1 mb-2">
+                  <div className="ml-[22px] pl-4 border-l border-sidebar-border space-y-1 mt-1 mb-2">
                     {monitorSubItems.length === 0 && item.title === 'Giám sát trực tuyến' && (
                         <div className="px-3 py-2 text-xs text-muted-foreground italic">
                             Chưa có cổng nào. <br/>Vui lòng thêm trong cấu hình.
@@ -291,33 +361,42 @@ export default function Sidebar() {
       </nav>
 
       {/* User Profile */}
-      <div className={`border-t border-sidebar-border relative ${isCollapsed ? 'p-2' : 'p-4'}`}>
+      <div className={`h-16 border-t border-sidebar-border relative flex items-center ${isCollapsed ? 'justify-center p-2' : 'px-4'}`}>
         <button 
-          onClick={() => setUserMenuOpen(!userMenuOpen)}
-          className={`flex items-center gap-3 w-full rounded-md hover:bg-sidebar-accent transition-colors ${isCollapsed ? 'justify-center p-2' : 'p-2'}`}
+          onClick={() => {
+            if (isCollapsed) {
+              setIsCollapsed(false);
+              setUserMenuOpen(true);
+            } else {
+              setUserMenuOpen(!userMenuOpen);
+            }
+          }}
+          className={`flex items-center gap-3.5 w-full rounded-xl hover:bg-sidebar-accent transition-all ${isCollapsed ? 'justify-center p-1.5' : 'px-3 py-1.5'}`}
           title={isCollapsed ? "Người dùng" : undefined}
         >
-          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary shrink-0">
-            <AccountCircle />
+          <div className="w-10 h-10 rounded-full bg-[#f59e0b1a] flex items-center justify-center text-[#f59e0b] shrink-0 border border-[#f59e0b33] shadow-inner">
+            <AccountCircle sx={{ fontSize: 28 }} />
           </div>
+
           {!isCollapsed && (
             <div className="flex-1 text-left overflow-hidden">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">{userData?.full_name || userData?.username || 'Người dùng'}</p>
-                <p className="text-xs text-muted-foreground truncate">{userData?.role === 'admin' ? 'Quản trị viên' : 'Vận hành viên'}</p>
+                <p className="text-[15px] font-bold text-sidebar-foreground truncate leading-tight tracking-tight">{userData?.full_name || userData?.username || 'Người dùng'}</p>
+                <p className="text-[10px] text-muted-foreground truncate leading-none mt-1.5 opacity-80 uppercase tracking-widest font-black">{userData?.role === 'admin' ? 'Quản trị viên' : 'Vận hành viên'}</p>
             </div>
           )}
         </button>
 
         {/* Popover */}
         {userMenuOpen && (
-          <div className="absolute bottom-full left-4 right-4 mb-2 bg-popover border border-border rounded-lg shadow-lg py-1 z-50 animate-in fade-in zoom-in-95 duration-200 min-w-[150px]">
+          <div className={`absolute ${isCollapsed ? 'left-full ml-2 bottom-0' : 'bottom-full left-4 right-4'} mb-2 bg-popover border border-border rounded-xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-200 min-w-[180px]`}>
+
             {userData?.role === 'admin' && (
               <Link 
                 href="/system-config" 
                 className="flex items-center gap-2 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors"
                 onClick={() => setUserMenuOpen(false)}
               >
-                <Tune fontSize="small" />
+                <Tune fontSize="small" className="text-[#f59e0b]" />
                 <span>Thiết lập</span>
               </Link>
             )}
@@ -326,9 +405,10 @@ export default function Sidebar() {
               className="flex items-center gap-2 w-full px-4 py-2 text-sm text-popover-foreground hover:bg-accent transition-colors"
               onClick={() => setUserMenuOpen(false)}
             >
-              <Settings fontSize="small" />
+              <Settings fontSize="small" className="text-[#f59e0b]" />
               <span>Cài đặt</span>
             </Link>
+
             <div className="h-px bg-border my-1" />
             <button 
                 onClick={() => {
@@ -351,6 +431,7 @@ export default function Sidebar() {
           />
         )}
       </div>
+
     </aside>
   )
 }

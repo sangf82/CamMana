@@ -13,6 +13,11 @@ class CameraStatus(str, Enum):
 class CameraConnectRequest(BaseModel):
     ip: str
     port: int = 8899
+    onvif_port: Optional[int] = None
+    rtsp_port: int = 554
+    transport_mode: str = "tcp"
+    channel_id: Optional[int] = None
+    stream_type: str = "main"
     user: str = "admin"
     password: str = ""
     name: str = "Camera"
@@ -33,6 +38,11 @@ class CameraBase(BaseModel):
     name: Optional[str] = "Camera"
     ip: Optional[str] = None
     port: int = 8899
+    onvif_port: Optional[int] = None
+    rtsp_port: int = 554
+    transport_mode: str = "tcp"
+    channel_id: Optional[int] = None
+    stream_type: str = "main"
     user: str = "admin"
     password: str = ""
     location: Optional[str] = ""
@@ -57,6 +67,11 @@ class CameraUpdate(BaseModel):
     name: Optional[str] = None
     ip: Optional[str] = None
     port: Optional[int] = None
+    onvif_port: Optional[int] = None
+    rtsp_port: Optional[int] = None
+    transport_mode: Optional[str] = None
+    channel_id: Optional[int] = None
+    stream_type: Optional[str] = None
     user: Optional[str] = None
     password: Optional[str] = None
     location: Optional[str] = None

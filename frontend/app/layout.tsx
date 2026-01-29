@@ -21,8 +21,7 @@ export default function RootLayout({
   return (
     <html lang="vi" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
-        {/* Explicit favicon link to avoid preload warning in WebView */}
-        <link rel="icon" href="/favicon.ico" sizes="any" type="image/x-icon" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
       <body
         className={`${inter.variable} ${mono.variable} font-sans antialiased bg-background text-foreground overflow-hidden`}

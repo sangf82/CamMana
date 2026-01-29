@@ -172,16 +172,14 @@ export default function SettingsPage() {
   const isAdmin = currentUser?.role === 'admin'
 
   return (
-    <div className="p-6 pb-40 space-y-6 min-h-screen bg-background w-full">
+    <div className="w-full h-full overflow-y-auto bg-background">
+      <div className="max-w-[1500px] mx-auto p-6 pb-40 space-y-4 min-h-screen">
       {/* Header */}
-      <div className="flex justify-between items-center shrink-0 border-b border-border pb-4">
+      <div className="flex justify-between items-center shrink-0">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#f59e0b]">
+          <h1 className="text-2xl font-bold tracking-tight">
             Cài đặt hệ thống
           </h1>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mt-1 opacity-70">
-            Quản lý cấu hình toàn diện & Infrastructure
-          </p>
         </div>
         <div className="flex items-center gap-3">
             <div className={`px-3 py-1.5 rounded-md border flex items-center gap-2 ${syncConfig.is_destination ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>
@@ -579,6 +577,7 @@ export default function SettingsPage() {
       
       {/* Extra space at bottom for better scrolling */}
       <div className="h-32" />
+      </div>
     </div>
   )
 }

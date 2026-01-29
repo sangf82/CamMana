@@ -1,6 +1,11 @@
 [Setup]
+; === App Info (synced from pyproject.toml by build.py) ===
+#define AppVersion "2.0.1"
+#define AppPublisher "Sang.lt"
 AppName=CamMana
-AppVersion=2.0.0
+AppVersion={#AppVersion}
+AppPublisher={#AppPublisher}
+AppCopyright=Copyright © 2026 {#AppPublisher}
 DefaultDirName={autopf}\CamMana
 DefaultGroupName=CamMana
 UninstallDisplayIcon={app}\CamMana.exe
@@ -9,6 +14,8 @@ SolidCompression=yes
 WizardStyle=modern
 OutputBaseFilename=CamMana_Setup
 SetupIconFile=..\assets\icon.ico
+WizardSmallImageFile=..\assets\wizard_small.bmp
+WizardImageFile=..\assets\wizard_large.bmp
 DisableProgramGroupPage=yes
 ; Require admin for Program Files install
 PrivilegesRequired=admin

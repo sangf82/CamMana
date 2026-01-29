@@ -13,6 +13,7 @@ from .capture import VideoStreamer
 from .control import PTZController
 from backend.camera.state import cameras as active_cameras
 from backend.sync_process.sync.proxy import is_client_mode, proxy_get, proxy_post, proxy_put, proxy_delete
+from backend.data_process.log.logic import logger_logic
 
 logger = logging.getLogger(__name__)
 
@@ -24,19 +25,28 @@ class CameraBase(BaseModel):
     name: str
     ip: str
     port: int = 80
+    onvif_port: Optional[int] = None
+    rtsp_port: int = 554
+    transport_mode: str = "tcp"
+    channel_id: Optional[int] = None
+    stream_type: str = "main"
     username: Optional[str] = ""
     password: Optional[str] = ""
     location: Optional[str] = ""
-    location_id: Optional[str] = "" # Link to location
+    location_id: Optional[str] = ""
     type: Optional[str] = ""
     brand: Optional[str] = ""
     tag: Optional[str] = ""
-    # Add other fields as per _common.py headers if needed
 
 class CameraUpdate(BaseModel):
     name: Optional[str] = None
     ip: Optional[str] = None
     port: Optional[int] = None
+    onvif_port: Optional[int] = None
+    rtsp_port: Optional[int] = None
+    transport_mode: Optional[str] = None
+    channel_id: Optional[int] = None
+    stream_type: Optional[str] = None
     username: Optional[str] = None
     password: Optional[str] = None
     location: Optional[str] = None
@@ -212,24 +222,35 @@ async def connect_camera(request: Request, cam_id: str, user: UserSchema = Depen
     config = CameraConnectionConfig(
         ip=ip,
         port=port,
-        user=cam_data.get('username', ''),  # Use username field
-        password=cam_data.get('password', '')
+        user=cam_data.get('username', ''),
+        password=cam_data.get('password', ''),
+        onvif_port=int(cam_data.get('onvif_port')) if cam_data.get('onvif_port') else None,
+        rtsp_port=int(cam_data.get('rtsp_port')) if cam_data.get('rtsp_port') else 554,
+        transport_mode=cam_data.get('transport_mode', 'tcp') or 'tcp',
+        channel_id=int(cam_data.get('channel_id')) if cam_data.get('channel_id') else None,
+        stream_type=cam_data.get('stream_type', 'main') or 'main'
     )
     
     conn = CameraConnection(config)
     res = await asyncio.to_thread(conn.connect)
     
     if not res['success']:
+        logger_logic.log_event(cam_id, "Connection Failure", res['error'])
         raise HTTPException(status_code=400, detail=res['error'])
     
+    logger_logic.log_event(cam_id, "Connection Success", f"Connected to ONVIF via port {res['onvif_port']} ({res['mode']}). Model: {res['model']}")
+    
     # Start Streamer
-    streamer = VideoStreamer(res['stream_uri'])
-    streamer.set_camera_info(name=cam_data.get('name'), location=cam_data.get('location'))
+    streamer = VideoStreamer(res['stream_uri'], transport_mode=config.transport_mode)
+    streamer.set_camera_info(id=cam_id, name=cam_data.get('name'), location=cam_data.get('location'))
     success = streamer.start()
     
     if not success:
         conn.disconnect()
+        logger_logic.log_event(cam_id, "Stream Failure", "OpenCV failed to open RTSP stream")
         raise HTTPException(status_code=500, detail="Failed to start stream")
+    
+    logger_logic.log_event(cam_id, "Stream Started", f"RTSP stream active ({config.transport_mode}, {res['resolution']['width']}x{res['resolution']['height']})")
 
     # Use the same ID for active_cameras key
     active_cameras[cam_id] = {
@@ -374,3 +395,9 @@ async def get_stream_info(request: Request, cam_id: str, user: UserSchema = Depe
     if cam_id not in active_cameras:
         raise HTTPException(404, "Camera not connected")
     return active_cameras[cam_id]['streamer'].get_stream_info()
+# Logs
+@router.get("/logs")
+async def get_camera_logs(date: Optional[str] = None, user: UserSchema = Depends(get_current_user)):
+    """Get system logs for cameras (Nhật ký)."""
+    from backend.data_process.log.logic import logger_logic
+    return logger_logic.get_logs(date)

@@ -274,7 +274,8 @@ export default function SystemConfigPage() {
   ]
 
   return (
-    <div className="p-6 space-y-6 w-full mx-auto pb-12">
+    <div className="w-full h-full overflow-y-auto">
+      <div className="max-w-[1500px] mx-auto p-6 space-y-4 pb-12">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Settings2 className="h-6 w-6 text-[#f59e0b]" />
@@ -375,7 +376,7 @@ export default function SystemConfigPage() {
           )}
 
           {/* Settings - inline like data expiry panel */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label htmlFor="bg-interval" className="text-xs text-muted-foreground">
                 Tần suất cập nhật
@@ -384,12 +385,16 @@ export default function SystemConfigPage() {
                 value={String(bgSettings.update_interval_hours)}
                 onValueChange={(v) => setBgSettings({...bgSettings, update_interval_hours: Number(v)})}
               >
-                <SelectTrigger id="bg-interval" className="h-9">
+                <SelectTrigger id="bg-interval" className="h-10 rounded-xl border-border bg-background dark:bg-[#111] dark:border-white/10 px-4 text-sm font-bold focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500/50 dark:focus:border-white/40 transition-all">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl border-border bg-popover dark:bg-[#1a1a1a] shadow-2xl animate-in fade-in zoom-in-95 duration-200">
                   {intervalOptions.map(opt => (
-                    <SelectItem key={opt.value} value={String(opt.value)}>
+                    <SelectItem 
+                      key={opt.value} 
+                      value={String(opt.value)}
+                      className="rounded-lg mb-1 last:mb-0 focus:bg-amber-50 focus:text-amber-600 dark:focus:bg-amber-900/30 dark:focus:text-amber-400 data-[state=checked]:bg-amber-50 data-[state=checked]:text-amber-600 dark:data-[state=checked]:bg-amber-900/30 dark:data-[state=checked]:text-amber-400 font-medium transition-colors cursor-pointer"
+                    >
                       {opt.label}
                     </SelectItem>
                   ))}
@@ -414,7 +419,8 @@ export default function SystemConfigPage() {
               onClick={handleSaveBgSettings} 
               disabled={isSavingBg}
               size="sm"
-              className="gap-2 bg-amber-500 hover:bg-amber-600 text-white"
+              className="gap-2 bg-amber-500 hover:bg-amber-600 text-black border border-amber-600/20 shadow-lg shadow-amber-500/10 font-bold"
+
             >
               {isSavingBg ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -463,12 +469,16 @@ export default function SystemConfigPage() {
                 value={String(expirySettings.registered_cars_days)}
                 onValueChange={(v) => setExpirySettings({...expirySettings, registered_cars_days: Number(v)})}
               >
-                <SelectTrigger id="reg-days" className="h-9">
+                <SelectTrigger id="reg-days" className="h-10 rounded-xl border-border bg-background dark:bg-[#111] dark:border-white/10 px-4 text-sm font-bold focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500/50 dark:focus:border-white/40 transition-all">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl border-border bg-popover dark:bg-[#1a1a1a] shadow-2xl animate-in fade-in zoom-in-95 duration-200">
                   {dayOptions.map(opt => (
-                    <SelectItem key={opt.value} value={String(opt.value)}>
+                    <SelectItem 
+                      key={opt.value} 
+                      value={String(opt.value)}
+                      className="rounded-lg mb-1 last:mb-0 focus:bg-amber-50 focus:text-amber-600 dark:focus:bg-amber-900/30 dark:focus:text-amber-400 data-[state=checked]:bg-amber-50 data-[state=checked]:text-amber-600 dark:data-[state=checked]:bg-amber-900/30 dark:data-[state=checked]:text-amber-400 font-medium transition-colors cursor-pointer"
+                    >
                       {opt.label}
                     </SelectItem>
                   ))}
@@ -483,12 +493,16 @@ export default function SystemConfigPage() {
                 value={String(expirySettings.history_days)}
                 onValueChange={(v) => setExpirySettings({...expirySettings, history_days: Number(v)})}
               >
-                <SelectTrigger id="history-days" className="h-9">
+                <SelectTrigger id="history-days" className="h-10 rounded-xl border-border bg-background dark:bg-[#111] dark:border-white/10 px-4 text-sm font-bold focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500/50 dark:focus:border-white/40 transition-all">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl border-border bg-popover dark:bg-[#1a1a1a] shadow-2xl animate-in fade-in zoom-in-95 duration-200">
                   {dayOptions.map(opt => (
-                    <SelectItem key={opt.value} value={String(opt.value)}>
+                    <SelectItem 
+                      key={opt.value} 
+                      value={String(opt.value)}
+                      className="rounded-lg mb-1 last:mb-0 focus:bg-amber-50 focus:text-amber-600 dark:focus:bg-amber-900/30 dark:focus:text-amber-400 data-[state=checked]:bg-amber-50 data-[state=checked]:text-amber-600 dark:data-[state=checked]:bg-amber-900/30 dark:data-[state=checked]:text-amber-400 font-medium transition-colors cursor-pointer"
+                    >
                       {opt.label}
                     </SelectItem>
                   ))}
@@ -503,12 +517,16 @@ export default function SystemConfigPage() {
                 value={String(expirySettings.reports_days)}
                 onValueChange={(v) => setExpirySettings({...expirySettings, reports_days: Number(v)})}
               >
-                <SelectTrigger id="report-days" className="h-9">
+                <SelectTrigger id="report-days" className="h-10 rounded-xl border-border bg-background dark:bg-[#111] dark:border-white/10 px-4 text-sm font-bold focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500/50 dark:focus:border-white/40 transition-all">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl border-border bg-popover dark:bg-[#1a1a1a] shadow-2xl animate-in fade-in zoom-in-95 duration-200">
                   {dayOptions.map(opt => (
-                    <SelectItem key={opt.value} value={String(opt.value)}>
+                    <SelectItem 
+                      key={opt.value} 
+                      value={String(opt.value)}
+                      className="rounded-lg mb-1 last:mb-0 focus:bg-amber-50 focus:text-amber-600 dark:focus:bg-amber-900/30 dark:focus:text-amber-400 data-[state=checked]:bg-amber-50 data-[state=checked]:text-amber-600 dark:data-[state=checked]:bg-amber-900/30 dark:data-[state=checked]:text-amber-400 font-medium transition-colors cursor-pointer"
+                    >
                       {opt.label}
                     </SelectItem>
                   ))}
@@ -523,12 +541,16 @@ export default function SystemConfigPage() {
                 value={String(expirySettings.car_history_days)}
                 onValueChange={(v) => setExpirySettings({...expirySettings, car_history_days: Number(v)})}
               >
-                <SelectTrigger id="car-history-days" className="h-9">
+                <SelectTrigger id="car-history-days" className="h-10 rounded-xl border-border bg-background dark:bg-[#111] dark:border-white/10 px-4 text-sm font-bold focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500/50 dark:focus:border-white/40 transition-all">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl border-border bg-popover dark:bg-[#1a1a1a] shadow-2xl animate-in fade-in zoom-in-95 duration-200">
                   {dayOptions.map(opt => (
-                    <SelectItem key={opt.value} value={String(opt.value)}>
+                    <SelectItem 
+                      key={opt.value} 
+                      value={String(opt.value)}
+                      className="rounded-lg mb-1 last:mb-0 focus:bg-amber-50 focus:text-amber-600 dark:focus:bg-amber-900/30 dark:focus:text-amber-400 data-[state=checked]:bg-amber-50 data-[state=checked]:text-amber-600 dark:data-[state=checked]:bg-amber-900/30 dark:data-[state=checked]:text-amber-400 font-medium transition-colors cursor-pointer"
+                    >
                       {opt.label}
                     </SelectItem>
                   ))}
@@ -553,7 +575,8 @@ export default function SystemConfigPage() {
               onClick={handleSaveExpirySettings} 
               disabled={isSavingExpiry}
               size="sm"
-              className="gap-2 bg-amber-500 hover:bg-amber-600 text-white"
+              className="gap-2 bg-amber-500 hover:bg-amber-600 text-black border border-amber-600/20 shadow-lg shadow-amber-500/10 font-bold"
+
             >
               {isSavingExpiry ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -589,6 +612,7 @@ export default function SystemConfigPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

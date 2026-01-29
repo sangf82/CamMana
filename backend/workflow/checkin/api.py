@@ -139,7 +139,11 @@ async def capture_and_process(
                     # Check mean and variance. Solid gray/black has very low variance.
                     # Solid gray is often mean ~128, variance ~0
                     _, stddev = cv2.meanStdDev(f)
-                    return stddev[0][0] < 5.0  # Very low variance is suspicious
+                    val = stddev[0][0]
+                    is_bad = val < 2.0  # Reduced from 5.0 to be less aggressive
+                    if is_bad:
+                        print(f"[API] Frame suspicious: stddev={val:.2f} (threshold 2.0)")
+                    return is_bad
                 except Exception as e:
                     print(f"[API] Error checking frame variance: {e}")
                     return True
@@ -163,9 +167,9 @@ async def capture_and_process(
                     return frame
 
                 print(
-                    f"[API] Frame from {cam_id} is suspicious (attempt {attempt + 1}), waiting..."
+                    f"[API] Frame from {cam_id} is suspicious (attempt {attempt + 1}/3), waiting 1s..."
                 )
-                await asyncio.sleep(0.5)  # Wait for stream to stabilize
+                await asyncio.sleep(1.0)  # Increased wait to 1s for stabilization
 
             return frame  # Return anyway if all retries fail
 

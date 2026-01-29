@@ -12,9 +12,11 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 
 import cv2
+import numpy as np
 
 from backend.settings import settings
 from backend.model_process.functions.truck import TruckDetector
+from backend.camera.capture import suppress_ffmpeg_stderr
 
 logger = logging.getLogger(__name__)
 
@@ -168,32 +170,53 @@ class BackgroundManager:
                 logger.warning(f"[BackgroundManager] No stream URI for camera {camera_id}")
                 return {"success": False, "error": "No stream URI"}
             
-            # Capture frame using OpenCV
-            cap = cv2.VideoCapture(stream_uri)
+            # Capture frame using OpenCV with robust RTSP options
+            transport = camera.get('transport_mode', 'tcp').lower()
+            if transport not in ['tcp', 'udp']:
+                transport = 'tcp'
+                
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+                f"rtsp_transport;{transport}|"
+                "fflags;discardcorrupt|"
+                "err_detect;ignore_err|"
+                "analyzeduration;1000000|"
+                "probesize;1000000"
+            )
+            
+            with suppress_ffmpeg_stderr():
+                cap = cv2.VideoCapture(stream_uri, cv2.CAP_FFMPEG)
+                
             if not cap.isOpened():
                 conn.disconnect()
                 logger.warning(f"[BackgroundManager] Failed to open stream for {camera_id}")
                 return {"success": False, "error": "Failed to open stream"}
             
-            # Wait for camera to stabilize (10 seconds) to avoid gray frames
-            logger.info(f"[BackgroundManager] Waiting 10 seconds for camera {camera_id} to stabilize...")
-            await asyncio.sleep(10)
+            # Setup buffer
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             
-            # Read multiple frames to get a stable image
+            # Warmup - instead of a hard 10s wait, we read frames and check for stability
+            logger.info(f"[BackgroundManager] Warming up camera {camera_id}...")
             frame = None
-            for _ in range(30):  # Try more frames after waiting
-                ret, frame = cap.read()
-                if ret and frame is not None:
-                    # Check if frame is not gray/blank (has some color variation)
-                    if frame.std() > 10:  # Frame has enough variation
-                        break
+            max_warmup_frames = 60 # ~2 seconds at 30fps
+            
+            with suppress_ffmpeg_stderr():
+                for i in range(max_warmup_frames):
+                    ret, f = cap.read()
+                    if ret and f is not None:
+                        frame = f
+                        # Check if frame is stable (not solid color)
+                        _, stddev = cv2.meanStdDev(frame)
+                        if stddev[0][0] > 10.0:  # Frame has enough variation
+                            if i > 5: # Skip first few frames even if "good"
+                                break
+                    await asyncio.sleep(0.01)
             
             cap.release()
             conn.disconnect()
             
             if frame is None:
-                logger.warning(f"[BackgroundManager] Failed to capture frame from {camera_id}")
-                return {"success": False, "error": "Failed to capture frame"}
+                logger.warning(f"[BackgroundManager] Failed to capture stable frame from {camera_id}")
+                return {"success": False, "error": "Failed to capture stable frame"}
             
             # Check if car is detected (skip detection for forced capture)
             # result = self.detector.detect(frame)

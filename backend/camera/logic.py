@@ -65,12 +65,13 @@ class CameraLogic:
         if 'id' not in data:
             data['id'] = str(uuid.uuid4())
         
-        # Ensure cam_id matches internal ID logic if needed, or keep separate
-        # The schema has both 'id' and 'cam_id'. 
-        # 'id' usually timestamp-based in _common. 
-        # let's just use what's passed or generate.
-        
         current = self._read_csv()
+        
+        # Enforce unique name
+        new_name = data.get('name', '').strip()
+        if any(c.get('name', '').strip().lower() == new_name.lower() for c in current):
+            raise Exception(f"Tên camera '{new_name}' đã tồn tại. Vui lòng chọn tên khác.")
+            
         current.append(data)
         self._write_csv(current)
         
@@ -93,6 +94,13 @@ class CameraLogic:
 
     def update_camera(self, cam_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         current = self._read_csv()
+        
+        # If name is being updated, check for uniqueness
+        new_name = data.get('name', '').strip()
+        if new_name:
+            if any(c.get('name', '').strip().lower() == new_name.lower() and (c.get('cam_id') != cam_id and c.get('id') != cam_id) for c in current):
+                raise Exception(f"Tên camera '{new_name}' đã tồn tại. Vui lòng chọn tên khác.")
+
         updated = None
         for c in current:
             # Match by cam_id (custom ID) or id (internal ID)

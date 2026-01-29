@@ -10,7 +10,8 @@ import {
   ExpandMore,
   ChevronRight,
   ChevronLeft,
-  ExpandLess,
+  CalendarMonth,
+  CheckCircle,
 } from "@mui/icons-material";
 import { toast } from "sonner";
 import { LoadingPanel } from "@/components/ui/loading-spinner";
@@ -22,40 +23,35 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   "đang cân": { label: "Đang cân", color: "bg-yellow-500/20 text-yellow-400" },
   "ra cổng": { label: "Ra cổng", color: "bg-orange-500/20 text-orange-400" },
   "đã ra": { label: "Đã ra", color: "bg-green-500/20 text-green-400" },
-  // Legacy/fallback statuses
-  pending_verification: {
-    label: "Vào cổng",
-    color: "bg-blue-500/20 text-blue-400",
-  },
-  verified: { label: "Đã vào", color: "bg-indigo-500/20 text-indigo-400" },
-  rejected: { label: "Từ chối", color: "bg-red-500/20 text-red-400" },
-  stranger: { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
-  matched: { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
+  "xe ra lạ": { label: "Xe ra lạ", color: "bg-rose-500/20 text-rose-400" },
+  "check-in pending": { label: "Check-In Pending", color: "bg-slate-500/20 text-slate-400" },
+  
+  // Mixed case fallback
+  "Vào cổng": { label: "Vào cổng", color: "bg-blue-500/20 text-blue-400" },
+  "Đã vào": { label: "Đã vào", color: "bg-indigo-500/20 text-indigo-400" },
+  "Đang cân": { label: "Đang cân", color: "bg-yellow-500/20 text-yellow-400" },
+  "Ra cổng": { label: "Ra cổng", color: "bg-orange-500/20 text-orange-400" },
+  "Đã ra": { label: "Đã ra", color: "bg-green-500/20 text-green-400" },
+  "Xe ra lạ": { label: "Xe ra lạ", color: "bg-rose-500/20 text-rose-400" },
+  "Check-In Pending": { label: "Check-In Pending", color: "bg-slate-500/20 text-slate-400" },
 };
 
 const VERIFY_MAP: Record<string, { label: string; color: string }> = {
   // Primary verify statuses (Xác minh)
-  "đã xác minh": {
-    label: "Đã XM",
-    color: "bg-emerald-500/20 text-emerald-400",
-  },
-  "chưa xác minh": {
-    label: "Chưa XM",
-    color: "bg-amber-500/20 text-amber-400",
-  },
+  "đã xác minh": { label: "Đã XM", color: "bg-emerald-500/20 text-emerald-400" },
+  "chưa xác minh": { label: "Chưa XM", color: "bg-amber-500/20 text-amber-400" },
   "cần kt": { label: "Cần KT", color: "bg-orange-500/20 text-orange-400" },
   "xe lạ": { label: "Xe lạ", color: "bg-rose-500/20 text-rose-400" },
   "xe chưa đk": { label: "Xe chưa ĐK", color: "bg-red-500/20 text-red-400" },
-  // Legacy/fallback verify statuses
-  "❌ Chưa xác minh": {
-    label: "Chưa XM",
-    color: "bg-amber-500/20 text-amber-400",
-  },
-  "✅ Đã xác minh": {
-    label: "Đã XM",
-    color: "bg-emerald-500/20 text-emerald-400",
-  },
-  "❌ Từ chối": { label: "Xe chưa ĐK", color: "bg-red-500/20 text-red-400" },
+  "từ chối": { label: "Từ chối", color: "bg-red-500/20 text-red-500" },
+
+  // Mixed case fallback
+  "Đã xác minh": { label: "Đã XM", color: "bg-emerald-500/20 text-emerald-400" },
+  "Chưa xác minh": { label: "Chưa XM", color: "bg-amber-500/20 text-amber-400" },
+  "Cần KT": { label: "Cần KT", color: "bg-orange-500/20 text-orange-400" },
+  "Xe lạ": { label: "Xe lạ", color: "bg-rose-500/20 text-rose-400" },
+  "Xe chưa ĐK": { label: "Xe chưa ĐK", color: "bg-red-500/20 text-red-400" },
+  "Từ chối": { label: "Từ chối", color: "bg-red-500/20 text-red-500" },
 };
 
 export default function HistoryPage() {
@@ -64,6 +60,11 @@ export default function HistoryPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterGate, setFilterGate] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
+  
+  // Date selection
+  const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
 
   // Pending states for filters
   const [pendingFilterGate, setPendingFilterGate] = useState("All");
@@ -73,47 +74,62 @@ export default function HistoryPage() {
   const [isGateOpen, setIsGateOpen] = useState(false);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
 
-  // Fetch history data from API
+  // Fetch history data & dates
   useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        setLoading(true);
-        const token = localStorage.getItem('token');
-        const response = await fetch("/api/history", {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({ detail: "Unknown error" }));
-            console.error("History API error:", err);
-            toast.error(err.detail || "Không thể tải lịch sử");
-            setData([]);
-            return;
-        }
-
-        const result = await response.json();
-
-        // Backend returns List[HistoryRecord] directly
-        if (Array.isArray(result)) {
-          setData(result);
-        } else if (result.success && result.data) {
-          // Support legacy wrapper if it exists
-          setData(result.data);
-        } else {
-          console.error("Unexpected history data format:", result);
-          toast.error("Format dữ liệu không hợp lệ");
-          setData([]);
-        }
-      } catch (error) {
-        console.error("Error fetching history:", error);
-        toast.error("Lỗi kết nối đến server");
-      } finally {
-        setLoading(false);
-      }
-    };
-
+    fetchDates();
     fetchHistory();
   }, []);
+
+  const fetchDates = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch("/api/history/dates", {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const dates = await response.json();
+        setAvailableDates(dates);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchHistory = async (date?: string) => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const url = date ? `/api/history?date=${date}` : "/api/history";
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (!response.ok) {
+          const err = await response.json().catch(() => ({ detail: "Unknown error" }));
+          toast.error(err.detail || "Không thể tải lịch sử");
+          setData([]);
+          return;
+      }
+
+      const result = await response.json();
+      if (Array.isArray(result)) {
+        setData(result);
+      } else if (result.success && result.data) {
+        setData(result.data);
+      } else {
+        setData([]);
+      }
+    } catch (error) {
+      console.error("Error fetching history:", error);
+      toast.error("Lỗi kết nối");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDateChange = (date: string) => {
+    setSelectedDate(date);
+    fetchHistory(date);
+    setIsDateDropdownOpen(false);
+  };
 
   // Sync pending filters when opening
   useEffect(() => {
@@ -147,7 +163,7 @@ export default function HistoryPage() {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
-  });
+  }).replace(/\//g, '-');
 
   const gates = [
     "All",
@@ -230,7 +246,7 @@ export default function HistoryPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const dateParam = today.replace(/\//g, '-');
+      const dateParam = (selectedDate || today).replace(/\//g, '-');
       
       // Try to save directly to Downloads folder (desktop app mode)
       const saveResponse = await fetch(`/api/history/export/excel/save?date=${dateParam}`, {
@@ -279,7 +295,8 @@ export default function HistoryPage() {
   };
 
   return (
-    <div className="h-full flex flex-col p-6 gap-2 overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden bg-background">
+      <div className="max-w-[1500px] w-full mx-auto flex-1 flex flex-col p-6 gap-4 min-h-0">
       {/* Header Section */}
       <div className="flex justify-between items-center shrink-0">
         <div className="space-y-1">
@@ -287,9 +304,33 @@ export default function HistoryPage() {
             <h1 className="text-2xl font-bold tracking-tight">
               Lịch sử Ra Vào
             </h1>
-            <span className="text-[#f59e0b] font-mono bg-[#f59e0b]/10 px-2 py-0.5 rounded text-sm border border-[#f59e0b]/20">
-              {today}
-            </span>
+            <div className="relative">
+              <button 
+                onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
+                className="flex items-center gap-2 bg-card border border-border px-3 py-1 rounded text-sm font-bold text-[#f59e0b] shadow-sm hover:border-[#f59e0b] transition-all min-w-[140px] justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <CalendarMonth fontSize="small" />
+                  <span>{selectedDate || today}</span>
+                </div>
+                <ExpandMore className={` transition-transform duration-200 ${isDateDropdownOpen ? 'rotate-180' : ''}`} fontSize="small" />
+              </button>
+              
+              {isDateDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 w-full z-[100] bg-popover text-popover-foreground border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                  {availableDates.map(date => (
+                    <button 
+                      key={date} 
+                      onClick={() => handleDateChange(date)}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-[#f59e0b]/10 flex items-center justify-between ${selectedDate === date || (selectedDate === "" && date === today) ? "text-[#f59e0b] bg-[#f59e0b]/5" : "text-muted-foreground"}`}
+                    >
+                      <span>{date}{date === today ? " (Hôm nay)" : ""}</span>
+                      {(selectedDate === date || (selectedDate === "" && date === today)) && <CheckCircle sx={{ fontSize: 14 }} />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -534,9 +575,10 @@ export default function HistoryPage() {
           className="fixed bottom-10 left-1/2 -translate-x-1/2 p-2 bg-[#f59e0b] text-black rounded-full shadow-lg hover:bg-[#f59e0b]/90 transition-all animate-in fade-in zoom-in duration-300 z-50 flex items-center justify-center border border-[#f59e0b]/20"
           aria-label="Back to top"
         >
-          <ExpandLess fontSize="medium" />
+          <ChevronRight className="-rotate-90" fontSize="medium" />
         </button>
       )}
+      </div>
     </div>
-  );
+  )
 }

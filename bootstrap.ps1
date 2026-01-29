@@ -1,3 +1,5 @@
+# To run it, use: irm https://raw.githubusercontent.com/sangf82/CamMana/master/bootstrap.ps1 | iex
+
 $ErrorActionPreference = "Stop"
 $OutputEncoding = [System.Text.Encoding]::UTF8
 $Version = "v2.5.2"
@@ -54,7 +56,7 @@ Write-Host @"
 *                                                  *
 *       CAMMANA - HỆ THỐNG QUẢN LÝ CAMERA          *
 *           BOOTSTRAP & AUTO-INSTALLER             *
-*                Phiên bản: $Version               *
+*                Phiên bản: $Version                *
 *                                                  *
 ****************************************************
 "@ -ForegroundColor Magenta

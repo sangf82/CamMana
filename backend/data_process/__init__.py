@@ -29,6 +29,11 @@ def get_cameras_config():
             type=c.get('type', ''),
             status=c.get('status', 'Offline'),
             tag=c.get('tag', ''),
+            onvif_port=int(c.get('onvif_port')) if c.get('onvif_port') else None,
+            rtsp_port=int(c.get('rtsp_port')) if c.get('rtsp_port') else 554,
+            transport_mode=c.get('transport_mode', 'tcp') or 'tcp',
+            channel_id=int(c.get('channel_id')) if c.get('channel_id') else None,
+            stream_type=c.get('stream_type', 'main') or 'main',
             username=c.get('username', 'admin'),
             brand=c.get('brand', ''),
             cam_id=c.get('cam_id', '')
@@ -46,16 +51,16 @@ def save_camera(data):
     cam_id = str(d.get('id', ''))
     if not cam_id: cam_id = str(uuid.uuid4())
     
-    # Construct address
-    ip = d.get('ip', '')
-    port = d.get('port', 80)
-    addr = f"{ip}:{port}" if port and port != 80 else ip
-    
     new_data = {
         "id": cam_id,
         "name": d.get('name', ''),
         "ip": d.get('ip', ''),
         "port": d.get('port', 80),
+        "onvif_port": d.get('onvif_port'),
+        "rtsp_port": d.get('rtsp_port', 554),
+        "transport_mode": d.get('transport_mode', 'tcp'),
+        "channel_id": d.get('channel_id'),
+        "stream_type": d.get('stream_type', 'main'),
         "username": d.get('username', d.get('user', 'admin')),
         "password": d.get('password', ''),
         "location": d.get('location', ''),

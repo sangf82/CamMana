@@ -13,6 +13,19 @@ from functools import lru_cache
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+def is_frozen_app_settings() -> bool:
+    """Detection consistent with app.py"""
+    if getattr(sys, 'frozen', False): return True
+    if hasattr(sys, 'nuitka_binary'): return True
+    if '__nuitka__' in sys.modules: return True
+    main_mod = sys.modules.get('__main__')
+    if main_mod and (hasattr(main_mod, '__compiled__') or "__nuitka_version__" in dir(main_mod)):
+        return True
+    exe_name = Path(sys.executable).name.lower()
+    if exe_name not in ('python.exe', 'python', 'python3.exe', 'python3', 'pythonw.exe'):
+        return True
+    return False
+
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
@@ -94,23 +107,16 @@ class Settings(BaseSettings):
     
     @property
     def project_root(self) -> Path:
-        """Path to project root directory.
-        
-        In production, backend runs from .venv/Scripts/python.exe
-        so we need to go up 2 levels to get to CamMana folder.
-        We detect production by checking if .venv exists in parent folders.
-        """
+        """Path to project root directory."""
         backend_parent = self.backend_dir.parent
         
-        # Check if running from a .venv (production subprocess)
-        # The path would be like: CamMana/.venv/Scripts/python.exe
-        # and backend_dir would be CamMana/backend
+        # Check frozen state first (Nuitka standalone)
+        if is_frozen_app_settings():
+            return Path(sys.executable).parent
+            
+        # Check if running from a .venv (production subprocess in dev env)
         if (backend_parent / ".venv" / "Scripts" / "python.exe").exists():
             return backend_parent
-        
-        # Check frozen state (though in new strategy, backend isn't frozen)
-        if getattr(sys, 'frozen', False):
-            return Path(sys.executable).parent
         
         # Development mode
         return backend_parent
@@ -176,10 +182,15 @@ class Settings(BaseSettings):
     @property
     def models_dir(self) -> Path:
         """AI models directory."""
-        if getattr(sys, 'frozen', False):
-            # Running as compiled executable - models bundled in _MEIPASS
-            return Path(sys._MEIPASS) / "backend" / "model_process" / "models"  # type: ignore[attr-defined]
-        # In development, models are in backend/model_process/models
+        if is_frozen_app_settings():
+            # In Nuitka standalone, they are in the 'backend/model_process/models' relative to exe
+            path = self.project_root / "backend" / "model_process" / "models"
+            if path.exists(): return path
+            # PyInstaller fallback
+            if hasattr(sys, '_MEIPASS'):
+                return Path(sys._MEIPASS) / "backend" / "model_process" / "models"
+        
+        # In development
         return self.backend_dir / "model_process" / "models"
     
     @property

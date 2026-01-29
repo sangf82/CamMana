@@ -8,12 +8,52 @@ import signal
 import socket
 import subprocess
 import logging
+import traceback
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
+# Debug mode: enable with --debug flag or CAMMANA_DEBUG=1 environment variable
+DEBUG_MODE = "--debug" in sys.argv or os.environ.get("CAMMANA_DEBUG") == "1"
+
 # Setup base paths
+# Nuitka standalone sets __compiled__ at module level
+def is_nuitka_standalone() -> bool:
+    """Check if running as Nuitka standalone binary"""
+    try:
+        # Nuitka sets __compiled__ as a module-level constant
+        return "__compiled__" in dir() or hasattr(sys.modules.get('__main__'), '__compiled__')
+    except:
+        return False
+
+def is_frozen_app() -> bool:
+    """Check if we are running as a frozen/compiled application"""
+    # 1. PyInstaller standard
+    if getattr(sys, 'frozen', False):
+        return True
+    
+    # 2. Nuitka Onefile standard
+    if hasattr(sys, 'nuitka_binary'):
+        return True
+
+    # 3. Nuitka Standalone: Check if Nuitka is in sys.modules
+    # Nuitka adds special entries when compiled
+    if '__nuitka__' in sys.modules:
+        return True
+    
+    # 4. Check __main__ for Nuitka's compilation marker
+    main_mod = sys.modules.get('__main__')
+    if main_mod and (hasattr(main_mod, '__compiled__') or "__nuitka_version__" in dir(main_mod)):
+        return True
+
+    # 5. Fallback: if executable is NOT in a standard location
+    exe_name = Path(sys.executable).name.lower()
+    if exe_name not in ('python.exe', 'python', 'python3.exe', 'python3', 'pythonw.exe'):
+        return True
+        
+    return False
+
 def get_resource_path(relative_path: str) -> Path:
     """ Get absolute path to resource, works for dev and for Nuitka/PyInstaller """
     base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
@@ -21,11 +61,43 @@ def get_resource_path(relative_path: str) -> Path:
 
 def get_app_dir() -> Path:
     """ Get directory where the executable or script is located """
-    if getattr(sys, 'frozen', False):
+    if is_frozen_app():
         return Path(sys.executable).parent
     return Path(__file__).parent.absolute()
 
 APP_DIR = get_app_dir()
+
+
+def save_crash_log(error: Exception, context: str = "system") -> Path:
+    """Save system errors to database/logs for debugging. Returns crash log path."""
+    log_dir = APP_DIR / "database" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    crash_file = log_dir / f"crash_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    
+    try:
+        lines = [
+            "=" * 60, "CamMana Crash Report", "=" * 60, "",
+            f"Time: {datetime.now().isoformat()}",
+            f"Context: {context}",
+            f"Debug Mode: {DEBUG_MODE}",
+            f"Frozen App: {is_frozen_app()}",
+            f"Python: {sys.version}",
+            f"Executable: {sys.executable}",
+            f"Working Dir: {os.getcwd()}",
+            "", "=" * 60, "Error Details", "=" * 60, "",
+            f"Type: {type(error).__name__}",
+            f"Message: {error}",
+            f"\nTraceback:\n{traceback.format_exc()}",
+            "", "=" * 60, "System Info", "=" * 60, "",
+            f"Platform: {sys.platform}",
+            f"Args: {sys.argv}",
+        ]
+        crash_file.write_text("\n".join(lines), encoding="utf-8")
+        logging.error(f"Crash log saved: {crash_file}")
+    except Exception as e:
+        logging.error(f"Failed to save crash log: {e}")
+    
+    return crash_file
 
 # Check mode before heavy imports
 IS_BACKEND = "--backend" in sys.argv
@@ -74,11 +146,13 @@ def is_production_mode() -> bool:
     """Detect if running in production mode"""
     if "--prod" in sys.argv: return True
     if "--dev" in sys.argv: return False
-    # Check if we are running from a frozen bundle (Nuitka, PyInstaller)
-    if getattr(sys, 'frozen', False) or hasattr(sys, '__compiled__'): return True
+    
+    # Primary check: is it frozen/compiled?
+    if is_frozen_app(): return True
+    
     # Fallback checks
     if (get_resource_path("frontend/out")).exists(): return True
-    return not (Path(__file__).parent / "pyproject.toml").exists()
+    return not (APP_DIR / "pyproject.toml").exists()
 
 def get_assets_dir() -> Path:
     """Get assets directory - priority to packed assets in production"""
@@ -95,6 +169,21 @@ def check_port(port: int) -> bool:
             sock.settimeout(1)
             return sock.connect_ex(("127.0.0.1", port)) == 0
     except: return False
+
+def kill_port(port: int):
+    """Identify and kill any process using the specified port (Windows only)."""
+    if sys.platform != "win32": return
+    try:
+        # Find PID using the port
+        output = subprocess.check_output(["netstat", "-ano", "-p", "tcp"], text=True)
+        for line in output.splitlines():
+            if f":{port}" in line and "LISTENING" in line:
+                pid = line.strip().split()[-1]
+                if pid and pid != "0":
+                    logging.info(f"Port {port} is busy by PID {pid}. Terminating...")
+                    subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True)
+    except Exception as e:
+        logging.warning(f"Failed to clear port {port}: {e}")
 
 def clean_pycache():
     """Lightweight pycache cleanup - only for backend folder"""
@@ -221,7 +310,7 @@ class BackendManager(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.process_manager = ProcessManager()
-        self.is_frozen = getattr(sys, 'frozen', False) or hasattr(sys, '__compiled__') or hasattr(sys, 'nuitka_binary')
+        self.is_frozen = is_frozen_app()
         self.is_production = is_production_mode()
     
     def start(self):
@@ -250,17 +339,34 @@ class BackendManager(QObject):
                 details = f"EXE: {sys.executable}\nDIR: {APP_DIR}\nFROZEN: {self.is_frozen}"
                 self.error.emit(f"Không tìm thấy trình chạy (Runner not found):\n{python_exe}\n\n{details}"); return
             
+            # Clear previous process on port 8000
+            self.status_changed.emit("Kiểm tra cổng 8000...")
+            kill_port(self.PORT)
+            
+            self.status_changed.emit("Khởi động Backend...")
             self._start_backend(python_exe)
-            status = self._wait_for_port(self.PORT, timeout=300)
+            
+            # Wait for port with health check
+            status = False
+            start_time = time.time()
+            timeout = 120 # 2 minutes is plenty
+            
+            while time.time() - start_time < timeout:
+                # Check if the process died early
+                for proc in self.process_manager._processes:
+                    if proc.poll() is not None:
+                        # Process died! Stop waiting and report error
+                        ret_code = proc.poll()
+                        error_msg = f"Backend process exited immediately (Code: {ret_code})"
+                        self.error.emit(error_msg); return
+                
+                if check_port(self.PORT):
+                    status = True
+                    break
+                time.sleep(1.0)
+                
             if not status:
-                error_msg = "Backend timeout (Port 8000)"
-                try:
-                    log_path = APP_DIR / "database" / "logs" / "backend_errors.log"
-                    if log_path.exists():
-                        lines = log_path.read_text(encoding="utf-8").splitlines()
-                        relevant_errors = [l for l in lines[-10:] if any(kw in l for kw in ["Error", "Exception", "Traceback"])]
-                        if relevant_errors: error_msg = "Lỗi Backend: " + " | ".join(relevant_errors[-2:])
-                except: pass
+                error_msg = "Backend timeout (Port 8000) - please check logs."
                 self.error.emit(error_msg); return
             
             if self.is_production:
@@ -401,6 +507,13 @@ def main():
 
     def fatal_error(msg):
         logging.error(f"FATAL: {msg}")
+        # Save crash log for debugging
+        try:
+            crash_file = save_crash_log(Exception(msg), "gui_fatal_error")
+            if DEBUG_MODE:
+                logging.info(f"Debug: Crash log at {crash_file}")
+        except:
+            pass
         splash.showMessage(f"Lỗi: {msg}", Qt.AlignBottom|Qt.AlignCenter, QColor("#ef4444"))
         QTimer.singleShot(100, lambda: (QMessageBox.critical(None, "CamMana - Lỗi", f"Lỗi hệ thống không thể tự khắc phục:\n\n{msg}"), app.quit()))
 

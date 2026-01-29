@@ -873,7 +873,7 @@ function MonitorPageContent() {
                 <img
                   src={displayUrl}
                   alt="Snapshot"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
                 {/* Hover overlay */}
                 {currentDetection && (
@@ -1056,7 +1056,7 @@ function MonitorPageContent() {
           <Button
             onClick={handleConfirm}
             disabled={!currentDetection}
-            className="flex-1 py-2.5 font-bold rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 bg-[#00C853] hover:bg-[#00E676] text-white shadow-lg border-none"
+            className="flex-1 py-2.5 font-bold rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 bg-[#00C853] hover:bg-[#00E676] text-black shadow-lg border-none"
           >
             <CheckCircle className="w-4 h-4" />
             Xác nhận
@@ -1072,7 +1072,7 @@ function MonitorPageContent() {
           <Button
             onClick={handleReject}
             disabled={!currentDetection}
-            className="flex-1 py-2.5 font-bold rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 bg-[#D50000] hover:bg-[#FF1744] text-white shadow-lg border-none"
+            className="flex-1 py-2.5 font-bold rounded-lg flex items-center justify-center gap-2 transition-all active:scale-95 bg-[#D50000] hover:bg-[#FF1744] text-black shadow-lg border-none"
           >
             <XCircle className="w-4 h-4" />
             Từ chối

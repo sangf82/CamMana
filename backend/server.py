@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from contextlib import asynccontextmanager
 
 # Initialize backend logging first
 from backend.logging_config import setup_backend_logging, get_logger
@@ -51,15 +52,23 @@ def clean_pycache():
         print(f"[cam_mana] Cleaned {count} __pycache__ directories")
 
 
+def is_frozen_app_backend() -> bool:
+    """Detection consistent with app.py"""
+    if getattr(sys, 'frozen', False): return True
+    if hasattr(sys, 'nuitka_binary'): return True
+    if '__nuitka__' in sys.modules: return True
+    main_mod = sys.modules.get('__main__')
+    if main_mod and (hasattr(main_mod, '__compiled__') or "__nuitka_version__" in dir(main_mod)):
+        return True
+    exe_name = Path(sys.executable).name.lower()
+    if exe_name not in ('python.exe', 'python', 'python3.exe', 'python3', 'pythonw.exe'):
+        return True
+    return False
+
 def get_static_dir():
-    """Get path to static frontend files.
-    
-    In production (frozen), the frontend is at APP_DIR/frontend/out
-    where APP_DIR is the directory containing CamMana.exe
-    (NOT sys._MEIPASS which is the internal bundle folder).
-    """
-    if getattr(sys, 'frozen', False):
-        # Production: frontend/out is next to CamMana.exe
+    """Get path to static frontend files."""
+    if is_frozen_app_backend():
+        # Production: frontend/out is next to the executable
         app_dir = Path(sys.executable).parent
         static_path = app_dir / "frontend" / "out"
     else:
@@ -71,10 +80,21 @@ def get_static_dir():
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """FastAPI lifespan manager (startup/shutdown events)"""
+        import threading
+        # Run heavy initialization in a separate thread to not block the event loop
+        thread = threading.Thread(target=initialize_backend, daemon=True)
+        thread.start()
+        logger.info("Main backend initialization moved to background thread")
+        yield
+
     app = FastAPI(
         title=settings.api_title,
         description=settings.api_description,
-        version=settings.api_version
+        version=settings.api_version,
+        lifespan=lifespan
     )
     
     # CORS middleware
@@ -157,7 +177,8 @@ def create_app() -> FastAPI:
             
             # Fallback to index.html for client-side routing
             return FileResponse(static_dir / "index.html")
-    
+
+
     return app
 
 
@@ -239,8 +260,8 @@ def run_server(host: str = None, port: int = None, reload: bool = None):
     # Clean pycache on start
     clean_pycache()
     
-    # Initialize backend services
-    initialize_backend()
+    # Initialization is now handled by the FastAPI 'startup' event
+    # which runs after uvicorn binds to the port.
     
     try:
         logger.info(f"Starting backend on {host}:{port}...")

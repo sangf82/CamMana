@@ -16,6 +16,10 @@ export default function VehiclesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterContractor, setFilterContractor] = useState('All')
   const [filterType, setFilterType] = useState('All')
+  
+  // Date selection
+  const [selectedDate, setSelectedDate] = useState('')
+  const [availableDates, setAvailableDates] = useState<string[]>([])
 
   const [showScrollTop, setShowScrollTop] = useState(false)
 
@@ -33,10 +37,11 @@ export default function VehiclesPage() {
 
   // --- Persistence ---
   // --- 1. Load Data from API ---
-  const fetchInitialData = async () => {
+  const fetchInitialData = async (date?: string) => {
       try {
           const token = localStorage.getItem('token');
-          const res = await fetch('/api/registered_cars', {
+          const url = date ? `/api/registered_cars?date=${date}` : '/api/registered_cars';
+          const res = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }
           })
           if (res.ok) {
@@ -61,9 +66,30 @@ export default function VehiclesPage() {
       }
   }
 
+  const fetchDates = async () => {
+    try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/registered_cars/dates', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (res.ok) {
+            const dates = await res.json()
+            setAvailableDates(dates)
+        }
+    } catch (error) {
+        console.error("Failed to load dates", error)
+    }
+  }
+
   useEffect(() => {
+    fetchDates()
     fetchInitialData()
   }, [])
+
+  const handleDateChange = (date: string) => {
+    setSelectedDate(date);
+    fetchInitialData(date);
+  };
 
   // --- 2. Save Data to API ---
   const saveToBackend = async (newData: Vehicle[]) => {
@@ -192,8 +218,9 @@ export default function VehiclesPage() {
     try {
       const token = localStorage.getItem('token');
       
+      const urlParams = selectedDate ? `?date=${selectedDate}` : '';
       // Try to save directly to Downloads folder (desktop app mode)
-      const saveResponse = await fetch('/api/registered_cars/export/excel/save', {
+      const saveResponse = await fetch(`/api/registered_cars/export/excel/save${urlParams}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -211,7 +238,7 @@ export default function VehiclesPage() {
       }
       
       // Fallback to browser download if save fails
-      const response = await fetch('/api/registered_cars/export/excel', {
+      const response = await fetch(`/api/registered_cars/export/excel${urlParams}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -296,7 +323,8 @@ export default function VehiclesPage() {
   }
 
   return (
-    <div className="h-full flex flex-col p-6 gap-2 overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="max-w-[1500px] w-full mx-auto flex-1 flex flex-col p-6 gap-4 min-h-0">
       <VehicleFilterBar 
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
@@ -308,6 +336,9 @@ export default function VehiclesPage() {
         vehicleTypes={vehicleTypes}
         onAdd={openAddDialog}
         onExport={handleExportExcel}
+        selectedDate={selectedDate}
+        setSelectedDate={handleDateChange}
+        availableDates={availableDates}
       />
 
       <VehicleTable 
@@ -334,6 +365,7 @@ export default function VehiclesPage() {
         onSave={handleSave}
         onImport={handleImport}
       />
+      </div>
     </div>
   )
 }

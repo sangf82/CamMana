@@ -72,8 +72,9 @@ def suppress_ffmpeg_stderr():
                 pass
 
 class VideoStreamer:
-    def __init__(self, rtsp_uri: str):
+    def __init__(self, rtsp_uri: str, transport_mode: str = "tcp"):
         self.rtsp_uri = rtsp_uri
+        self.transport_mode = transport_mode
         self.cap: Optional[cv2.VideoCapture] = None
         self.is_streaming = False
         self.last_frame: Optional[np.ndarray] = None
@@ -90,7 +91,8 @@ class VideoStreamer:
         self.capture_dir = PROJECT_ROOT / "database" / "captured_img"
         self.capture_dir.mkdir(parents=True, exist_ok=True)
         
-        # Camera info for image naming
+        # Camera info for image naming and logging
+        self.cam_id = "Unknown"
         self.cam_name = "Unknown"
         self.cam_location = "Unknown"
         
@@ -101,7 +103,8 @@ class VideoStreamer:
         self._fps_calc_frames = 0
         self._fps_calc_start = 0.0
     
-    def set_camera_info(self, name: str = None, location: str = None):
+    def set_camera_info(self, id: str = None, name: str = None, location: str = None):
+        if id: self.cam_id = id
         if name: self.cam_name = name
         if location: self.cam_location = location
     
@@ -148,6 +151,15 @@ class VideoStreamer:
         if self.cap: self.cap.release()
         time.sleep(self._reconnect_delay)
         try:
+            # Set transport mode env before opening
+            transport = "tcp" if self.transport_mode.lower() == "tcp" else "udp"
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+                f"rtsp_transport;{transport}|"
+                "fflags;discardcorrupt|"
+                "err_detect;ignore_err|"
+                "analyzeduration;1000000|"
+                "probesize;1000000"
+            )
             with suppress_ffmpeg_stderr():
                 self.cap = cv2.VideoCapture(self.rtsp_uri, cv2.CAP_FFMPEG)
             if self.cap.isOpened():
@@ -166,6 +178,16 @@ class VideoStreamer:
         
         self._stop_event.clear()
         try:
+            # Set transport mode env
+            transport = "tcp" if self.transport_mode.lower() == "tcp" else "udp"
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+                f"rtsp_transport;{transport}|"
+                "fflags;discardcorrupt|"
+                "err_detect;ignore_err|"
+                "analyzeduration;1000000|"
+                "probesize;1000000"
+            )
+
             with suppress_ffmpeg_stderr():
                 self.cap = cv2.VideoCapture(self.rtsp_uri, cv2.CAP_FFMPEG)
             if not self.cap.isOpened(): return False
@@ -229,22 +251,52 @@ class VideoStreamer:
             await asyncio.sleep(0.04)
             
     def capture_image(self) -> Dict[str, Any]:
-        if self.last_frame is None:
-            return {"success": False, "error": "No frame"}
-        try:
-            date_str = datetime.now().strftime("%d-%m-%Y")
-            time_str = datetime.now().strftime("%H%M%S")
-            # Filename: name_location_date_time.jpg
-            safe_name = "".join(c for c in self.cam_name if c.isalnum() or c in ('-','_'))
-            safe_loc = "".join(c for c in self.cam_location if c.isalnum() or c in ('-','_'))
+        from backend.data_process.log.logic import logger_logic
+        
+        attempts = 0
+        max_attempts = 3 # Original + 2 retries
+        
+        while attempts < max_attempts:
+            if self.last_frame is None:
+                if attempts < max_attempts - 1:
+                    time.sleep(0.5)
+                    attempts += 1
+                    continue
+                return {"success": False, "error": "No frame available after retries"}
             
-            filename = self.capture_dir / f"{safe_name}_{safe_loc}_{date_str}_{time_str}.jpg"
+            # Check frame quality (gray test)
+            _, stddev = cv2.meanStdDev(self.last_frame)
+            if stddev[0][0] <= 5.0: # Gray or solid frame
+                logger_logic.log_event(self.cam_id, "Capture Warning", f"Gray frame detected (stddev={stddev[0][0]:.2f}). Retry {attempts+1}/2.")
+                time.sleep(0.5)
+                attempts += 1
+                continue
             
-            frame_rgb = cv2.cvtColor(self.last_frame, cv2.COLOR_BGR2RGB)
-            Image.fromarray(frame_rgb).save(filename, quality=95)
-            return {"success": True, "path": str(filename), "filename": filename.name}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+            # Good frame found
+            try:
+                date_str = datetime.now().strftime("%d-%m-%Y")
+                time_str = datetime.now().strftime("%H%M%S")
+                # Filename: name_location_date_time.jpg
+                safe_name = "".join(c for c in self.cam_name if c.isalnum() or c in ('-','_'))
+                safe_loc = "".join(c for c in self.cam_location if c.isalnum() or c in ('-','_'))
+                
+                filename = self.capture_dir / f"{safe_name}_{safe_loc}_{date_str}_{time_str}.jpg"
+                
+                frame_rgb = cv2.cvtColor(self.last_frame, cv2.COLOR_BGR2RGB)
+                Image.fromarray(frame_rgb).save(filename, quality=95)
+                
+                if attempts > 0:
+                    logger_logic.log_event(self.cam_id, "Capture Success", f"Captured after {attempts} retries.")
+                else:
+                    logger_logic.log_event(self.cam_id, "Capture Success", "Image captured successfully.")
+                    
+                return {"success": True, "path": str(filename), "filename": filename.name}
+            except Exception as e:
+                logger_logic.log_event(self.cam_id, "Capture Error", f"Save error: {str(e)}")
+                return {"success": False, "error": str(e)}
+        
+        logger_logic.log_event(self.cam_id, "Capture Failure", f"Failed after {max_attempts-1} retries due to gray frames.")
+        return {"success": False, "error": "Failed to capture non-gray image after retries"}
 
     def get_last_frame(self) -> Optional[np.ndarray]:
         if self.last_frame is not None:

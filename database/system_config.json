@@ -2,7 +2,7 @@
   "background": {
     "update_interval_hours": 1,
     "scheduler_enabled": true,
-    "last_update": "2026-01-29T15:20:55.613534"
+    "last_update": "2026-01-30T01:30:58.842598"
   },
   "data_expiry": {
     "registered_cars_days": 2,

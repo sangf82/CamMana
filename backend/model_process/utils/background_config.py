@@ -237,16 +237,6 @@ async def get_volume_topdown_cameras():
     return result
 
 
-@router.get("/backgrounds/{filename}")
-async def get_background_image(filename: str):
-    """Serve a background image file."""
-    bg_path = settings.backgrounds_dir / filename
-    if not bg_path.exists():
-        raise HTTPException(status_code=404, detail="Background not found")
-    
-    return FileResponse(bg_path, media_type="image/jpeg")
-
-
 @router.get("/backgrounds/settings", response_model=BackgroundSettings)
 async def get_background_settings():
     """Get background capture settings."""
@@ -256,6 +246,16 @@ async def get_background_settings():
         scheduler_enabled=bg_config.get("scheduler_enabled", True),
         last_update=bg_config.get("last_update")
     )
+
+
+@router.get("/backgrounds/{filename}")
+async def get_background_image(filename: str):
+    """Serve a background image file."""
+    bg_path = settings.backgrounds_dir / filename
+    if not bg_path.exists():
+        raise HTTPException(status_code=404, detail="Background not found")
+    
+    return FileResponse(bg_path, media_type="image/jpeg")
 
 
 @router.post("/backgrounds/settings")

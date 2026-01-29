@@ -16,9 +16,15 @@ import shutil
 import subprocess
 import time
 import re
+import tomllib
+from functools import lru_cache
 from pathlib import Path
 from datetime import datetime
 from tqdm import tqdm
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
 
 # Paths
 ROOT_DIR = Path(__file__).parent.parent.resolve()
@@ -29,53 +35,201 @@ ASSETS_DIR = PROD_DIR / "assets"
 ISS_CONFIG = PROD_DIR / "config" / "installer.iss"
 FRONTEND_DIR = ROOT_DIR / "frontend"
 
-# Parse arguments
+# CLI Arguments
 INCREMENTAL = "--incremental" in sys.argv or "-i" in sys.argv
 FRONTEND_ONLY = "--frontend" in sys.argv
 BACKEND_ONLY = "--backend" in sys.argv
 CLEAN_ONLY = "--clean" in sys.argv
 
-# Detect CPU cores for optimal parallelization
+# CPU Configuration
 CPU_CORES = os.cpu_count() or 8
-NUITKA_JOBS = max(1, min(CPU_CORES - 2, 16))  # Leave some breathing room
+NUITKA_JOBS = max(1, min(CPU_CORES - 2, 16))
 
-# Build start time
+# Build timing
 BUILD_START = time.time()
 
+# Package mappings (pip name -> import name)
+PACKAGE_NAME_MAP = {
+    "opencv-python": "cv2",
+    "pillow": "PIL",
+    "pyside6": "PySide6",
+    "pydantic-settings": "pydantic_settings",
+    "python-multipart": "multipart",
+    "python-dotenv": "dotenv",
+    "onvif-zeep": "onvif",
+    "fpdf2": "fpdf",
+    "python-jose": "jose",
+}
+
+# Packages that need full inclusion (dynamic imports)
+INCLUDE_FULL_PACKAGES = {
+    "pandas", "matplotlib", "openpyxl", "passlib",
+    "bcrypt", "PIL", "jose", "apscheduler",
+}
+
+# Packages to skip in Nuitka
+SKIP_PACKAGES = {"uvicorn"}
+
+# =============================================================================
+# PYPROJECT CONFIG
+# =============================================================================
+
+
+@lru_cache(maxsize=1)
+def get_pyproject_config() -> dict:
+    """Read and cache pyproject.toml configuration (cached for performance)."""
+    pyproject_path = ROOT_DIR / "pyproject.toml"
+    if not pyproject_path.exists():
+        raise FileNotFoundError(f"pyproject.toml not found at {pyproject_path}")
+    with open(pyproject_path, "rb") as f:
+        return tomllib.load(f)
+
+
+def get_app_version() -> str:
+    """Get app version from pyproject.toml."""
+    return get_pyproject_config().get("project", {}).get("version", "1.0.0")
+
+
+def get_app_author() -> str:
+    """Get app author from pyproject.toml."""
+    authors = get_pyproject_config().get("project", {}).get("authors", [])
+    return authors[0].get("name", "Unknown") if authors and isinstance(authors[0], dict) else "Unknown"
+
+
+
+def get_production_packages() -> list[str]:
+    """Extract production dependencies from pyproject.toml for Nuitka."""
+    try:
+        dependencies = get_pyproject_config().get("project", {}).get("dependencies", [])
+    except FileNotFoundError:
+        print("⚠️  Warning: pyproject.toml not found")
+        return []
+    
+    packages = []
+    for dep in dependencies:
+        if match := re.match(r"^([a-zA-Z0-9_-]+)", dep):
+            pip_name = match.group(1).lower()
+            if pip_name not in SKIP_PACKAGES:
+                packages.append(PACKAGE_NAME_MAP.get(pip_name, pip_name.replace("-", "_")))
+    return packages
+
+
+def sync_installer_config():
+    """
+    Synchronize installer.iss with version/author from pyproject.toml.
+    This ensures the installer always matches the codebase version.
+    """
+    version = get_app_version()
+    author = get_app_author()
+    
+    log(f"Syncing installer config: v{version} by {author}", "info")
+    
+    iss_content = ISS_CONFIG.read_text(encoding="utf-8")
+    
+    # Update #define directives at the top
+    iss_content = re.sub(
+        r'#define AppVersion "[^"]+"',
+        f'#define AppVersion "{version}"',
+        iss_content
+    )
+    iss_content = re.sub(
+        r'#define AppPublisher "[^"]+"',
+        f'#define AppPublisher "{author}"',
+        iss_content
+    )
+    
+    ISS_CONFIG.write_text(iss_content, encoding="utf-8")
+    log(f"Installer synced: v{version}, author: {author}", "success")
+
+
+def preflight_checks() -> bool:
+    """
+    Validate all requirements BEFORE starting the long build process.
+    Catches missing files and configuration issues early.
+    """
+    header("PRE-BUILD VALIDATION")
+    errors = []
+    warnings = []
+    
+    # Required files
+    required_files = [
+        (ROOT_DIR / "app.py", "Main entry point"),
+        (ROOT_DIR / "pyproject.toml", "Project configuration"),
+        (ASSETS_DIR / "icon.ico", "Application icon"),
+        (ASSETS_DIR / "icon.png", "Splash screen icon"),
+        (ISS_CONFIG, "Inno Setup configuration"),
+    ]
+    for path, desc in required_files:
+        if not path.exists():
+            errors.append(f"Missing {desc}: {path.name}")
+    
+    # Wizard images for installer (optional but recommended)
+    for img in ["wizard_small.bmp", "wizard_large.bmp"]:
+        if not (ASSETS_DIR / img).exists():
+            warnings.append(f"Missing installer image: {img} (installer will use defaults)")
+    
+    # Check Nuitka is available
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "nuitka", "--version"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode != 0:
+            errors.append("Nuitka not working. Run: uv add nuitka")
+    except Exception as e:
+        errors.append(f"Nuitka check failed: {e}")
+    
+    # Check frontend build or node_modules
+    frontend_out = FRONTEND_DIR / "out"
+    if not frontend_out.exists():
+        if not (FRONTEND_DIR / "node_modules").exists():
+            warnings.append("Frontend not built & no node_modules - npm install will run")
+        else:
+            log("Frontend will be built during this process", "info")
+    
+    # Report results
+    for w in warnings:
+        log(w, "warning")
+    
+    if errors:
+        for e in errors:
+            log(e, "error")
+        print()
+        log("Pre-flight checks FAILED. Fix errors above before building.", "error")
+        return False
+    
+    log("All pre-flight checks passed!", "success")
+    print()
+    return True
+
+
+# =============================================================================
+# LOGGING & UTILITIES
+# =============================================================================
 
 def elapsed() -> str:
-    """Get elapsed time since build start"""
-    secs = int(time.time() - BUILD_START)
-    mins, secs = divmod(secs, 60)
+    """Get elapsed time since build start."""
+    mins, secs = divmod(int(time.time() - BUILD_START), 60)
     return f"{mins:02d}:{secs:02d}"
 
 
+LOG_ICONS = {
+    "info": "💡", "success": "✅", "warning": "⚠️",
+    "error": "❌", "step": "🚀", "dim": "⚙️",
+}
+
 def log(msg: str, level: str = "info"):
-    """Print formatted log messages"""
-    icons = {
-        "info": "💡",
-        "success": "✅",
-        "warning": "⚠️",
-        "error": "❌",
-        "step": "🚀",
-        "dim": "⚙️",
-    }
-    icon = icons.get(level, "🔹")
-    # Clean output with icons
-    print(f"[{elapsed()}] {icon} {msg}")
+    """Print formatted log message with icon."""
+    print(f"[{elapsed()}] {LOG_ICONS.get(level, '🔹')} {msg}")
 
 
 def header(title: str):
-    """Print a section header"""
-    print()
-    print("=" * 60)
-    print(f"  {title}")
-    print("=" * 60)
-    print()
+    """Print a section header."""
+    print(f"\n{'=' * 60}\n  {title}\n{'=' * 60}\n")
 
 
 def run_cmd(cmd, cwd=None, check=True, silent=False):
-    """Run a command with logging"""
+    """Run a shell command with optional logging."""
     if not silent:
         cmd_str = ' '.join(str(c) for c in cmd) if isinstance(cmd, list) else str(cmd)
         log(f"Running: {cmd_str[:60]}...", "dim")
@@ -83,6 +237,29 @@ def run_cmd(cmd, cwd=None, check=True, silent=False):
     if check and result.returncode != 0:
         raise RuntimeError(f"Command failed (exit {result.returncode})")
     return result
+
+
+# =============================================================================
+# BUILD SYNC FUNCTIONS
+# =============================================================================}
+
+
+def sync_installer_config():
+    """Sync installer.iss version/author from pyproject.toml."""
+    version, author = get_app_version(), get_app_author()
+    log(f"Syncing installer: v{version} by {author}", "info")
+    
+    content = ISS_CONFIG.read_text(encoding="utf-8")
+    content = re.sub(r'#define AppVersion "[^"]+"', f'#define AppVersion "{version}"', content)
+    content = re.sub(r'#define AppPublisher "[^"]+"', f'#define AppPublisher "{author}"', content)
+    ISS_CONFIG.write_text(content, encoding="utf-8")
+    
+    log(f"Installer synced: v{version}, author: {author}", "success")
+
+
+# =============================================================================
+# BUILD OPERATIONS
+# =============================================================================
 
 
 def clean(incremental: bool = False, create_dirs: bool = True):
@@ -146,6 +323,13 @@ def compile_nuitka():
     log("Compiling with Nuitka...", "step")
     log(f"Using {NUITKA_JOBS} parallel workers (detected {CPU_CORES} CPU cores)", "info")
     
+    # Auto-detect packages from pyproject.toml
+    all_packages = get_production_packages()
+    packages_to_include = [pkg for pkg in all_packages if pkg in INCLUDE_FULL_PACKAGES]
+    
+    log(f"Auto-detected {len(all_packages)} dependencies from pyproject.toml", "info")
+    log(f"Including full packages: {', '.join(packages_to_include)}", "dim")
+    
     # Nuitka command - optimized for speed and size
     nuitka_cmd = [
         sys.executable, "-m", "nuitka",
@@ -158,14 +342,23 @@ def compile_nuitka():
         f"--windows-icon-from-ico={ASSETS_DIR / 'icon.ico'}",
         # Plugins
         "--plugin-enable=pyside6",
+    ]
+    
+    # Add dynamic package includes (packages with complex submodule structures)
+    for pkg in packages_to_include:
+        nuitka_cmd.append(f"--include-package={pkg}")
+    
+    # Continue with rest of Nuitka options
+    nuitka_cmd.extend([
         # Output
         f"--output-dir={BUILD_DIR}",
         "--assume-yes-for-downloads",
         "--show-memory",
         f"--jobs={NUITKA_JOBS}",
         # === PERFORMANCE OPTIMIZATIONS ===
-        "--lto=no",              # Disable Link Time Optimization for much faster builds
+        "--lto=yes",             # Enable Link Time Optimization for better runtime performance
         "--no-pyi-file",         # Don't spend time parsing .pyi files
+        "--python-flag=no_site", # Faster startup (skip site.py)
         
         # === EXCLUDE UNUSED PACKAGES AND BLOAT ===
         "--noinclude-setuptools-mode=nofollow",
@@ -184,7 +377,6 @@ def compile_nuitka():
         "--nofollow-import-to=notebook",
         "--nofollow-import-to=jupyter",
         "--nofollow-import-to=pandas.tests",
-        "--nofollow-import-to=pandas.plotting",
         "--nofollow-import-to=numpy.tests",
         "--nofollow-import-to=numpy.f2py",
         "--nofollow-import-to=matplotlib.tests",
@@ -195,7 +387,7 @@ def compile_nuitka():
         
         # Entry
         str(ROOT_DIR / "app.py")
-    ]
+    ])
     
     print()
     log("Phase 1/3: Python optimization...", "info")
@@ -203,12 +395,18 @@ def compile_nuitka():
     
     # Add show progress back
     nuitka_cmd.insert(10, "--show-progress")
+    # Set NO_COLOR to prevent colorama/ANSI issues on Windows pipes
+    env = os.environ.copy()
+    env["NO_COLOR"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    
     process = subprocess.Popen(
         nuitka_cmd, 
         stdout=subprocess.PIPE, 
         stderr=subprocess.STDOUT,
         text=True, 
-        shell=True, 
+        shell=False,
+        env=env,
         bufsize=1
     )
     
@@ -359,9 +557,16 @@ def main():
     print()
     
     try:
+        # Run pre-flight checks before any heavy work
+        if not FRONTEND_ONLY and not preflight_checks():
+            sys.exit(1)
+        
         if FRONTEND_ONLY:
             build_frontend(force=True)
         else:
+            # Sync version/author to installer config
+            sync_installer_config()
+            
             clean(incremental=INCREMENTAL)
             if not BACKEND_ONLY:
                 build_frontend()

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Add, Search, Download, ChevronLeft, ExpandMore } from '@mui/icons-material'
+import { Add, Search, Download, ChevronLeft, ExpandMore, CalendarMonth, CheckCircle } from '@mui/icons-material'
 
 interface VehicleFilterBarProps {
   searchTerm: string
@@ -12,6 +12,9 @@ interface VehicleFilterBarProps {
   vehicleTypes: string[]
   onAdd: () => void
   onExport: () => void
+  selectedDate: string
+  setSelectedDate: (date: string) => void
+  availableDates: string[]
 }
 
 export default function VehicleFilterBar({
@@ -24,11 +27,15 @@ export default function VehicleFilterBar({
   contractors,
   vehicleTypes,
   onAdd,
-  onExport
+  onExport,
+  selectedDate,
+  setSelectedDate,
+  availableDates
 }: VehicleFilterBarProps) {
   const [showFilters, setShowFilters] = useState(false)
   const [isContractorOpen, setIsContractorOpen] = useState(false)
   const [isTypeOpen, setIsTypeOpen] = useState(false)
+  const [isDateOpen, setIsDateOpen] = useState(false)
   
   // Pending states
   const [pendingFilterContractor, setPendingFilterContractor] = useState(filterContractor)
@@ -60,13 +67,36 @@ export default function VehicleFilterBar({
     <div className="flex justify-between items-center shrink-0">
         <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">Danh sách xe đăng ký</h1>
-            <span className="text-[#f59e0b] font-mono bg-[#f59e0b]/10 px-2 py-0.5 rounded text-sm border border-[#f59e0b]/20">
-              {new Date().toLocaleDateString("vi-VN", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
-            </span>
+            <div className="relative">
+              <button 
+                onClick={() => setIsDateOpen(!isDateOpen)}
+                className="flex items-center gap-2 bg-card border border-border px-3 py-1 rounded text-sm font-bold text-[#f59e0b] shadow-sm hover:border-[#f59e0b] transition-all min-w-[150px] justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <CalendarMonth fontSize="small" />
+                  <span>{selectedDate || new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, '-')}</span>
+                </div>
+                <ExpandMore className={`transition-transform duration-200 ${isDateOpen ? 'rotate-180' : ''}`} fontSize="small" />
+              </button>
+              
+              {isDateOpen && (
+                <div className="absolute top-full left-0 mt-1 w-full z-[100] bg-popover text-popover-foreground border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+                  {availableDates.map(date => {
+                    const todayStr = new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, '-');
+                    return (
+                      <button 
+                        key={date} 
+                        onClick={() => { setSelectedDate(date); setIsDateOpen(false); }}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors hover:bg-[#f59e0b]/10 flex items-center justify-between ${selectedDate === date || (selectedDate === "" && date === todayStr) ? 'text-[#f59e0b] bg-[#f59e0b]/10' : 'text-muted-foreground'}`}
+                      >
+                        <span>{date}{date === todayStr ? " (Hôm nay)" : ""}</span>
+                        {(selectedDate === date || (selectedDate === "" && date === todayStr)) && <CheckCircle sx={{ fontSize: 14 }} />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
         </div>
 
         <div className="flex items-center gap-3">

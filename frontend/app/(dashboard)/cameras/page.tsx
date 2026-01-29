@@ -40,11 +40,16 @@ interface Camera {
   ip: string;
   location: string;
   status: string;
-  type: string; // Stores the TypeItem.name
+  type: string;
   username?: string;
   password?: string;
   brand?: string;
   cam_id?: string;
+  onvif_port?: number;
+  rtsp_port?: number;
+  transport_mode?: string;
+  channel_id?: number;
+  stream_type?: string;
 }
 
 const SMART_FUNCTIONS = [
@@ -122,6 +127,7 @@ export default function CamerasPage() {
   >(null);
   const [isCamLocOpen, setIsCamLocOpen] = useState(false);
   const [isCamTypeOpen, setIsCamTypeOpen] = useState(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [userData, setUserData] = useState<{role: string, can_manage_cameras?: boolean} | null>(null);
 
   useEffect(() => {
@@ -222,12 +228,18 @@ export default function CamerasPage() {
       location: locations[0]?.name || "",
       status: "Offline",
       type: camTypes[0]?.name || "",
-      username: "",
+      username: "admin",
       password: "",
       brand: "",
       cam_id: "",
+      onvif_port: 80,
+      rtsp_port: 554,
+      transport_mode: "tcp",
+      channel_id: undefined,
+      stream_type: "main",
     });
-    setShowPassword(false);  // Reset password visibility
+    setShowPassword(false);
+    setIsAdvancedOpen(false); // Default collapsed
     setIsCamDialogOpen(true);
   };
 
@@ -627,20 +639,21 @@ export default function CamerasPage() {
   });
 
   return (
-    <div className="h-full flex flex-col p-6 gap-4 overflow-hidden bg-background">
+    <div className="h-full flex flex-col overflow-hidden bg-background">
+      <div className="max-w-[1500px] w-full mx-auto flex-1 flex flex-col p-6 gap-4 min-h-0">
       {/* Header */}
       <div className="flex justify-between items-center shrink-0">
-        <h1 className="text-2xl font-bold tracking-tight text-[#f59e0b]">
+        <h1 className="text-2xl font-bold tracking-tight">
           Danh sách Camera
         </h1>
         <div className="flex items-center gap-3">
-          <div className="relative min-w-[300px]">
+          <div className="relative group min-w-[300px]">
             <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-[#f59e0b]"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-[#f59e0b] transition-colors"
               fontSize="small"
             />
             <input
-              className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-md text-sm outline-none focus:border-[#f59e0b] focus:ring-1 focus:ring-[#f59e0b]"
+              className="w-full pl-10 pr-4 py-2 bg-card border border-border rounded-md text-sm outline-none focus:outline-none focus:ring-1 focus:ring-[#f59e0b] focus:border-[#f59e0b] transition-all"
               placeholder="Tìm kiếm camera..."
               title="Tìm kiếm camera theo tên, IP hoặc vị trí"
               aria-label="Tìm kiếm camera"
@@ -929,6 +942,108 @@ export default function CamerasPage() {
                   ))}
               </div>
             )}
+
+          {/* Advanced Section */}
+          <div className="border border-border rounded-md overflow-hidden bg-muted/20">
+            <button
+              type="button"
+              onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+              className="w-full flex justify-between items-center p-3 text-xs font-bold text-muted-foreground uppercase hover:bg-muted/30 transition-all border-b border-border/50"
+            >
+              <div className="flex items-center gap-2">
+                <Settings className="w-4 h-4 text-[#f59e0b]" />
+                <span>Cấu hình nâng cao</span>
+              </div>
+              {isAdvancedOpen ? <ExpandLess /> : <ExpandMore />}
+            </button>
+
+            {isAdvancedOpen && (
+              <div className="p-4 space-y-4 bg-background/50">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">
+                      ONVIF Port (Bỏ trống để tự động)
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b]"
+                      placeholder="Mặc định: 80, 8000, 8899..."
+                      value={editingItem?.onvif_port ?? ""}
+                      onChange={(e) =>
+                        setEditingItem((p) => ({ ...p!, onvif_port: e.target.value ? parseInt(e.target.value) : undefined }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">
+                      RTSP Port
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b]"
+                      placeholder="554"
+                      value={editingItem?.rtsp_port ?? 554}
+                      onChange={(e) =>
+                        setEditingItem((p) => ({ ...p!, rtsp_port: e.target.value ? parseInt(e.target.value) : 554 }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">
+                      Giao thức RTSP
+                    </label>
+                    <select
+                      className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b]"
+                      value={editingItem?.transport_mode || "tcp"}
+                      onChange={(e) =>
+                        setEditingItem((p) => ({ ...p!, transport_mode: e.target.value }))
+                      }
+                    >
+                      <option value="tcp">TCP (Stable)</option>
+                      <option value="udp">UDP</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">
+                      Loại luồng video
+                    </label>
+                    <select
+                      className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b]"
+                      value={editingItem?.stream_type || "main"}
+                      onChange={(e) =>
+                        setEditingItem((p) => ({ ...p!, stream_type: e.target.value }))
+                      }
+                    >
+                      <option value="main">Main-stream (Full HD)</option>
+                      <option value="sub">Sub-stream (Mobile/AI)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">
+                    Kênh NVR (Channel ID)
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full p-2 bg-background border border-border rounded text-sm outline-none focus:border-[#f59e0b]"
+                    placeholder="Chỉ dùng khi kết nối qua đầu ghi/NVR"
+                    value={editingItem?.channel_id ?? ""}
+                    onChange={(e) =>
+                      setEditingItem((p) => ({ ...p!, channel_id: e.target.value ? parseInt(e.target.value) : undefined }))
+                    }
+                  />
+                  <p className="text-[9px] text-muted-foreground italic">
+                    * Để trống nếu kết nối trực tiếp tới IP camera.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex justify-end gap-3 pt-4 border-t border-border">
             <button
               type="button"
@@ -1110,7 +1225,8 @@ export default function CamerasPage() {
                           {loc.tag}
                         </div>
                       </div>
-                      <div className="flex gap-1 ml-4 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                      <div className="flex gap-1 ml-4 shrink-0">
+
                         <button
                           onClick={() => {
                             setEditLocIndex(idx);
@@ -1322,7 +1438,8 @@ export default function CamerasPage() {
                             .join(", ") || "Mặc định"}
                         </div>
                       </div>
-                      <div className="flex gap-1 ml-4 opacity-0 group-hover:opacity-100 transition-all shrink-0">
+                      <div className="flex gap-1 ml-4 shrink-0">
+
                         <button
                           onClick={() => {
                             setEditTypeIndex(idx);
@@ -1409,6 +1526,7 @@ export default function CamerasPage() {
           </div>
         </div>
       </Dialog>
+      </div>
     </div>
-  );
+  )
 }

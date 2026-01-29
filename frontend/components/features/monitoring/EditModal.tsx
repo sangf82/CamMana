@@ -1,6 +1,62 @@
-import React from "react";
-import { X } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { X, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+interface CustomSelectProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  placeholder?: string;
+}
+
+function CustomSelect({ value, onChange, options, placeholder }: CustomSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedLabel = options.find((o) => o.value === value)?.label || placeholder || "";
+
+  return (
+    <div ref={containerRef} className="relative mt-1">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all text-foreground"
+      >
+        <span className={value ? "text-foreground" : "text-muted-foreground"}>{selectedLabel}</span>
+        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+      {isOpen && (
+        <div className="absolute top-full left-0 w-full z-[100] mt-1 bg-popover text-popover-foreground border border-border rounded-xl shadow-2xl p-1 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-top-1 duration-200">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors hover:bg-amber-500/10 ${
+                value === option.value ? "text-amber-500 bg-amber-500/10" : "text-foreground"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface EditModalProps {
   isOpen: boolean;
@@ -18,6 +74,23 @@ interface EditModalProps {
   setEditVolume: (value: string) => void;
   isVolumeEnabled?: boolean;
 }
+
+const STATUS_OPTIONS = [
+  { value: "Vào cổng", label: "Vào cổng" },
+  { value: "Đã vào", label: "Đã vào" },
+  { value: "Đang cân", label: "Đang cân" },
+  { value: "Ra cổng", label: "Ra cổng" },
+  { value: "Đã ra", label: "Đã ra" },
+];
+
+const VERIFY_OPTIONS = [
+  { value: "Đã xác minh", label: "Đã xác minh" },
+  { value: "Chưa xác minh", label: "Chưa xác minh" },
+  { value: "Cần KT", label: "Cần KT" },
+  { value: "Xe lạ", label: "Xe lạ" },
+  { value: "Xe chưa ĐK", label: "Xe chưa ĐK" },
+  { value: "Từ chối", label: "Từ chối" },
+];
 
 export default function EditModal({
   isOpen,
@@ -61,7 +134,7 @@ export default function EditModal({
               type="text"
               value={editPlate}
               onChange={(e) => setEditPlate(e.target.value.toUpperCase())}
-              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all font-mono font-bold tracking-wide"
+              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all font-mono font-bold tracking-wide text-foreground"
               placeholder="Nhập biển số..."
             />
           </div>
@@ -71,17 +144,11 @@ export default function EditModal({
               <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
                 Trạng thái
               </label>
-              <select
+              <CustomSelect
                 value={editStatus}
-                onChange={(e) => setEditStatus(e.target.value)}
-                className="w-full mt-1 px-2 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all"
-              >
-                <option value="Vào cổng">Vào cổng</option>
-                <option value="Đã vào">Đã vào</option>
-                <option value="Đang cân">Đang cân</option>
-                <option value="Ra cổng">Ra cổng</option>
-                <option value="Đã ra">Đã ra</option>
-              </select>
+                onChange={setEditStatus}
+                options={STATUS_OPTIONS}
+              />
             </div>
 
             <div>
@@ -93,7 +160,7 @@ export default function EditModal({
                 value={editVolume}
                 onChange={(e) => setEditVolume(e.target.value)}
                 disabled={!isVolumeEnabled}
-                className={`w-full mt-1 px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono transition-all ${!isVolumeEnabled ? "opacity-50 blur-[0.5px] cursor-not-allowed select-none" : ""}`}
+                className={`w-full mt-1 px-3 py-2 bg-background border border-border rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono transition-all text-foreground ${!isVolumeEnabled ? "opacity-50 blur-[0.5px] cursor-not-allowed select-none" : ""}`}
                 placeholder="0.00"
               />
             </div>
@@ -103,18 +170,11 @@ export default function EditModal({
             <label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
               Xác minh
             </label>
-            <select
+            <CustomSelect
               value={editVerify}
-              onChange={(e) => setEditVerify(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 text-sm transition-all"
-            >
-              <option value="Đã xác minh">Đã xác minh</option>
-              <option value="Chưa xác minh">Chưa xác minh</option>
-              <option value="Cần KT">Cần KT</option>
-              <option value="Xe lạ">Xe lạ</option>
-              <option value="Xe chưa ĐK">Xe chưa ĐK</option>
-              <option value="Từ chối">Từ chối</option>
-            </select>
+              onChange={setEditVerify}
+              options={VERIFY_OPTIONS}
+            />
           </div>
 
           <div>
@@ -125,7 +185,7 @@ export default function EditModal({
               type="text"
               value={editNote}
               onChange={(e) => setEditNote(e.target.value)}
-              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all"
+              className="w-full mt-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all text-foreground"
               placeholder="Nhập ghi chú..."
             />
           </div>

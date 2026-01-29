@@ -83,7 +83,14 @@ class RegisteredCarLogic:
             writer.writeheader()
             writer.writerows(data)
 
-    def get_all_cars(self) -> List[Dict[str, str]]:
+    def get_all_cars(self, date_str: Optional[str] = None) -> List[Dict[str, str]]:
+        if date_str:
+            target_file = DATA_DIR / f"{self.FILE_PREFIX}{date_str}.csv"
+            if not target_file.exists():
+                return []
+            with open(target_file, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                return list(reader)
         return self._read_csv()
 
     @staticmethod

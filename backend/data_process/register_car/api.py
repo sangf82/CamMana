@@ -56,8 +56,33 @@ class CarResponse(CarBase):
 router = APIRouter(prefix="/api/registered_cars", tags=["Registered Cars"])
 logic = RegisteredCarLogic()
 
+@router.get("/dates")
+async def get_available_dates(request: Request):
+    """Get available dates for registered car files."""
+    if is_client_mode():
+        token = request.headers.get("authorization", "").replace("Bearer ", "")
+        result = await proxy_get("/api/registered_cars/dates", token=token)
+        if result is not None:
+            return result
+    
+    # List files like registered_cars_DD-MM-YYYY.csv
+    from backend.config import DATA_DIR
+    files = list(DATA_DIR.glob(f"{logic.FILE_PREFIX}*.csv"))
+    dates = []
+    for f in files:
+        try:
+            d_str = f.name.replace(logic.FILE_PREFIX, "").replace(".csv", "")
+            # Validate format
+            datetime.strptime(d_str, logic.DATE_FORMAT)
+            dates.append(d_str)
+        except: continue
+    
+    # Sort newest first
+    dates.sort(key=lambda x: datetime.strptime(x, logic.DATE_FORMAT), reverse=True)
+    return dates
+
 @router.get("")
-async def get_cars(request: Request):
+async def get_cars(request: Request, date: Optional[str] = Query(None, description="Date in dd-mm-yyyy format")):
     """
     Get all registered cars. 
     When in client mode, fetches data from master node.
@@ -65,15 +90,16 @@ async def get_cars(request: Request):
     # If in client mode, proxy the request to master
     if is_client_mode():
         token = request.headers.get("authorization", "").replace("Bearer ", "")
-        logger.info("Client mode: Fetching registered cars from master")
-        master_data = await proxy_get("/api/registered_cars", token=token)
+        logger.info(f"Client mode: Fetching registered cars from master (date={date})")
+        endpoint = "/api/registered_cars" if not date else f"/api/registered_cars?date={date}"
+        master_data = await proxy_get(endpoint, token=token)
         if master_data is not None:
             return master_data
         else:
             logger.warning("Failed to fetch from master, falling back to local data")
     
     # Local data (master mode or fallback)
-    return logic.get_all_cars()
+    return logic.get_all_cars(date)
 
 @router.post("")
 async def add_car(request: Request, car: CarBase, user: UserSchema = Depends(get_current_user)):
@@ -176,12 +202,12 @@ def health_check():
 
 
 @router.get("/export/excel")
-async def export_excel(request: Request):
+async def export_excel(request: Request, date: Optional[str] = Query(None)):
     """
     Export registered cars to Excel (CSV format with UTF-8 BOM).
     Returns the file as a download.
     """
-    cars = logic.get_all_cars()
+    cars = logic.get_all_cars(date)
     if not cars:
         raise HTTPException(status_code=404, detail="No data to export")
     
@@ -212,22 +238,24 @@ async def export_excel(request: Request):
     df.to_csv(output, index=False, encoding='utf-8')
     csv_content = '\ufeff' + output.getvalue()
     
+    date_str = date or datetime.now().strftime("%d-%m-%Y")
+    
     return StreamingResponse(
         io.BytesIO(csv_content.encode('utf-8')),
         media_type="text/csv; charset=utf-8",
         headers={
-            "Content-Disposition": f"attachment; filename=Danh_sach_xe_dang_ky.csv"
+            "Content-Disposition": f"attachment; filename=Danh_sach_xe_dang_ky_{date_str}.csv"
         }
     )
 
 
 @router.post("/export/excel/save")
-async def save_excel_to_downloads(request: Request, user: UserSchema = Depends(get_current_user)):
+async def save_excel_to_downloads(request: Request, date: Optional[str] = Query(None), user: UserSchema = Depends(get_current_user)):
     """
     Export registered cars and save directly to user's Downloads folder.
     This endpoint is for desktop app usage where we can access local filesystem.
     """
-    cars = logic.get_all_cars()
+    cars = logic.get_all_cars(date)
     if not cars:
         raise HTTPException(status_code=404, detail="No data to export")
     
@@ -260,8 +288,9 @@ async def save_excel_to_downloads(request: Request, user: UserSchema = Depends(g
             downloads_folder = Path.home() / "Desktop"
         
         # Create filename with timestamp
-        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
-        filename = f"Danh_sach_xe_dang_ky_{timestamp}.csv"
+        date_str = date or datetime.now().strftime("%d-%m-%Y")
+        timestamp = datetime.now().strftime("%H-%M-%S")
+        filename = f"Danh_sach_xe_dang_ky_{date_str}_{timestamp}.csv"
         file_path = downloads_folder / filename
         
         # Write CSV with UTF-8 BOM

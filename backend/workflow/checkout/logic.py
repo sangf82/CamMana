@@ -102,12 +102,10 @@ class CheckOutService:
             
             uuid_val = None
             folder_path = None
-            status = "Unknown Check-In"
-
             if target_record:
                 uuid_val = target_record["id"]
                 folder_path = Path(target_record["folder_path"]) if target_record.get("folder_path") else None
-                status = "Matched"
+                status = "Đã ra"
             else:
                 # Create NEW record for unknown checkout
                 import uuid
@@ -119,12 +117,13 @@ class CheckOutService:
                     location=location_name
                 )
                 
+                status = "Xe ra lạ"
                 record_data = {
                     "id": uuid_val,
                     "plate": clean_plate,
                     "location": location_name,
                     "time_in": "---",
-                    "status": "Xe ra lạ",
+                    "status": status,
                     "verify": "Cần KT",
                     "folder_path": str(folder_path),
                     "note": "Xe ra không có dữ liệu vào"
@@ -254,7 +253,7 @@ class CheckOutService:
             
             update_data = {
                 "time_out": time_out,
-                "status": "Đã ra" if status == "Matched" else "Xe ra lạ"
+                "status": status
             }
             if final_volume is not None:
                 try:

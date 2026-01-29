@@ -1,7 +1,8 @@
 [project]
 name = "cammana"
-version = "2.0.0"
+version = "2.0.1"
 description = "ONVIF Camera Manager - Desktop Application"
+authors = [{ name = "Sang.lt" }]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -13,7 +14,6 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "httpx>=0.28.1",
-    "aiofiles>=24.0.0",
     "python-multipart>=0.0.21",
     # GUI
     "PySide6>=6.6.0",
@@ -42,8 +42,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "nuitka>=2.8.10",
-    "pyinstaller>=6.18.0",
-    "zstandard>=0.25.0",
 ]
 
 [build-system]
