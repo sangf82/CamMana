@@ -136,7 +136,7 @@ export default function VehiclesPage() {
   const vehicleTypes = ['All', ...Array.from(new Set(data.map(d => d.truckModel?.trim() || 'None')))]
 
   const filteredData = data.filter(item => {
-    const matchesSearch = item.plate.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesSearch = (item.plate ?? "").toLowerCase().includes(searchTerm.toLowerCase())
     const matchesContractor = filterContractor === 'All' || (item.contractor?.trim() || 'None') === filterContractor
     const matchesType = filterType === 'All' || (item.truckModel?.trim() || 'None') === filterType
     return matchesSearch && matchesContractor && matchesType

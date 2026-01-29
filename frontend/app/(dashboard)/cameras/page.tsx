@@ -546,9 +546,9 @@ export default function CamerasPage() {
   const filteredData = data.filter((item) => {
     const s = searchTerm.toLowerCase();
     return (
-      item.name.toLowerCase().includes(s) ||
-      item.ip.toLowerCase().includes(s) ||
-      item.location.toLowerCase().includes(s)
+      (item.name ?? "").toLowerCase().includes(s) ||
+      (item.ip ?? "").toLowerCase().includes(s) ||
+      (item.location ?? "").toLowerCase().includes(s)
     );
   });
 

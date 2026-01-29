@@ -45,9 +45,9 @@ export default function LogsPage() {
   const filteredLogs = logs.filter((log) => {
     const s = searchTerm.toLowerCase();
     return (
-      log.camera_id.toLowerCase().includes(s) ||
-      log.event_type.toLowerCase().includes(s) ||
-      log.details.toLowerCase().includes(s)
+      (log.camera_id?.toLowerCase()?.includes(s) ?? false) ||
+      (log.event_type?.toLowerCase()?.includes(s) ?? false) ||
+      (log.details?.toLowerCase()?.includes(s) ?? false)
     );
   }).reverse(); // Latest logs first
 

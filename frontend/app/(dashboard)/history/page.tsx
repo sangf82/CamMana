@@ -175,7 +175,7 @@ export default function HistoryPage() {
   ];
 
   const filteredData = data.filter((item) => {
-    const matchesSearch = item.plate
+    const matchesSearch = (item.plate ?? "")
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
     const matchesGate =
