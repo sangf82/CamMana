@@ -14,10 +14,9 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 
 from backend.schemas import SyncPayload
-from backend.sync_process.sync.logic import SyncLogic
+from backend.sync_process.sync.logic import SyncLogic, sync_logic
 
 sync_router = APIRouter(prefix="/api/sync", tags=["sync"])
-sync_logic = SyncLogic()
 
 
 @sync_router.post("/receive")

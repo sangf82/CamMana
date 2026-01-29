@@ -1,5 +1,6 @@
 import csv
 import uuid
+import asyncio
 import logging
 from pathlib import Path
 from typing import List, Dict, Optional, Any
@@ -64,7 +65,23 @@ class LocationLogic:
         current = self._read_csv()
         current.append(new_loc)
         self._write_csv(current)
+        
+        # Sync Hook
+        try:
+            from backend.sync_process.sync.logic import sync_logic
+            asyncio.create_task(sync_logic.broadcast_change("location", "create", new_loc))
+        except: pass
+            
         return new_loc
+
+    def save_location(self, data: Dict[str, Any]) -> Dict[str, str]:
+        """Save a location. Update if ID exists, otherwise add."""
+        loc_id = data.get('id')
+        if loc_id:
+            updated = self.update_location(loc_id, data)
+            if updated:
+                return updated
+        return self.add_location(data)
 
     def update_location(self, loc_id: str, data: Dict[str, Any]) -> Optional[Dict[str, str]]:
         current = self._read_csv()
@@ -93,6 +110,12 @@ class LocationLogic:
                 CameraDataSync.sync_location_name(loc_id, new_name)
                 logger.info(f"Location '{old_name}' -> '{new_name}': synced to cameras")
             
+            # Sync Hook
+            try:
+                from backend.sync_process.sync.logic import sync_logic
+                asyncio.create_task(sync_logic.broadcast_change("location", "update", updated_loc))
+            except: pass
+            
             return updated_loc
         return None
 
@@ -106,6 +129,12 @@ class LocationLogic:
             # Sync: Clear location references in cameras
             CameraDataSync.remove_location_references(loc_id)
             logger.info(f"Location {loc_id} deleted: cleared from cameras")
+            
+            # Sync Hook
+            try:
+                from backend.sync_process.sync.logic import sync_logic
+                asyncio.create_task(sync_logic.broadcast_change("location", "delete", {"id": loc_id}))
+            except: pass
             
             return True
         return False

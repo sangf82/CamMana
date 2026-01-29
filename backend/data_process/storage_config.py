@@ -11,6 +11,7 @@ import shutil
 from datetime import datetime
 from typing import Optional
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -132,6 +133,13 @@ async def update_data_expiry_settings(
     
     if not save_expiry_config(expiry_config):
         raise HTTPException(status_code=500, detail="Failed to save config")
+    
+    # Sync Hook
+    try:
+        from backend.sync_process.sync.logic import sync_logic
+        config = load_system_config()
+        asyncio.create_task(sync_logic.broadcast_change("system_config", "update", config))
+    except: pass
     
     return {"success": True, "message": "Data expiry settings updated"}
 

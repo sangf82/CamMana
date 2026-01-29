@@ -198,7 +198,9 @@ class HistoryLogic:
             from backend.sync_process.sync.logic import sync_logic
             import asyncio
             asyncio.create_task(sync_logic.broadcast_change("history", "create", clean_record))
-        except: pass
+        except Exception as e:
+            logger.error(f"Failed to sync history create: {e}")
+            pass
             
         return clean_record
 
@@ -234,7 +236,9 @@ class HistoryLogic:
                     from backend.sync_process.sync.logic import sync_logic
                     import asyncio
                     asyncio.create_task(sync_logic.broadcast_change("history", "update", updated_rec))
-                except: pass
+                except Exception as e:
+                    logger.error(f"Failed to sync history update: {e}")
+                    pass
                     
                 return updated_rec
                 

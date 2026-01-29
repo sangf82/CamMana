@@ -1,6 +1,7 @@
 import csv
 import uuid
 import logging
+import asyncio
 from typing import List, Dict, Any, Optional
 from backend.config import DATA_DIR
 from backend.data_process.csv_utils import CAMERA_HEADERS
@@ -72,7 +73,23 @@ class CameraLogic:
         current = self._read_csv()
         current.append(data)
         self._write_csv(current)
+        
+        # Sync Hook
+        try:
+            from backend.sync_process.sync.logic import sync_logic
+            asyncio.create_task(sync_logic.broadcast_change("camera", "create", data))
+        except: pass
+        
         return data
+
+    def save_camera(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Save a camera. Update if ID exists, otherwise add."""
+        cam_id = data.get('cam_id') or data.get('id')
+        if cam_id:
+            updated = self.update_camera(cam_id, data)
+            if updated:
+                return updated
+        return self.add_camera(data)
 
     def update_camera(self, cam_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         current = self._read_csv()
@@ -85,6 +102,13 @@ class CameraLogic:
                 break
         if updated:
             self._write_csv(current)
+            
+            # Sync Hook
+            try:
+                from backend.sync_process.sync.logic import sync_logic
+                asyncio.create_task(sync_logic.broadcast_change("camera", "update", updated))
+            except: pass
+            
             return updated
         return None
 
@@ -95,5 +119,12 @@ class CameraLogic:
         current = [c for c in current if c.get('cam_id') != cam_id and c.get('id') != cam_id]
         if len(current) < initial:
             self._write_csv(current)
+            
+            # Sync Hook
+            try:
+                from backend.sync_process.sync.logic import sync_logic
+                asyncio.create_task(sync_logic.broadcast_change("camera", "delete", {"cam_id": cam_id}))
+            except: pass
+            
             return True
         return False

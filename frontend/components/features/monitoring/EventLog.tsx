@@ -1,8 +1,6 @@
 import React, { useEffect, useCallback, useState } from "react";
 import {
   FileText,
-  ToggleRight,
-  ToggleLeft,
   PlayCircle,
   Move,
   ArrowUp,
@@ -15,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import LogList, { LogEntry } from "./LogList";
 
 
@@ -279,23 +278,11 @@ export default function EventLog({
           <span className="text-xs font-semibold text-muted-foreground">
             Tự động phát hiện
           </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsAutoDetect(!isAutoDetect)}
-            className={`flex items-center gap-1 transition-colors h-8 px-2 ${
-              isAutoDetect ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground"
-            }`}
-          >
-            <span className="text-[10px] font-bold">
-              {isAutoDetect ? "ON" : "OFF"}
-            </span>
-            {isAutoDetect ? (
-              <ToggleRight className="w-5 h-5" />
-            ) : (
-              <ToggleLeft className="w-5 h-5" />
-            )}
-          </Button>
+          <Switch
+            checked={isAutoDetect}
+            onCheckedChange={setIsAutoDetect}
+            className="data-[state=checked]:bg-[#f59e0b]"
+          />
         </div>
 
         <Button

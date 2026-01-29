@@ -236,8 +236,13 @@ class SyncLogic:
             from backend.data_process.register_car.logic import RegisteredCarLogic
             reg_logic = RegisteredCarLogic()
             if payload.action in ("create", "update"):
-                reg_logic.add_car(data)
+                reg_logic.save_car(data)
                 return True
+            elif payload.action == "delete":
+                car_id = data.get("car_id")
+                if car_id:
+                    reg_logic.delete_car(car_id)
+                    return True
                 
         elif payload.type == "user":
             from backend.data_process.user.logic import UserLogic
@@ -250,7 +255,48 @@ class SyncLogic:
                 if username:
                     user_logic.delete_user(username)
                     return True
-        
+
+        elif payload.type == "camera":
+            from backend.camera.logic import CameraLogic
+            cam_logic = CameraLogic()
+            if payload.action in ("create", "update"):
+                cam_logic.save_camera(data)
+                return True
+            elif payload.action == "delete":
+                cam_id = data.get("cam_id")
+                if cam_id:
+                    cam_logic.delete_camera(cam_id)
+                    return True
+
+        elif payload.type == "location":
+            from backend.data_process.location.logic import LocationLogic
+            loc_logic = LocationLogic()
+            if payload.action in ("create", "update"):
+                loc_logic.save_location(data)
+                return True
+            elif payload.action == "delete":
+                loc_id = data.get("id")
+                if loc_id:
+                    loc_logic.delete_location(loc_id)
+                    return True
+
+        elif payload.type == "camera_type":
+            from backend.data_process.camera_type.logic import CameraTypeLogic
+            type_logic = CameraTypeLogic()
+            if payload.action in ("create", "update"):
+                type_logic.save_camera_type(data)
+                return True
+            elif payload.action == "delete":
+                type_id = data.get("id")
+                if type_id:
+                    type_logic.delete_type(type_id)
+                    return True
+
+        elif payload.type == "system_config":
+            from backend.data_process.storage_config import save_system_config
+            if payload.action == "update":
+                save_system_config(data)
+                return True
         return False
 
     async def broadcast_change(
@@ -297,3 +343,5 @@ class SyncLogic:
             self.zc.close()
         except:
             pass
+# Global singleton instance
+sync_logic = SyncLogic()

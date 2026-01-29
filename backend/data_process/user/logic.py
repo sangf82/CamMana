@@ -2,6 +2,7 @@ import csv
 import os
 import uuid
 import logging
+import asyncio
 from datetime import datetime
 from typing import List, Optional, Dict
 from passlib.context import CryptContext
@@ -85,6 +86,12 @@ class UserLogic:
             writer = csv.DictWriter(f, fieldnames=self.HEADERS)
             writer.writerow(new_user_data)
         
+        # Sync Hook
+        try:
+            from backend.sync_process.sync.logic import sync_logic
+            asyncio.create_task(sync_logic.broadcast_change("user", "create", new_user_data))
+        except: pass
+
         return User(
             id=user_id,
             username=user_in.username,
@@ -117,6 +124,13 @@ class UserLogic:
             writer = csv.DictWriter(f, fieldnames=self.HEADERS)
             writer.writeheader()
             writer.writerows(new_users)
+
+        # Sync Hook
+        try:
+            from backend.sync_process.sync.logic import sync_logic
+            asyncio.create_task(sync_logic.broadcast_change("user", "delete", {"username": username}))
+        except: pass
+
         return True
 
     def update_user(self, username: str, update_data: dict) -> Optional[dict]:
@@ -148,6 +162,12 @@ class UserLogic:
             writer = csv.DictWriter(f, fieldnames=self.HEADERS)
             writer.writeheader()
             writer.writerows(users)
+
+        # Sync Hook
+        try:
+            from backend.sync_process.sync.logic import sync_logic
+            asyncio.create_task(sync_logic.broadcast_change("user", "update", user))
+        except: pass
             
         return user
 
