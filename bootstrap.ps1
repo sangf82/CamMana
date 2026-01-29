@@ -56,7 +56,7 @@ Write-Host @"
 *                                                  *
 *       CAMMANA - HỆ THỐNG QUẢN LÝ CAMERA          *
 *           BOOTSTRAP & AUTO-INSTALLER             *
-*                Phiên bản: $Version                *
+*                Phiên bản: $Version                 *
 *                                                  *
 ****************************************************
 "@ -ForegroundColor Magenta
