@@ -157,7 +157,7 @@ export default function Sidebar() {
 
   return (
     <aside 
-        className={`${isCollapsed ? 'w-16' : 'w-64'} h-full bg-sidebar border-r border-sidebar-border flex flex-col shrink-0 transition-all duration-300`}
+        className={`${isCollapsed ? 'w-16' : 'w-64'} h-full bg-sidebar border-r border-sidebar-border flex flex-col shrink-0 transition-all duration-300 overflow-x-hidden`}
     >
       {/* Branding */}
       <div className={`h-16 flex items-center border-b border-sidebar-border relative ${isCollapsed ? 'justify-center px-0' : 'justify-between pl-6 pr-2'}`}>
@@ -179,7 +179,7 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className={`flex-1 overflow-y-auto py-4 space-y-1 ${isCollapsed ? 'px-2' : 'px-3'} [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]`}>
+      <nav className={`flex-1 overflow-y-auto overflow-x-hidden py-4 space-y-1 ${isCollapsed ? 'px-2' : 'px-3'} scrollbar-hide`}>
         {fullMenu.map((item) => (
           <div key={item.title}>
             {item.subItems ? (

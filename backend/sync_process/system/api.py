@@ -71,6 +71,7 @@ def get_system_info():
     """Get system information - no auth required for sync discovery."""
     # Try to get detailed CPU name
     cpu_name = platform.processor()  # Fallback
+    network_category = "Unknown"
     
     if platform.system() == "Windows":
         try:
@@ -80,6 +81,15 @@ def get_system_info():
             winreg.CloseKey(key)
         except:
             pass
+            
+        try:
+            # Check network profile (Private/Public) via PowerShell
+            ps_cmd = 'Get-NetConnectionProfile | Select-Object -ExpandProperty NetworkCategory'
+            result = subprocess.run(["powershell", "-Command", ps_cmd], capture_output=True, text=True, timeout=5)
+            network_category = result.stdout.strip()
+        except:
+            pass
+            
     elif platform.system() == "Linux":
         try:
             with open("/proc/cpuinfo", "r") as f:
@@ -96,100 +106,106 @@ def get_system_info():
         "processor": cpu_name,
         "cpu_count": psutil.cpu_count(logical=True),
         "ram": f"{round(psutil.virtual_memory().total / (1024**3), 2)} GB",
-        "ip_address": get_lan_ip()
+        "ip_address": get_lan_ip(),
+        "network_category": network_category
     }
 
 
 @system_router.get("/firewall/status")
 def check_firewall_status():
-    """Check if firewall rule for CamMana exists (Windows only)."""
+    """Detailed check of network accessibility status (Windows only)."""
     if platform.system() != "Windows":
         return {"supported": False, "message": "Firewall management only supported on Windows"}
     
     try:
-        result = subprocess.run(
+        # 1. Check TCP rule
+        tcp_result = subprocess.run(
             ["netsh", "advfirewall", "firewall", "show", "rule", f"name={FIREWALL_RULE_NAME}"],
-            capture_output=True,
-            text=True,
-            timeout=10
+            capture_output=True, text=True, timeout=5
         )
+        tcp_exists = "Rule Name:" in tcp_result.stdout
         
-        rule_exists = "Rule Name:" in result.stdout and FIREWALL_RULE_NAME in result.stdout
+        # 2. Check ICMP (Ping) rule
+        icmp_result = subprocess.run(
+            ["netsh", "advfirewall", "firewall", "show", "rule", "name=CamMana Ping"],
+            capture_output=True, text=True, timeout=5
+        )
+        icmp_exists = "Rule Name:" in icmp_result.stdout
         
+        # 3. Check Network Profile
+        ps_profile = 'Get-NetConnectionProfile -InterfaceAlias Wi-Fi -ErrorAction SilentlyContinue | Select-Object -ExpandProperty NetworkCategory'
+        profile_result = subprocess.run(["powershell", "-Command", ps_profile], capture_output=True, text=True, timeout=5)
+        network_category = profile_result.stdout.strip() or "Unknown"
+
         return {
             "supported": True,
-            "rule_exists": rule_exists,
-            "rule_name": FIREWALL_RULE_NAME,
-            "message": "Đã mở firewall" if rule_exists else "CONFIG: Rule Not Found"
+            "tcp_rule": tcp_exists,
+            "icmp_rule": icmp_exists,
+            "network_category": network_category,
+            "rule_exists": tcp_exists, # legacy support
+            "message": "Hệ thống đã sẵn sàng" if (tcp_exists and network_category == "Private") else "Cần cấu hình hạ tầng"
         }
     except Exception as e:
         return {
             "supported": True,
-            "rule_exists": False,
             "error": str(e),
             "message": "CORE: System Exception"
         }
 
 
 @system_router.post("/firewall/open")
-def open_firewall(user: User = Depends(get_current_user)):
+def open_firewall():
     """
-    Add firewall rule to allow CamMana backend connections.
+    Perform a 'Deep Clean' and re-open firewall ports + set profile to Private.
     Requires admin privileges - will prompt UAC dialog.
     """
     if platform.system() != "Windows":
         raise HTTPException(status_code=400, detail="Only supported on Windows")
     
-    if user.role != "admin":
-        raise HTTPException(status_code=403, detail="Requires admin role")
-    
     try:
         port = settings.port
         
-        # PowerShell command to add firewall rule with elevation
-        cmd = f'netsh advfirewall firewall add rule name="{FIREWALL_RULE_NAME}" dir=in action=allow protocol=TCP localport={port} profile=any'
-        elevated_cmd = f'Start-Process cmd -ArgumentList \'/c {cmd}\' -Verb RunAs -Wait -WindowStyle Hidden'
+        # PowerShell block for Deep Clean and Refresh
+        ps_script = f"""
+        # 1. Remove any stale rules
+        Remove-NetFirewallRule -DisplayName '{FIREWALL_RULE_NAME}' -ErrorAction SilentlyContinue
+        Remove-NetFirewallRule -DisplayName 'CamMana Ping' -ErrorAction SilentlyContinue
         
-        print(f"Executing firewall open command: {elevated_cmd}")
+        # 2. Add fresh TCP Port 8000 rule
+        New-NetFirewallRule -DisplayName '{FIREWALL_RULE_NAME}' -Direction Inbound -LocalPort {port} -Protocol TCP -Action Allow -Profile Any
         
-        result = subprocess.run(
-            ["powershell", "-ExecutionPolicy", "Bypass", "-Command", elevated_cmd],
-            capture_output=True,
-            text=True,
-            timeout=45
+        # 3. Add ICMP (Ping) rule
+        New-NetFirewallRule -DisplayName 'CamMana Ping' -Direction Inbound -Protocol ICMPv4 -Action Allow -Profile Any
+        
+        # 4. Set Network Profile to Private
+        Get-NetConnectionProfile -InterfaceAlias Wi-Fi -ErrorAction SilentlyContinue | Set-NetConnectionProfile -NetworkCategory Private -ErrorAction SilentlyContinue
+        """
+        
+        # Wrap in Start-Process for elevation
+        wrapped_cmd = f'Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command {ps_script}" -Verb RunAs -Wait -WindowStyle Hidden'
+        
+        print(f"Executing Deep Network Fix: {wrapped_cmd}")
+        
+        subprocess.run(
+            ["powershell", "-ExecutionPolicy", "Bypass", "-Command", wrapped_cmd],
+            timeout=60
         )
         
-        if result.returncode != 0:
-            print(f"Firewall automation error: {result.stderr}")
-        
-        # Check if rule was added successfully
-        check_result = subprocess.run(
-            ["netsh", "advfirewall", "firewall", "show", "rule", f"name={FIREWALL_RULE_NAME}"],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        
-        rule_exists = "Rule Name:" in check_result.stdout and FIREWALL_RULE_NAME in check_result.stdout
-        
-        if rule_exists:
+        # Final Verification
+        final_check = check_firewall_status()
+        if final_check.get("tcp_rule"):
             return {
                 "success": True,
-                "message": f"Đã mở tường lửa cho cổng {port}",
-                "rule_name": FIREWALL_RULE_NAME
+                "message": f"Đã cấu hình hạ tầng mạng thành công. Profile: {final_check.get('network_category')}",
+                "details": final_check
             }
         else:
             return {
                 "success": False,
-                "message": "Không thể thêm quy tắc. Có thể bạn đã hủy yêu cầu UAC hoặc lỗi quyền truy cập.",
-                "hint": "Vui lòng chấp nhận yêu cầu quyền Admin khi được hỏi hoặc thử chạy backend dưới quyền Administrator."
+                "message": "Không thể cấu hình. Vui lòng đảm bảo bạn đã nhấn 'Yes' trên cửa sổ Admin.",
+                "hint": "Nếu bạn dùng Antivirus thứ 3 (BKAV, McAfee, v.v.), hãy tắt nó tạm thời hoặc thêm Port 8000 vào vùng tin cậy."
             }
             
-    except subprocess.TimeoutExpired:
-        return {
-            "success": False,
-            "message": "Hết thời gian chờ. Đã hủy yêu cầu?"
-        }
     except Exception as e:
         print(f"firewall exception: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

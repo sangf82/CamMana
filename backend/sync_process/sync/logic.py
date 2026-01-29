@@ -56,6 +56,9 @@ class SyncLogic:
         Get the best local IP address for advertising.
         Prioritizes physical network interfaces over VPN/virtual ones.
         """
+        # Skip these common virtual/VPN prefixes
+        blocked_prefixes = ('172.', '10.244.', '169.254.', '100.') # 100.x is Tailscale
+        
         # Method 1: Use UDP socket trick (works when internet is available)
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -63,8 +66,7 @@ class SyncLogic:
             try:
                 s.connect(("8.8.8.8", 80))
                 ip = s.getsockname()[0]
-                # Skip APIPA addresses (169.254.x.x)
-                if not ip.startswith("169.254."):
+                if not any(ip.startswith(pref) for pref in blocked_prefixes):
                     return ip
             finally:
                 s.close()
@@ -90,12 +92,15 @@ class SyncLogic:
             
             found_ips = []
             for section in output.split("\n\n"):
+                # Skip sections with "Virtual", "Docker", "vEthernet", "Tailscale"
+                if any(word in section.lower() for word in ["virtual", "docker", "vethernet", "tailscale"]):
+                    continue
+                    
                 for pattern, priority in priority_patterns:
                     match = re.search(pattern, section, re.DOTALL | re.IGNORECASE)
                     if match:
                         ip = match.group(1)
-                        # Skip APIPA and loopback
-                        if not ip.startswith("169.254.") and ip != "127.0.0.1":
+                        if not any(ip.startswith(pref) for pref in blocked_prefixes) and ip != "127.0.0.1":
                             found_ips.append((priority, ip))
             
             if found_ips:
@@ -109,7 +114,7 @@ class SyncLogic:
             hostname = socket.gethostname()
             ips = socket.gethostbyname_ex(hostname)[2]
             for ip in ips:
-                if not ip.startswith("169.254.") and ip != "127.0.0.1":
+                if not any(ip.startswith(pref) for pref in blocked_prefixes) and ip != "127.0.0.1":
                     return ip
         except:
             pass
@@ -275,7 +280,7 @@ class SyncLogic:
             return False
             
         try:
-            async with httpx.AsyncClient(timeout=1.0) as client:
+            async with httpx.AsyncClient(timeout=5.0) as client:
                 url = self.remote_url.rstrip('/')
                 response = await client.post(
                     f"{url}/api/sync/receive",

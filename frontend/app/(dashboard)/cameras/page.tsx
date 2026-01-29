@@ -16,6 +16,8 @@ import {
   Download,
   ExpandLess,
 } from "@mui/icons-material";
+import { Pencil, Trash } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import Dialog from "../../../components/ui/dialog";
 import { toast } from "sonner";
 
@@ -596,22 +598,24 @@ export default function CamerasPage() {
       width: "100px",
       render: (row: Camera) => (
         <div className="flex gap-2">
-          <button
-            onClick={() => handleEdit(row)}
-            className="p-1 text-[#f59e0b] hover:bg-[#f59e0b]/10 rounded"
+          <Button
+            onClick={(e) => { e.stopPropagation(); handleEdit(row) }}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-amber-500 hover:text-amber-600 hover:bg-amber-500/10"
             title="Chỉnh sửa camera"
-            aria-label="Chỉnh sửa camera"
           >
-            <Edit fontSize="small" />
-          </button>
-          <button
-            onClick={() => setDeleteCamId(row.id)}
-            className="p-1 text-red-500 hover:bg-red-500/10 rounded"
+            <Pencil className="w-4 h-4" />
+          </Button>
+          <Button
+            onClick={(e) => { e.stopPropagation(); setDeleteCamId(row.id) }}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
             title="Xóa camera"
-            aria-label="Xóa camera"
           >
-            <Delete fontSize="small" />
-          </button>
+            <Trash className="w-4 h-4" />
+          </Button>
         </div>
       ),
     },
@@ -713,7 +717,7 @@ export default function CamerasPage() {
         isOpen={isCamDialogOpen}
         onClose={() => setIsCamDialogOpen(false)}
         title={editingItem?.id ? "Cấu hình Camera" : "Thêm Camera mới"}
-        maxWidth="sm"
+        maxWidth="2xl"
       >
         <form onSubmit={handleSaveCamera} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
